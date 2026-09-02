@@ -35,7 +35,7 @@ from harness import OUT, Args, Proof, economics, parse, sync, transport_for  # n
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from s17code.core.live_graph import (  # noqa: E402
+from crucible.core.live_graph import (  # noqa: E402
     Event,
     GraphPatch,
     GraphSnapshot,
@@ -43,12 +43,12 @@ from s17code.core.live_graph import (  # noqa: E402
     LiveGraphExecutor,
     TaskSpec,
 )
-from s17code.economics import (  # noqa: E402
+from crucible.economics import (  # noqa: E402
     TIER_KEY,
     BudgetAwarePlanner,
     BudgetedGateway,
 )
-from s17code.runtime import metered  # noqa: E402
+from crucible.runtime import metered  # noqa: E402
 
 #: How many rounds the loop is allowed before the PROOF itself gives up. This is
 #: a safety net for the proof, not the thing under test: if the controller worked,

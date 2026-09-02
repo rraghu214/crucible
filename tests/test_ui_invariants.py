@@ -7,11 +7,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from s17code.ui.agui import stream_agui
-from s17code.ui.fixtures import RecordedJournal, load_injections
-from s17code.ui.hitl import PendingAction, decide_resume
-from s17code.ui.surface import build_run_surface
-from s17code.ui.validator import Invariant, validate_surface
+from crucible.ui.agui import stream_agui
+from crucible.ui.fixtures import RecordedJournal, load_injections
+from crucible.ui.hitl import PendingAction, decide_resume
+from crucible.ui.surface import build_run_surface
+from crucible.ui.validator import Invariant, validate_surface
 
 
 def test_builder_surface_is_clean():

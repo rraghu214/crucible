@@ -35,7 +35,7 @@ from typing import Any
 
 from harness import Args, Proof, economics, main, sync, transport_for
 
-from s17code.economics import BudgetedGateway, RunBudget, call_site
+from crucible.economics import BudgetedGateway, RunBudget, call_site
 
 #: A neutral instruction. The proof measures which model answered and what it
 #: cost, never what it said, so the system prompt only has to be identical

@@ -1,4 +1,4 @@
-"""Run replaceable agentic tasks through the real S17 HTTP path and score them.
+"""Run replaceable agentic tasks through the real Crucible HTTP path and score them.
 
 Task-specific facts and expectations live in JSONL. This harness contains only
 generic graph, artifact, evidence and rubric checks; replacing the task file
@@ -241,7 +241,7 @@ def judge_quality(client: httpx.Client, gateway_url: str, task: dict[str, Any], 
         response = client.post(gateway_url.rstrip("/") + "/v1/chat", json={
             "messages": [{"role": "user", "content": prompt}], "system": system,
             "provider": provider, "max_tokens": 500, "temperature": 0, "reasoning": "off",
-            "agent": "s17_stress_judge",
+            "agent": "crucible_stress_judge",
         })
         if response.status_code not in {429, 502, 503}:
             break
@@ -275,7 +275,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:8116")
     parser.add_argument("--gateway-url", default="http://127.0.0.1:8111")
-    parser.add_argument("--judge-provider", default=os.getenv("S17_PROOF_JUDGE_PROVIDER", "gemini"))
+    parser.add_argument("--judge-provider", default=os.getenv("CRUCIBLE_PROOF_JUDGE_PROVIDER", "gemini"))
     parser.add_argument("--tasks", type=Path, default=Path(__file__).with_name("tasks") / "agentic_20.jsonl")
     parser.add_argument("--fixture-root", type=Path, default=Path(__file__).with_name("fixtures"))
     parser.add_argument("--output", type=Path, default=Path(__file__).with_name("out") / "agentic_20_live.json")
@@ -298,7 +298,7 @@ def main() -> None:
     with httpx.Client(timeout=900) as client:
         for ordinal, original in enumerate(tasks, 1):
             task = json.loads(json.dumps(original).replace("{{BASE_URL}}", args.base_url.rstrip("/")))
-            scope = {"tenant_id": "s17-stress", "project_id": task["id"], "user_id": "reviewer"}
+            scope = {"tenant_id": "crucible-stress", "project_id": task["id"], "user_id": "reviewer"}
             preludes = []
             prelude_attempts = []
             for text in task.get("preludes", []):

@@ -40,9 +40,9 @@ Nothing about the measurement is written down in this file, so pointing it at an
 unseen pair file recomputes every number with no edit.
 
 Unlike p7 this proof talks to ``/v1/chat`` over plain httpx rather than through
-:class:`~s17code.gateway.GatewayClient`. It has to: the thing under test is the
+:class:`~crucible.gateway.GatewayClient`. It has to: the thing under test is the
 gateway's ``cache`` envelope and its ``semantic_cache`` opt-in, and the client
-deliberately does not carry either — S17Code's budget path must never be able to
+deliberately does not carry either — Crucible's budget path must never be able to
 be served a stale answer without asking for one.
 
     python proofs/p6_cache_savings.py --base-url http://127.0.0.1:8112
@@ -65,9 +65,9 @@ from typing import Any
 import httpx
 from harness import DEFAULT_BASE_URL, OUT, Args, Proof, gateway_reachable, sync
 
-from s17code.core.memory.embeddings import DeterministicEmbedder
-from s17code.economics import EconomicsConfig
-from s17code.evals import (
+from crucible.core.memory.embeddings import DeterministicEmbedder
+from crucible.economics import EconomicsConfig
+from crucible.evals import (
     LabelledPair,
     best_operating,
     by_family,
@@ -879,7 +879,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--offline", action="store_true",
                         help="deterministic SIMULATION: exercises every path, proves nothing")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
-    parser.add_argument("--config-dir", default=os.getenv("S17_CONFIG_DIR"))
+    parser.add_argument("--config-dir", default=os.getenv("CRUCIBLE_CONFIG_DIR"))
     parser.add_argument("--label", default="", help="suffix for the JSON written to proofs/out/")
     return parser.parse_args(argv)
 

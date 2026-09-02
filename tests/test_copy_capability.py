@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import pytest
 
-from s17code.coding.edit import EditError, EditLedger, copy_within_workspace
-from s17code.coding.workspace import Workspace
+from crucible.coding.edit import EditError, EditLedger, copy_within_workspace
+from crucible.coding.workspace import Workspace
 
 
 @pytest.fixture()
 def ws(tmp_path, monkeypatch):
-    monkeypatch.setenv("S17_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("CRUCIBLE_WORKSPACE", str(tmp_path))
     (tmp_path / "base.html").write_text("x" * 5_000)
     return Workspace.from_env(), EditLedger()
 

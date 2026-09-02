@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from s17code.core.memory import MemoryKind, MemoryScope, MemoryStore
-from s17code.core.memory.chunking import DocumentChunk
-from s17code.core.memory.embeddings import DeterministicEmbedder
+from crucible.core.memory import MemoryKind, MemoryScope, MemoryStore
+from crucible.core.memory.chunking import DocumentChunk
+from crucible.core.memory.embeddings import DeterministicEmbedder
 
 SCOPE = MemoryScope("tenant", "project", "user")
 

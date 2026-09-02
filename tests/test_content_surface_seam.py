@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 
-from s17code.runtime import _as_section, _parse_json_array
+from crucible.runtime import _as_section, _parse_json_array
 
 
 QUESTIONS = [

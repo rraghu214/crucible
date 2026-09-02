@@ -3,7 +3,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from s17code.events.adapters import cron_event, gmail_pubsub_event, webhook_event
+from crucible.events.adapters import cron_event, gmail_pubsub_event, webhook_event
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -16,7 +16,7 @@ def test_twenty_replaceable_tasks_are_data_not_runtime_branches():
     assert {task["level"] for task in tasks} == {"simple", "moderate", "advanced", "complex"}
 
     production = "\n".join(path.read_text(encoding="utf-8")
-                           for path in (ROOT / "s17code").rglob("*.py"))
+                           for path in (ROOT / "crucible").rglob("*.py"))
     # Distinctive canaries make this stronger than searching only task ids:
     # neither prompts nor a disguised phrase router may leak into production.
     for task in tasks:

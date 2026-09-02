@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from s17code.capabilities import default_registry
-from s17code.planner import GeneralAgentPlanner
+from crucible.capabilities import default_registry
+from crucible.planner import GeneralAgentPlanner
 
 
 class _Snapshot:
@@ -78,7 +78,7 @@ def test_the_validator_is_declared_and_cannot_be_confused_with_building() -> Non
 
 
 def test_the_validator_brief_is_hostile_and_forbids_editing() -> None:
-    from s17code.coding.validate import VALIDATOR_SYSTEM, validator_goal
+    from crucible.coding.validate import VALIDATOR_SYSTEM, validator_goal
     assert "may NOT edit" in VALIDATOR_SYSTEM
     assert "find out where that belief is wrong" in VALIDATOR_SYSTEM
     # It must be told that a page can be present and still invisible.
@@ -90,7 +90,7 @@ def test_the_validator_brief_is_hostile_and_forbids_editing() -> None:
 
 def test_a_validator_that_ran_nothing_is_not_a_pass() -> None:
     """Saying 'looks fine' without executing anything is the failure that matters."""
-    from s17code.coding.validate import summarise
+    from crucible.coding.validate import summarise
     blocked = summarise({"passed": True, "summary": "seems ok", "findings": [
         {"what": "maybe broken", "severity": "blocker", "reproduced": False}]})
     assert blocked["passed"] is False          # a blocker overrides a claimed pass
@@ -98,14 +98,14 @@ def test_a_validator_that_ran_nothing_is_not_a_pass() -> None:
 
 
 def test_a_clean_validation_passes() -> None:
-    from s17code.coding.validate import summarise
+    from crucible.coding.validate import summarise
     assert summarise({"passed": True, "findings": [], "summary": "ran it, works"})["passed"]
 
 
 # ------------------------------------------------------ the supplied harness
 
 def _webcheck() -> Path:
-    return Path(__file__).resolve().parents[1] / "s17code" / "coding" / "assets" / "webcheck.js"
+    return Path(__file__).resolve().parents[1] / "crucible" / "coding" / "assets" / "webcheck.js"
 
 
 def test_the_web_harness_ships_with_the_package() -> None:

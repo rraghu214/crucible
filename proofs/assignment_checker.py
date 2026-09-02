@@ -1,6 +1,6 @@
 """A simulated LMS test runner for a student-friendly durable-wait proof.
 
-The fixed report belongs to the external test fixture. S17 receives it only
+The fixed report belongs to the external test fixture. Crucible receives it only
 through the same generic launch-job callback contract used by any program.
 """
 

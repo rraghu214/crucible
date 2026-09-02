@@ -18,5 +18,6 @@ proofs/out/
 *.bento.html
 # Local run stores and scratch workspaces. Anchored to the repo root so it
 # does not swallow proofs/runs/, which is evidence rather than scratch.
-/.s17/
+/.crucible/
 /runs/
+CLAUDE_CODE_PROMPTS.md

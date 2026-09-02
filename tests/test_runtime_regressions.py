@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import json
 
-import s17code.routes as agent_route
-import s17code.runtime as runtime_module
-import s17code.workers.general as general_workers
-from s17code.core.memory.embeddings import DeterministicEmbedder
-from s17code.tools import file_uri_to_path
+import crucible.routes as agent_route
+import crucible.runtime as runtime_module
+import crucible.workers.general as general_workers
+from crucible.core.memory.embeddings import DeterministicEmbedder
+from crucible.tools import file_uri_to_path
 
 
 def _patch(add=None, reason="next outcome earned this frontier"):
@@ -85,7 +85,7 @@ def test_directory_discovery_earns_parallel_indexing(app_client, monkeypatch, tm
     papers.mkdir()
     for name in ("a.md", "b.md", "c.md"):
         (papers / name).write_text(f"# {name}\nA distinct paper about {name}.")
-    monkeypatch.setenv("S17_SANDBOX_ROOT", str(tmp_path))
+    monkeypatch.setenv("CRUCIBLE_SANDBOX_ROOT", str(tmp_path))
 
     def decide(context):
         states = _states(context)
@@ -237,7 +237,7 @@ def test_verify_artifact_reads_back_its_own_file_uri(app_client, monkeypatch):
 
 def test_failed_file_read_is_visible_to_the_final_answer(app_client, monkeypatch, tmp_path):
     app_client.app.state.runtime.memory.embedder = DeterministicEmbedder(128)
-    monkeypatch.setenv("S17_SANDBOX_ROOT", str(tmp_path))
+    monkeypatch.setenv("CRUCIBLE_SANDBOX_ROOT", str(tmp_path))
 
     def decide(context):
         states = _states(context)

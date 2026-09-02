@@ -12,8 +12,8 @@ import inspect
 
 import pytest
 
-from s17code.workers import RunContext
-from s17code.workers import coding as workers
+from crucible.workers import RunContext
+from crucible.workers import coding as workers
 
 
 def test_git_workers_use_the_workspace_not_the_command_runner() -> None:

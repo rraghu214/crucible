@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from s17code.ui.agui import (
+from crucible.ui.agui import (
     empty_state,
     replay_state,
     run_data_model,
@@ -28,12 +28,12 @@ from s17code.ui.agui import (
     stream_agui,
     to_agui_event,
 )
-from s17code.ui.catalog import COMPONENTS, REGISTERED_ACTIONS, catalog_manifest
-from s17code.ui.fixtures import RecordedJournal
-from s17code.ui.hitl import PendingAction, decide_resume
-from s17code.ui.routes import router as ui_router
-from s17code.ui.surface import build_run_surface
-from s17code.ui.validator import Invariant, validate_surface
+from crucible.ui.catalog import COMPONENTS, REGISTERED_ACTIONS, catalog_manifest
+from crucible.ui.fixtures import RecordedJournal
+from crucible.ui.hitl import PendingAction, decide_resume
+from crucible.ui.routes import router as ui_router
+from crucible.ui.surface import build_run_surface
+from crucible.ui.validator import Invariant, validate_surface
 
 _BUILD_ROOT = Path(__file__).resolve().parent.parent
 
@@ -397,7 +397,7 @@ class _FakeRuntime:
 @pytest.fixture(scope="module")
 def client() -> TestClient:
     app = FastAPI()
-    app.include_router(ui_router)  # exactly how s17code.main folds the UI in
+    app.include_router(ui_router)  # exactly how crucible.main folds the UI in
     app.state.runtime = _FakeRuntime()
     return TestClient(app)
 
@@ -535,7 +535,7 @@ def test_route_reconnect_snapshot_rebuild_equals_full_replay(live_client):
 # --------------------------------------------------------------------------- #
 
 def test_render_client_never_uses_innerhtml_and_documents_the_contract():
-    html = (_BUILD_ROOT / "s17code" / "ui" / "client" / "index.html").read_text()
+    html = (_BUILD_ROOT / "crucible" / "ui" / "client" / "index.html").read_text()
     # The client draws every value through text nodes, never as markup.
     assert "createTextNode" in html
     # innerHTML is never assigned anywhere — no data path can reach it.
@@ -546,7 +546,7 @@ def test_render_client_never_uses_innerhtml_and_documents_the_contract():
 
 
 def test_render_client_reconnects_and_rebuilds_from_a_state_snapshot():
-    html = (_BUILD_ROOT / "s17code" / "ui" / "client" / "index.html").read_text()
+    html = (_BUILD_ROOT / "crucible" / "ui" / "client" / "index.html").read_text()
     # It opens the AG-UI event stream and knows how to recover a dropped one.
     assert "EventSource" in html
     assert "?reconnect=1" in html

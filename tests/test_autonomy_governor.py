@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from s17code.events import (
+from crucible.events import (
     AutonomousEventEngine,
     AutonomyGovernor,
     EventEnvelope,
@@ -69,10 +69,10 @@ async def test_an_agent_refuses_an_event_it_caused_itself(tmp_path) -> None:
     store = EventStore(tmp_path)
     runtime = _Runtime()
     engine = AutonomousEventEngine(store, runtime,
-                                   governor=AutonomyGovernor(store, self_actors=("s17code",)))
+                                   governor=AutonomyGovernor(store, self_actors=("crucible",)))
     store.put_subscription(_subscription())
 
-    outcome = await engine.process(_event(actor="s17code"), llm=_relevance_llm())
+    outcome = await engine.process(_event(actor="crucible"), llm=_relevance_llm())
 
     assert outcome["refused"] is True
     assert outcome["control"] == "self_trigger"
@@ -85,7 +85,7 @@ async def test_an_event_from_somebody_else_is_unaffected(tmp_path) -> None:
     store = EventStore(tmp_path)
     runtime = _Runtime()
     engine = AutonomousEventEngine(store, runtime,
-                                   governor=AutonomyGovernor(store, self_actors=("s17code",)))
+                                   governor=AutonomyGovernor(store, self_actors=("crucible",)))
     store.put_subscription(_subscription())
 
     outcome = await engine.process(_event(actor="ci-server"), llm=_relevance_llm())

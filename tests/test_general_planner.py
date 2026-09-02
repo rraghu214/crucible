@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from s17code.capabilities import default_registry
-from s17code.core.live_graph import Event, GraphSnapshot
-from s17code.planner import GeneralAgentPlanner
+from crucible.capabilities import default_registry
+from crucible.core.live_graph import Event, GraphSnapshot
+from crucible.planner import GeneralAgentPlanner
 
 
 class Replies:
@@ -338,7 +338,7 @@ async def test_capability_keyed_provider_shorthand_is_normalized_generically():
 
 
 def test_runtime_contains_no_prompt_router_or_benchmark_case_logic():
-    source = (Path(__file__).parents[1] / "s17code" / "runtime.py").read_text()
+    source = (Path(__file__).parents[1] / "crucible" / "runtime.py").read_text()
     assert "_work_intent" not in source
     assert "DeterministicPlanner" not in source
     assert "family-friendly things to do in Tokyo" not in source

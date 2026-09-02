@@ -1,4 +1,4 @@
-"""Run the twenty channel prompts through live GLC v5 -> S17 services.
+"""Run the twenty channel prompts through live GLC v5 -> Crucible services.
 
 The runner injects at GLC's canonical ChannelMessage WebSocket seam. It never
 calls an adapter's outbound provider API, so a proof cannot contact real people.
@@ -33,7 +33,7 @@ FORBIDDEN_LIVE_DELIVERY_TOOLS = {"send_channel_message", "launch_job"}
 def _args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--glc", default=os.getenv("GLC_BASE_URL", "http://127.0.0.1:8121"))
-    parser.add_argument("--s17", default=os.getenv("S17_BASE_URL", "http://127.0.0.1:8123"))
+    parser.add_argument("--crucible", default=os.getenv("CRUCIBLE_BASE_URL", "http://127.0.0.1:8123"))
     parser.add_argument("--install-token", default=os.getenv("GLC_INSTALL_TOKEN"))
     parser.add_argument("--output", default="proofs/results/channel_stress_latest.json")
     parser.add_argument("--only", action="append", default=[])
@@ -68,7 +68,7 @@ async def _send(glc: str, token: str, scenario: ChannelScenario, *, text: str,
         "attachments": [],
         "voice_audio_ref": None,
         "thread_id": thread_id,
-        # GLC overwrites this claim from its pairing store before S17 sees it.
+        # GLC overwrites this claim from its pairing store before Crucible sees it.
         "trust_level": "untrusted",
         "arrived_at": datetime.now(UTC).isoformat(),
         "metadata": {"message_id": message_id, "proof_scenario": scenario.id},
@@ -78,31 +78,31 @@ async def _send(glc: str, token: str, scenario: ChannelScenario, *, text: str,
         return json.loads(await asyncio.wait_for(socket.recv(), timeout=300))
 
 
-async def _run_record(s17: httpx.AsyncClient, channel: str, message_id: str) -> tuple[dict, dict]:
-    history = (await s17.get("/v1/agent/events")).json()["events"]
+async def _run_record(crucible: httpx.AsyncClient, channel: str, message_id: str) -> tuple[dict, dict]:
+    history = (await crucible.get("/v1/agent/events")).json()["events"]
     record = next(item for item in reversed(history)
                   if item["event"]["source"] == f"glc.channel.{channel}"
                   and item["event"]["id"] == message_id)
     decision = record["decisions"][-1]
-    run = (await s17.get(f"/v1/agent/runs/{decision['run_id']}")).json()
+    run = (await crucible.get(f"/v1/agent/runs/{decision['run_id']}")).json()
     return record, run
 
 
-async def run_one(glc: str, token: str, s17: httpx.AsyncClient,
+async def run_one(glc: str, token: str, crucible: httpx.AsyncClient,
                   scenario: ChannelScenario, ordinal: int) -> dict[str, Any]:
     started = time.perf_counter()
     message_id = f"channel-proof-{ordinal:02d}-{int(time.time() * 1000)}"
     thread_id = f"proof-{scenario.id}"
     reply = await _send(glc, token, scenario, text=scenario.prompt,
                         message_id=message_id, thread_id=thread_id)
-    record, run = await _run_record(s17, scenario.channel, message_id)
+    record, run = await _run_record(crucible, scenario.channel, message_id)
     final_decision = record["decisions"][-1]
     follow_up = None
     if scenario.follow_up:
         follow_id = f"{message_id}-approval"
         follow_reply = await _send(glc, token, scenario, text=scenario.follow_up,
                                    message_id=follow_id, thread_id=thread_id)
-        follow_record, run = await _run_record(s17, scenario.channel, follow_id)
+        follow_record, run = await _run_record(crucible, scenario.channel, follow_id)
         final_decision = follow_record["decisions"][-1]
         follow_up = {"prompt": scenario.follow_up, "reply": follow_reply,
                      "decision": follow_record["decisions"][-1]}
@@ -158,13 +158,13 @@ async def main() -> int:
         raise SystemExit("GLC_INSTALL_TOKEN is required")
     selected = [item for item in SCENARIOS if not args.only or item.id in set(args.only)]
     async with httpx.AsyncClient(base_url=args.glc, timeout=20) as glc, \
-               httpx.AsyncClient(base_url=args.s17, timeout=20) as s17:
+               httpx.AsyncClient(base_url=args.crucible, timeout=20) as crucible:
         for channel in sorted({item.channel for item in selected}):
             await _pair_owner(glc, channel, args.install_token)
         results = []
         for ordinal, scenario in enumerate(selected, 1):
             try:
-                result = await run_one(args.glc, args.install_token, s17, scenario, ordinal)
+                result = await run_one(args.glc, args.install_token, crucible, scenario, ordinal)
             except Exception as error:
                 result = {"id": scenario.id, "channel": scenario.channel, "prompt": scenario.prompt,
                           "passed": False, "error": f"{type(error).__name__}: {error}"}
@@ -176,7 +176,7 @@ async def main() -> int:
     report = {
         "generated_at": datetime.now(UTC).isoformat(),
         "glc": args.glc,
-        "s17": args.s17,
+        "crucible": args.crucible,
         "passed": sum(bool(item["passed"]) for item in results),
         "total": len(results),
         "results": results,

@@ -5,11 +5,11 @@ import json
 import httpx
 import pytest
 
-from s17code.gateway import GatewayClient
+from crucible.gateway import GatewayClient
 
 
 @pytest.mark.asyncio
-async def test_s17code_calls_gateway_without_owning_provider_keys(monkeypatch):
+async def test_crucible_calls_gateway_without_owning_provider_keys(monkeypatch):
     captured: dict[str, object] = {}
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -17,7 +17,7 @@ async def test_s17code_calls_gateway_without_owning_provider_keys(monkeypatch):
         captured["payload"] = json.loads(request.content)
         return httpx.Response(200, json={"text": "done", "provider": "gemini_2", "model": "gemini"})
 
-    monkeypatch.setenv("S17_GATEWAY_PROVIDER", "gemini")
+    monkeypatch.setenv("CRUCIBLE_GATEWAY_PROVIDER", "gemini")
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport) as http:
         result = await GatewayClient("http://127.0.0.1:8111", client=http).complete(
@@ -28,7 +28,7 @@ async def test_s17code_calls_gateway_without_owning_provider_keys(monkeypatch):
     payload = captured["payload"]
     assert isinstance(payload, dict)
     assert payload["provider"] == "gemini"
-    assert payload["agent"] == "s17_agent"
+    assert payload["agent"] == "crucible_agent"
     assert payload["session"] == "proof-run"
     assert not any("key" in field.lower() or "secret" in field.lower() for field in payload)
     assert result["provider"] == "gemini_2"
@@ -48,8 +48,8 @@ async def test_gateway_retries_transient_pool_cooldown(monkeypatch):
     async def no_wait(_seconds: float) -> None:
         return None
 
-    monkeypatch.setenv("S17_GATEWAY_ATTEMPTS", "3")
-    monkeypatch.setattr("s17code.gateway.asyncio.sleep", no_wait)
+    monkeypatch.setenv("CRUCIBLE_GATEWAY_ATTEMPTS", "3")
+    monkeypatch.setattr("crucible.gateway.asyncio.sleep", no_wait)
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
         result = await GatewayClient("http://gateway", client=http).complete("goal", "system")
     assert calls == 3
@@ -71,10 +71,10 @@ async def test_gateway_can_fall_back_without_exposing_credentials(monkeypatch):
     async def no_wait(_seconds: float) -> None:
         return None
 
-    monkeypatch.setenv("S17_GATEWAY_PROVIDER", "gemini")
-    monkeypatch.setenv("S17_GATEWAY_FALLBACK_PROVIDERS", "openrouter")
-    monkeypatch.setenv("S17_GATEWAY_ATTEMPTS", "1")
-    monkeypatch.setattr("s17code.gateway.asyncio.sleep", no_wait)
+    monkeypatch.setenv("CRUCIBLE_GATEWAY_PROVIDER", "gemini")
+    monkeypatch.setenv("CRUCIBLE_GATEWAY_FALLBACK_PROVIDERS", "openrouter")
+    monkeypatch.setenv("CRUCIBLE_GATEWAY_ATTEMPTS", "1")
+    monkeypatch.setattr("crucible.gateway.asyncio.sleep", no_wait)
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
         result = await GatewayClient("http://gateway", client=http).chat(
             prompt="goal", system="system", request={"model": "gemini-only"}
@@ -83,6 +83,6 @@ async def test_gateway_can_fall_back_without_exposing_credentials(monkeypatch):
     assert result["text"] == "fallback"
 
 
-def test_s17code_does_not_reimplement_gateway_routes(app_client):
+def test_crucible_does_not_reimplement_gateway_routes(app_client):
     assert app_client.post("/v1/chat", json={}).status_code == 404
     assert app_client.get("/v1/providers").status_code == 404

@@ -11,17 +11,17 @@ Three strategies, one task set, one ledger, one generic judge:
                       into.
 **C budget-aware**    starts on the rung the ladder's ``role_tiers`` declares and
                       climbs one rung on an unresolved verdict, every call still
-                      admitted, metered and possibly downgraded by the S17Code
+                      admitted, metered and possibly downgraded by the Crucible
                       hard controller.
 
-Every strategy runs through :class:`~s17code.economics.BudgetedGateway`, so all
+Every strategy runs through :class:`~crucible.economics.BudgetedGateway`, so all
 three numbers come out of the same ledger, priced by ``pricing.yaml`` from the
 token counts the gateway actually reported. Nothing here knows a provider, a
 model, a tier name or a price: the ladder is read from config at run time, so the
 proof survives the ladder being rewritten under it.
 
 **"Resolved" is decided by a generic rubric, never an answer key.** See
-:mod:`s17code.evals`. The task set is a data file; swap it for your own:
+:mod:`crucible.evals`. The task set is a data file; swap it for your own:
 
     python proofs/p1_cost_per_task.py --tasks proofs/tasks/mixed.jsonl \\
         --principal proofs/s15/p1 --base-url http://127.0.0.1:8112
@@ -57,7 +57,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import httpx  # noqa: E402
 from harness import OUT, Args, Proof, sync  # noqa: E402
 
-from s17code.economics import (  # noqa: E402
+from crucible.economics import (  # noqa: E402
     BudgetedGateway,
     BudgetRefused,
     EconomicsConfig,
@@ -65,10 +65,10 @@ from s17code.economics import (  # noqa: E402
     TierLadder,
     call_site,
 )
-from s17code.evals import EvalsConfig, RubricJudge, Verdict, load_tasks  # noqa: E402
-from s17code.evals.judge import STATUS_JUDGE_FAILED  # noqa: E402
-from s17code.evals.tasks import EvalTask, by_difficulty  # noqa: E402
-from s17code.gateway import GatewayClient  # noqa: E402
+from crucible.evals import EvalsConfig, RubricJudge, Verdict, load_tasks  # noqa: E402
+from crucible.evals.judge import STATUS_JUDGE_FAILED  # noqa: E402
+from crucible.evals.tasks import EvalTask, by_difficulty  # noqa: E402
+from crucible.gateway import GatewayClient  # noqa: E402
 
 DEFAULT_BASE_URL = os.getenv("GLC_BASE_URL", "http://127.0.0.1:8112")
 DEFAULT_TASKS = Path(__file__).resolve().parent / "tasks" / "mixed.jsonl"
@@ -607,7 +607,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--offline", action="store_true",
                         help="deterministic SIMULATION: exercises every path, proves nothing economic")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
-    parser.add_argument("--config-dir", default=os.getenv("S17_CONFIG_DIR"))
+    parser.add_argument("--config-dir", default=os.getenv("CRUCIBLE_CONFIG_DIR"))
     parser.add_argument("--label", default="", help="suffix for the JSON written to proofs/out/")
     return parser.parse_args(argv)
 
@@ -650,7 +650,7 @@ def run(parsed: argparse.Namespace) -> Proof:
 
     panel = evals.rubric.panel
     if parsed.judge_provider:
-        from s17code.evals import JudgeModel
+        from crucible.evals import JudgeModel
         request = dict(panel[0].request) if panel else {}
         request["provider"] = parsed.judge_provider
         if parsed.judge_model:

@@ -8,7 +8,7 @@ Two runs. Same goal, same model (`gemini-2.5-flash`), same empty workspace with
 > dark/light theme toggle that remembers the choice. Self-contained, no CDNs.
 
 The only difference between the runs is the environment variable
-`S17_SKILLS_DIR`, which lets the runtime discover `skills/web-pages/SKILL.md`.
+`CRUCIBLE_SKILLS_DIR`, which lets the runtime discover `skills/web-pages/SKILL.md`.
 No Python was imported, registered or changed between them.
 
 ## Result
@@ -65,9 +65,9 @@ and why the injected block is capped.
 ## Reproducing it
 
 ```bash
-export S17_WORKSPACE=/path/to/an/empty/git/repo      # with webcheck.js in it
-export S17_SKILLS_DIR=$PWD/skills                    # omit for the control run
-uv run s17code serve
+export CRUCIBLE_WORKSPACE=/path/to/an/empty/git/repo   # with webcheck.js in it
+export CRUCIBLE_SKILLS_DIR=$PWD/skills                 # omit for the control run
+uv run crucible serve
 ```
 
 `webcheck.js` needs `jsdom` on the path (`npm install jsdom`); without it the

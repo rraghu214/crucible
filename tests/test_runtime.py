@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import json
 
-import s17code.routes as agent_route
-from s17code.core.memory.embeddings import DeterministicEmbedder
+import crucible.routes as agent_route
+from crucible.core.memory.embeddings import DeterministicEmbedder
 
 
 def test_agent_run_uses_memory_then_expands_to_a_grounded_answer(app_client, monkeypatch):

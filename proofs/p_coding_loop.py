@@ -13,10 +13,10 @@ Exits non-zero unless the loop actually iterated: at least two verification runs
 at least one of them red, one of them green, and no cycle in the graph.
 """
 import asyncio, json, shutil, sys
-shutil.rmtree("/tmp/s17loop", ignore_errors=True)
-from s17code.runtime import AgentRuntime
-from s17code.core.memory import MemoryScope
-from s17code.core.memory.embeddings import DeterministicEmbedder
+shutil.rmtree("/tmp/crucibleloop", ignore_errors=True)
+from crucible.runtime import AgentRuntime
+from crucible.core.memory import MemoryScope
+from crucible.core.memory.embeddings import DeterministicEmbedder
 
 ATTEMPTS = [
   ("    return sum(numbers) / len(numbers)", "    if numbers is None:\n        return 0\n    return sum(numbers) / len(numbers)"),
@@ -61,8 +61,8 @@ async def llm(prompt, system):
 async def main():
     rt = AgentRuntime(); rt.memory.embedder = DeterministicEmbedder(128)
     out = await rt.run(prompt="Fix the failing test, iterating until it passes.",
-        scope=MemoryScope("course","s17","rohan","assistant"), llm=llm,
-        source_uri="test://s17", source_author="rohan",
+        scope=MemoryScope("course","crucible","rohan","assistant"), llm=llm,
+        source_uri="test://crucible", source_author="rohan",
         allowed_side_effects={"edit_code","run_command"})
     nodes = out["graph"]["nodes"]
     order = ["read"] + [x for n in (1,2,3) for x in (f"fix_{n}", f"verify_{n}")] + ["answer"]

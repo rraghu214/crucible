@@ -4,8 +4,8 @@ from datetime import date
 
 import pytest
 
-from s17code.capabilities import CapabilityError, default_registry
-from s17code.tools import (
+from crucible.capabilities import CapabilityError, default_registry
+from crucible.tools import (
     calculate,
     copy_file,
     current_datetime,
@@ -25,7 +25,7 @@ def test_calculate_supports_useful_arithmetic_without_code_execution():
 
 
 def test_write_and_hash_stay_inside_sandbox(monkeypatch, tmp_path):
-    monkeypatch.setenv("S17_SANDBOX_ROOT", str(tmp_path))
+    monkeypatch.setenv("CRUCIBLE_SANDBOX_ROOT", str(tmp_path))
     written = write_text_file("reports/result.txt", "verified output")
     assert written["sha256"] == file_sha256("reports/result.txt")["sha256"]
     with pytest.raises(FileExistsError):
@@ -42,7 +42,7 @@ def test_current_datetime_uses_iana_timezone():
 
 
 def test_copy_file_is_byte_preserving(monkeypatch, tmp_path):
-    monkeypatch.setenv("S17_SANDBOX_ROOT", str(tmp_path))
+    monkeypatch.setenv("CRUCIBLE_SANDBOX_ROOT", str(tmp_path))
     (tmp_path / "source.bin").write_bytes(b"a\x00b\n")
     result = copy_file("source.bin", "nested/copy.bin")
     assert result["match"] is True
@@ -50,7 +50,7 @@ def test_copy_file_is_byte_preserving(monkeypatch, tmp_path):
 
 
 def test_query_csv_joins_and_aggregates_without_write_authority(monkeypatch, tmp_path):
-    monkeypatch.setenv("S17_SANDBOX_ROOT", str(tmp_path))
+    monkeypatch.setenv("CRUCIBLE_SANDBOX_ROOT", str(tmp_path))
     (tmp_path / "left.csv").write_text("id,value\na,3\nb,5\n")
     (tmp_path / "right.csv").write_text("id,multiplier\na,10\nb,4\n")
     result = query_csv(["left.csv", "right.csv"],

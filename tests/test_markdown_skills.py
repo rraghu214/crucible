@@ -11,7 +11,7 @@ import textwrap
 
 import pytest
 
-from s17code.skills import GenericSkill, SkillError, SkillFrontmatterError, SkillManager
+from crucible.skills import GenericSkill, SkillError, SkillFrontmatterError, SkillManager
 
 
 def write(tmp_path, name: str, text: str, folder: str | None = None):
@@ -206,7 +206,7 @@ def test_the_manager_has_no_route_to_authority_at_all(tmp_path) -> None:
     """Enforced structurally: the object simply has no such attribute or argument."""
     import inspect
 
-    from s17code.skills import manager as manager_module
+    from crucible.skills import manager as manager_module
 
     manager = SkillManager()
     for forbidden in ("allowed_side_effects", "registry", "grant", "authorize"):

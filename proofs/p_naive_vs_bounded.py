@@ -31,7 +31,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from s17code.events import (  # noqa: E402
+from crucible.events import (  # noqa: E402
     AutonomousEventEngine,
     AutonomyGovernor,
     EventEnvelope,
@@ -40,7 +40,7 @@ from s17code.events import (  # noqa: E402
     morning_report,
 )
 
-SELF_ACTOR = "s17code"
+SELF_ACTOR = "crucible"
 UNBOUNDED = 10 ** 9
 
 

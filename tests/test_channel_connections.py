@@ -7,10 +7,10 @@ from unittest.mock import AsyncMock
 import httpx
 
 import conftest
-import s17code.routes as agent_route
-from s17code.core.live_graph import Deferred, GraphPatch, TaskSpec
-from s17code.core.memory.embeddings import DeterministicEmbedder
-from s17code.gateway import GatewayClient
+import crucible.routes as agent_route
+from crucible.core.live_graph import Deferred, GraphPatch, TaskSpec
+from crucible.core.memory.embeddings import DeterministicEmbedder
+from crucible.gateway import GatewayClient
 
 
 def _channel_message(**changes):
@@ -33,7 +33,7 @@ def _channel_message(**changes):
 def test_channel_message_runs_the_real_graph_records_event_and_deduplicates(
     app_client, monkeypatch
 ):
-    monkeypatch.setenv("S17_CHANNEL_BRIDGE_TOKEN", "shared")
+    monkeypatch.setenv("CRUCIBLE_CHANNEL_BRIDGE_TOKEN", "shared")
     app_client.app.state.runtime.memory.embedder = DeterministicEmbedder(128)
 
     async def fake_gateway(_app, prompt: str, system: str):
@@ -66,14 +66,14 @@ def test_channel_message_runs_the_real_graph_records_event_and_deduplicates(
 
 
 def test_channel_bridge_requires_a_shared_secret(app_client, monkeypatch):
-    monkeypatch.setenv("S17_CHANNEL_BRIDGE_TOKEN", "shared")
+    monkeypatch.setenv("CRUCIBLE_CHANNEL_BRIDGE_TOKEN", "shared")
     denied = app_client.post("/v1/agent/channel-messages", json=_channel_message())
     assert denied.status_code == 401
 
 
 def test_untrusted_channel_sender_never_inherits_configured_side_effects(app_client, monkeypatch):
-    monkeypatch.setenv("S17_CHANNEL_BRIDGE_TOKEN", "shared")
-    monkeypatch.setenv("S17_CHANNEL_ALLOWED_SIDE_EFFECTS", "write_file")
+    monkeypatch.setenv("CRUCIBLE_CHANNEL_BRIDGE_TOKEN", "shared")
+    monkeypatch.setenv("CRUCIBLE_CHANNEL_ALLOWED_SIDE_EFFECTS", "write_file")
     app_client.app.state.runtime.memory.embedder = DeterministicEmbedder(128)
 
     async def fake_gateway(_app, prompt: str, system: str):
@@ -107,7 +107,7 @@ async def test_gateway_discovers_and_sends_without_a_channel_name_table(monkeypa
         return httpx.Response(200, json={"accepted": True, "channel": "future_adapter",
                                          "adapter_result": {"id": "out-1"}})
 
-    monkeypatch.setenv("S17_CHANNEL_BRIDGE_TOKEN", "shared")
+    monkeypatch.setenv("CRUCIBLE_CHANNEL_BRIDGE_TOKEN", "shared")
     http = httpx.AsyncClient(transport=httpx.MockTransport(gateway), base_url="http://glc")
     client = GatewayClient("http://glc", client=http)
     assert await client.channels() == [{"name": "future_adapter", "connected": True}]
@@ -123,8 +123,8 @@ async def test_gateway_discovers_and_sends_without_a_channel_name_table(monkeypa
 
 
 def test_a_reply_in_the_same_channel_thread_resumes_a_waiting_approval(app_client, monkeypatch):
-    monkeypatch.setenv("S17_CHANNEL_BRIDGE_TOKEN", "shared")
-    monkeypatch.setenv("S17_CHANNEL_ALLOWED_SIDE_EFFECTS", "request_approval")
+    monkeypatch.setenv("CRUCIBLE_CHANNEL_BRIDGE_TOKEN", "shared")
+    monkeypatch.setenv("CRUCIBLE_CHANNEL_ALLOWED_SIDE_EFFECTS", "request_approval")
     app_client.app.state.runtime.memory.embedder = DeterministicEmbedder(128)
 
     async def fake_gateway(_app, prompt: str, system: str):
@@ -166,7 +166,7 @@ def test_a_reply_in_the_same_channel_thread_resumes_a_waiting_approval(app_clien
 
 
 def test_job_callback_resumes_and_pushes_final_answer_to_originating_channel(app_client, monkeypatch):
-    monkeypatch.setenv("S17_CHANNEL_BRIDGE_TOKEN", "shared")
+    monkeypatch.setenv("CRUCIBLE_CHANNEL_BRIDGE_TOKEN", "shared")
     app_client.app.state.runtime.memory.embedder = DeterministicEmbedder(128)
     runtime = app_client.app.state.runtime
     origin = _channel_message(metadata={"message_id": "job-origin"})
@@ -174,7 +174,7 @@ def test_job_callback_resumes_and_pushes_final_answer_to_originating_channel(app
     runtime.graph.start(run_id, context={
         "prompt": origin["text"],
         "scope": {"tenant_id": "local", "project_id": "channel:telegram",
-                  "user_id": "telegram:42", "agent_id": "s17-channel-agent", "run_id": None},
+                  "user_id": "telegram:42", "agent_id": "crucible-channel-agent", "run_id": None},
         "source_uri": "channel://telegram/job-origin", "source_author": "rohan",
         "inbound_id": "not-this-run", "respond_as": "text", "allowed_side_effects": ["launch_job"],
         "initial_evidence": {"channel_message": origin},

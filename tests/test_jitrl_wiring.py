@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import inspect
 
-from s17code import runtime as rt
+from crucible import runtime as rt
 
 
 def _run_source() -> str:
@@ -29,20 +29,20 @@ def test_the_planner_plans_against_the_restated_goal() -> None:
 def test_it_is_off_unless_switched_on() -> None:
     """One extra model call before any work starts is not a default."""
     src = _run_source()
-    assert 'os.getenv("S17_QUERY_OPTIMIZER", "0")' in src
+    assert 'os.getenv("CRUCIBLE_QUERY_OPTIMIZER", "0")' in src
 
 
 def test_a_resumed_run_is_not_rewritten_again() -> None:
     """Resume reloads the goal from the journal. Rewriting it twice would mean a
     run silently changing its own objective between checkpoints."""
     src = _run_source()
-    i = src.index("S17_QUERY_OPTIMIZER")
+    i = src.index("CRUCIBLE_QUERY_OPTIMIZER")
     assert "not resume" in src[i:i + 200]
 
 
 def test_the_original_prompt_survives_into_the_goal() -> None:
     """planning_goal() carries the original verbatim, so the journal shows both."""
-    from s17code.reasoning import OptimizedQuery
+    from crucible.reasoning import OptimizedQuery
 
     q = OptimizedQuery(original="fix login", query="Find and fix the login failure.",
                        constraints=("do not change the API",), rewritten=True)
@@ -51,7 +51,7 @@ def test_the_original_prompt_survives_into_the_goal() -> None:
 
 
 def test_a_failed_rewrite_leaves_the_prompt_untouched() -> None:
-    from s17code.reasoning import OptimizedQuery
+    from crucible.reasoning import OptimizedQuery
 
     q = OptimizedQuery(original="fix login", query="fix login", rewritten=False,
                        rejected_because="optimizer error: provider down")

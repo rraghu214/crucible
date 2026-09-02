@@ -1,7 +1,7 @@
 # Capability tiers.
 #
 # A tier is a NAME plus the gateway request fields that name expands to. Nothing
-# in s17code knows any of these names, providers or models: add a tier, rename a
+# in crucible knows any of these names, providers or models: add a tier, rename a
 # tier, or repoint one at a different provider entirely by editing this file.
 #
 # `order` is the ladder, cheapest first. `policy.py` walks it downwards when the

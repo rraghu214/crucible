@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from s17code.evals import (
+from crucible.evals import (
     EvalsConfig,
     JudgeModel,
     JudgeUnparseable,
@@ -29,7 +29,7 @@ from s17code.evals import (
     load_tasks,
     parse_scores,
 )
-from s17code.evals.judge import STATUS_JUDGE_FAILED, STATUS_RESOLVED, STATUS_UNRESOLVED
+from crucible.evals.judge import STATUS_JUDGE_FAILED, STATUS_RESOLVED, STATUS_UNRESOLVED
 
 CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"
 TASKS_FILE = Path(__file__).resolve().parents[1] / "proofs" / "tasks" / "mixed.jsonl"
@@ -128,7 +128,7 @@ def test_rubric_threshold_and_weights_come_from_the_config_file():
     # No criterion name and no judge model is written anywhere in the library:
     # rename one in the file and nothing needs recompiling. That the BAR is config
     # too is shown by test_moving_the_threshold_in_config_changes_the_verdict.
-    literals = _string_literals(Path(__file__).resolve().parents[1] / "s17code" / "evals")
+    literals = _string_literals(Path(__file__).resolve().parents[1] / "crucible" / "evals")
     for criterion in loaded.criteria:
         assert criterion.name not in literals, f"{criterion.name} is hardcoded in the judge"
     for member in loaded.panel:
@@ -285,7 +285,7 @@ async def test_an_invented_task_file_with_invented_criteria_works_unchanged(tmp_
     """The generic-rubric claim, tested: a domain nobody anticipated, no code edit."""
     invented = tmp_path / "invented.jsonl"
     invented.write_text(
-        "# a domain no s17code module has heard of\n"
+        "# a domain no crucible module has heard of\n"
         + json.dumps({"id": "z1", "difficulty": "silly",
                       "task": "Name the ceremonial fruit of the Grand Duchy of Fenwick.",
                       "expectation": "Names the quince and says the coronation is in spring."}) + "\n"
@@ -319,7 +319,7 @@ def test_the_shipped_task_file_is_data_and_spans_difficulty():
     labels = {task.difficulty for task in tasks}
     assert len(labels) >= 3, f"a single-difficulty set measures nothing: {labels}"
     # No task text or expectation appears anywhere in the library.
-    library = Path(__file__).resolve().parents[1] / "s17code"
+    library = Path(__file__).resolve().parents[1] / "crucible"
     sources = "\n".join(path.read_text(encoding="utf-8") for path in library.rglob("*.py"))
     for task in tasks:
         assert task.task[:40] not in sources
@@ -434,7 +434,7 @@ async def test_the_judge_forces_structured_output_and_carries_its_config_request
 
 
 async def test_the_judges_own_meta_cost_is_metered_separately():
-    from s17code.economics import EconomicsConfig
+    from crucible.economics import EconomicsConfig
 
     pricing = EconomicsConfig.load(CONFIG_DIR).pricing
     member = JudgeModel("stub", {"provider": "p", "model": next(iter(pricing.models))})

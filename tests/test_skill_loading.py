@@ -13,9 +13,9 @@ import textwrap
 
 import pytest
 
-from s17code.capabilities import default_registry
-from s17code.planner import GeneralAgentPlanner
-from s17code.skills import GenericSkill, SkillError, SkillManager
+from crucible.capabilities import default_registry
+from crucible.planner import GeneralAgentPlanner
+from crucible.skills import GenericSkill, SkillError, SkillManager
 
 
 def write(tmp_path, folder: str, text: str, refs: dict[str, str] | None = None):
@@ -73,7 +73,7 @@ def test_the_listing_carries_routing_lines_and_never_a_body(manager) -> None:
 def test_the_planner_is_shown_the_listing(manager) -> None:
     import json
 
-    from s17code.core.live_graph import Event, GraphSnapshot
+    from crucible.core.live_graph import Event, GraphSnapshot
 
     planner = GeneralAgentPlanner(_llm, default_registry(), goal="do a thing", skills=manager)
     graph = GraphSnapshot(run_id="r", finished=False, nodes={}, edges=[])
@@ -101,7 +101,7 @@ def test_a_loaded_skill_survives_for_the_rest_of_the_run(manager) -> None:
     """Derived from the graph, so a resumed run reloads what the journal says."""
     import asyncio
 
-    from s17code.core.live_graph import Event, GraphSnapshot
+    from crucible.core.live_graph import Event, GraphSnapshot
 
     planner = GeneralAgentPlanner(_llm, default_registry(), goal="g", skills=manager)
     nodes = {"load_1": {"skill": "load_skill", "input": {"name": "bigskill"},
@@ -117,7 +117,7 @@ def test_a_loaded_skill_survives_for_the_rest_of_the_run(manager) -> None:
 def test_a_reference_fetch_does_not_count_as_loading_the_skill(manager) -> None:
     import asyncio
 
-    from s17code.core.live_graph import Event, GraphSnapshot
+    from crucible.core.live_graph import Event, GraphSnapshot
 
     planner = GeneralAgentPlanner(_llm, default_registry(), goal="g", skills=manager)
     nodes = {"ref_1": {"skill": "load_skill",
@@ -195,7 +195,7 @@ def test_the_evidence_review_sees_a_long_outcome_whole() -> None:
     """
     import json
 
-    from s17code.core.live_graph import GraphSnapshot
+    from crucible.core.live_graph import GraphSnapshot
 
     questions = "".join(
         f'{{"id":"Q{i}","stem":"{"physics question text " * 45}","options":["A","B","C","D"]}},'
@@ -225,7 +225,7 @@ def test_the_evidence_review_sees_a_long_outcome_whole() -> None:
     )
 
 
-from s17code.core.live_graph import Event  # noqa: E402  (used above)
+from crucible.core.live_graph import Event  # noqa: E402  (used above)
 
 
 def test_a_requested_skill_is_never_dropped_by_the_budget(tmp_path) -> None:

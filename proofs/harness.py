@@ -38,11 +38,11 @@ sys.path.insert(0, str(ROOT))
 
 import httpx  # noqa: E402
 
-from s17code.core.memory import MemoryScope  # noqa: E402
-from s17code.core.memory.embeddings import DeterministicEmbedder  # noqa: E402
-from s17code.economics import EconomicsConfig, MeteredTransport  # noqa: E402
-from s17code.gateway import GatewayClient  # noqa: E402
-from s17code.runtime import AgentRuntime  # noqa: E402
+from crucible.core.memory import MemoryScope  # noqa: E402
+from crucible.core.memory.embeddings import DeterministicEmbedder  # noqa: E402
+from crucible.economics import EconomicsConfig, MeteredTransport  # noqa: E402
+from crucible.gateway import GatewayClient  # noqa: E402
+from crucible.runtime import AgentRuntime  # noqa: E402
 
 OUT = Path(__file__).resolve().parent / "out"
 DEFAULT_BASE_URL = os.getenv("GLC_BASE_URL", "http://127.0.0.1:8111")
@@ -84,10 +84,10 @@ def parse(description: str, argv: list[str] | None = None) -> Args:
     parser.add_argument("--offline", action="store_true",
                         help="use the deterministic transport instead of a live gateway")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
-    parser.add_argument("--otel-endpoint", default=os.getenv("S17_OTEL_EXPORTER_ENDPOINT"),
+    parser.add_argument("--otel-endpoint", default=os.getenv("CRUCIBLE_OTEL_EXPORTER_ENDPOINT"),
                         help="OTLP endpoint. Unset means build the spans and send nothing.")
     parser.add_argument("--respond-as", default="text", choices=("text", "ui"))
-    parser.add_argument("--config-dir", default=os.getenv("S17_CONFIG_DIR"))
+    parser.add_argument("--config-dir", default=os.getenv("CRUCIBLE_CONFIG_DIR"))
     parser.add_argument("--live-embeddings", action="store_true")
     parser.add_argument("--label", default="", help="suffix for the JSON written to proofs/out/")
     parsed = parser.parse_args(argv)
