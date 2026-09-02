@@ -38,6 +38,20 @@ Micrometer metrics exposed at `/actuator/prometheus` and `/actuator/metrics/{nam
 Always expose: `hikaricp.*`, `jvm.gc.*`, `jvm.memory.*`, `jvm.threads.*`,
 `http.server.requests`, `executor.*`.
 
+`/api/db` is `@Transactional` and sleeps 50ms inside the transaction: H2
+in-memory answers in microseconds, so without a held connection the pool never
+queues regardless of size. The sleep simulates realistic Postgres round-trip
+latency and is what makes pool size a tunable variable.
+
+**Flag for later (not a spike blocker):** the "healthy" baseline currently uses
+`maximum-pool-size=10`. At 50 users / 50ms hold that is a ~200 rps ceiling, and
+K1 measured ~170 rps with `acquire_mean` already ~21ms — i.e. baseline runs at
+~85% of pool capacity, so the healthy state is not fully idle. The K1/K3 signal
+is still unambiguous (bottleneck p99 is 8.7× baseline), so proceed as-is for the
+spike. For the full capstone, consider `maximum-pool-size=20` as the healthy
+state for a cleaner baseline, and set the K3 `baseline_reference` from measured
+p99 (140–160ms), not an assumed 50ms floor.
+
 ### 2. Metrics collector
 
 `crucible/perf/collector.py`
@@ -60,6 +74,18 @@ Two probe modes:
 - `MetricsSnapshot.from_actuator(base_url)` — live pull after a run
 - `MetricsSnapshot.from_json(path)` — replay from saved journal (scorer use)
 
+**Sampling note:** `hikaricp.connections.pending` is a gauge — it reads
+instantaneous state. Post-run polling returns 0 because load has drained.
+The metrics collector must sample pending mid-run (e.g., every 5s during
+the Locust campaign) and report the peak value, not the post-run value.
+The LoadRunner will trigger a background sampler thread for gauge metrics.
+
+This is an architectural decision, not a nice-to-have. Without it the agent
+sees `pending=0` in every snapshot and cannot confirm pool exhaustion — the
+"clean zero vs untested zero" problem from S18. Confirmed empirically in K1
+(`docs/K1_RESULT.md`): post-run pending read 0 on every bottleneck run while
+mid-run sampling showed a stable queue of ~42.
+
 ### 3. Load runner
 
 `crucible/perf/runner.py`
@@ -70,7 +96,9 @@ Wraps Locust as a subprocess. Identical parameters for every run in a campaign.
 class LoadRunner:
     def run(self, run_id: str, campaign: CampaignConfig) -> LocustSummary:
         # Launches locust --headless with fixed params
+        # Starts a background gauge sampler (see collector §2 sampling note)
         # Saves raw CSV and summary JSON to journals/{campaign_id}/
+        # Stops the sampler; hands its per-gauge peaks to the collector
         # Returns LocustSummary
 ```
 
