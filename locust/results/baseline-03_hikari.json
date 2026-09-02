@@ -1,0 +1,6 @@
+# pending
+{"name":"hikaricp.connections.pending","description":"Pending threads","measurements":[{"statistic":"VALUE","value":0.0}],"availableTags":[{"tag":"application","values":["perf-lab"]},{"tag":"pool","values":["perflab-pool"]}]}
+# acquire
+{"name":"hikaricp.connections.acquire","description":"Connection acquire time","baseUnit":"seconds","measurements":[{"statistic":"COUNT","value":46685.0},{"statistic":"TOTAL_TIME","value":977.6347423},{"statistic":"MAX","value":0.1211016}],"availableTags":[{"tag":"application","values":["perf-lab"]},{"tag":"pool","values":["perflab-pool"]}]}
+# http.server.requests
+{"name":"http.server.requests","baseUnit":"seconds","measurements":[{"statistic":"COUNT","value":46593.0},{"statistic":"TOTAL_TIME","value":3716.7604955},{"statistic":"MAX","value":0.179422}],"availableTags":[{"tag":"exception","values":["none","IOException"]},{"tag":"method","values":["GET"]},{"tag":"application","values":["perf-lab"]},{"tag":"error","values":["none","IOException"]},{"tag":"uri","values":["/api/version","/actuator/metrics/{requiredMetricName}","/api/db"]},{"tag":"outcome","values":["SUCCESS"]},{"tag":"status","values":["200"]}]}

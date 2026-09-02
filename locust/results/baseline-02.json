@@ -1,0 +1,11 @@
+{
+  "run_id": "baseline-02",
+  "timestamp": 1788340561.047337,
+  "num_requests": 14602,
+  "num_failures": 0,
+  "avg_response_time": 91.2586189088931,
+  "p50": 89,
+  "p95": 130,
+  "p99": 150,
+  "rps": 167.1
+}

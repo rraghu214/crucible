@@ -1,0 +1,11 @@
+{
+  "run_id": "bottleneck-03",
+  "timestamp": 1788341102.079374,
+  "num_requests": 3126,
+  "num_failures": 0,
+  "avg_response_time": 1188.9668835245993,
+  "p50": 1200,
+  "p95": 1300,
+  "p99": 1300,
+  "rps": 35.0
+}
