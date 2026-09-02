@@ -1,6 +1,7 @@
 package dev.crucible.perflab;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -40,11 +41,17 @@ public class PerfController {
     }
 
     /**
-     * Single DB round-trip via the connection pool.
+     * Single DB round-trip via the connection pool. The method is transactional
+     * so the pooled connection stays checked out for the whole call, including
+     * the simulated latency below — H2 in-memory returns in microseconds, which
+     * is unrepresentative of a real Spring Boot service hitting Postgres
+     * (50-200ms is typical). Without the hold the pool never queues.
      */
     @GetMapping("/db")
-    public Map<String, Object> db() {
+    @Transactional
+    public Map<String, Object> db() throws InterruptedException {
         long count = itemRepository.count();
+        Thread.sleep(50); // simulate realistic DB latency
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("count", count);
         body.put("timestamp", Instant.now().toString());
