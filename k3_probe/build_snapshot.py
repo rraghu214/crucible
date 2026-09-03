@@ -4,10 +4,24 @@ as the JSON payload the agent will later receive.
 
 Run against the BOTTLENECK app (pool=2, after a 90s Locust run).
 """
-import json, requests, time
+import json, requests, sys, time
 
 BASE = "http://localhost:8080"
 ACTUATOR = f"{BASE}/actuator"
+SNAPSHOT_PATH = "k3_probe/snapshot.json"
+
+# K3b: the runtime config the diagnosis may reason about. This is the
+# Change-applicator authority list from DESIGN.md section 5 — no secrets in it,
+# so /actuator/env sanitisation is not relied on.
+RUNTIME_CONFIG_KEYS = [
+    "spring.datasource.hikari.maximum-pool-size",
+    "spring.datasource.hikari.minimum-idle",
+    "spring.datasource.hikari.connection-timeout",
+    "server.tomcat.threads.max",
+    "server.tomcat.threads.min-spare",
+    "spring.task.execution.pool.core-size",
+    "spring.task.execution.pool.max-size",
+]
 
 def metric(name):
     try:
@@ -18,6 +32,27 @@ def metric(name):
         return measurements
     except Exception as e:
         return {"error": str(e)}
+
+def env_prop(name):
+    try:
+        r = requests.get(f"{ACTUATOR}/env/{name}", timeout=5)
+        r.raise_for_status()
+        prop = r.json().get("property")
+        return prop.get("value") if prop else None
+    except Exception as e:
+        return {"error": str(e)}
+
+if "--with-env" in sys.argv:
+    # K3b: reuse the exact K3a snapshot (gauges have drained — do NOT re-pull
+    # metrics) and only append the runtime-config lens.
+    with open(SNAPSHOT_PATH, encoding="utf-8") as f:
+        snapshot = json.load(f)
+    snapshot["runtime_config"] = {k: env_prop(k) for k in RUNTIME_CONFIG_KEYS}
+    with open(SNAPSHOT_PATH, "w", encoding="utf-8") as f:
+        json.dump(snapshot, f, indent=2, ensure_ascii=False)
+    print(f"[K3b] Added runtime_config to {SNAPSHOT_PATH}")
+    print(json.dumps(snapshot["runtime_config"], indent=2))
+    raise SystemExit(0)
 
 snapshot = {
     "captured_at": time.time(),

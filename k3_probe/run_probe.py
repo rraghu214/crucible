@@ -16,7 +16,6 @@ async def run():
         system="You are a performance engineering assistant. Return only valid JSON.",
         request={
             "provider": os.getenv("CRUCIBLE_GATEWAY_PROVIDER", "gemini"),
-            "auto_route": False,
             "agent": "crucible_agent",
             "session": f"spike-k3-{int(time.time())}",
         }

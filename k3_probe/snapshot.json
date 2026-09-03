@@ -1,0 +1,82 @@
+{
+  "captured_at": 1788406115.6178663,
+  "run_id": "bottleneck-03",
+  "locust_summary": {
+    "p50_ms": 1200,
+    "p95_ms": 1300,
+    "p99_ms": 1400,
+    "rps": 34.9,
+    "error_rate": 0
+  },
+  "hikaricp": {
+    "connections_max": {
+      "VALUE": 2.0
+    },
+    "connections_active": {
+      "VALUE": 0.0
+    },
+    "connections_pending": {
+      "VALUE": 0.0
+    },
+    "connections_idle": {
+      "VALUE": 2.0
+    },
+    "acquire_ms": {
+      "COUNT": 3186.0,
+      "TOTAL_TIME": 3499.0656738,
+      "MAX": 2.4055714
+    },
+    "creation_ms": {
+      "COUNT": 2.0,
+      "TOTAL_TIME": 0.003,
+      "MAX": 0.0
+    },
+    "timeout_total": {
+      "COUNT": 0.0
+    }
+  },
+  "hikaricp_derived": {
+    "note": "acquire Timer is in SECONDS — mean = TOTAL_TIME/COUNT",
+    "acquire_mean_ms": 1098,
+    "acquire_max_ms": 2406,
+    "pending_peak_during_load": 43
+  },
+  "jvm": {
+    "gc_pause_ms": {
+      "COUNT": 5.0,
+      "TOTAL_TIME": 0.149,
+      "MAX": 0.053
+    },
+    "memory_heap_used": {
+      "VALUE": 160881936.0
+    },
+    "memory_heap_max": {
+      "VALUE": 5362417661.0
+    },
+    "threads_live": {
+      "VALUE": 50.0
+    },
+    "threads_peak": {
+      "VALUE": 63.0
+    }
+  },
+  "http": {
+    "server_requests": {
+      "COUNT": 3110.0,
+      "TOTAL_TIME": 3682.9360823,
+      "MAX": 2.4612532
+    }
+  },
+  "baseline_reference": {
+    "p99_ms_median": 150
+  },
+  "runtime_config": {
+    "spring.datasource.hikari.maximum-pool-size": "2",
+    "spring.datasource.hikari.minimum-idle": "1",
+    "spring.datasource.hikari.connection-timeout": "30000",
+    "server.tomcat.threads.max": "200",
+    "server.tomcat.threads.min-spare": "10",
+    "spring.task.execution.pool.core-size": "8",
+    "spring.task.execution.pool.max-size": "16"
+  }
+}

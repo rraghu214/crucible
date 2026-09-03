@@ -1,0 +1,11 @@
+{
+  "run_id": "k3-source",
+  "timestamp": 1788406055.1041746,
+  "num_requests": 3053,
+  "num_failures": 0,
+  "avg_response_time": 1200.608125352598,
+  "p50": 1200,
+  "p95": 1300,
+  "p99": 1400,
+  "rps": 34.9
+}

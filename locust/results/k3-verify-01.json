@@ -1,0 +1,11 @@
+{
+  "run_id": "k3-verify-01",
+  "timestamp": 1788418883.9258056,
+  "num_requests": 16129,
+  "num_failures": 0,
+  "avg_response_time": 64.7151725595457,
+  "p50": 63,
+  "p95": 78,
+  "p99": 93,
+  "rps": 186.3
+}

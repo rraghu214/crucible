@@ -1,0 +1,35 @@
+{
+  "timestamp": 1788406908.1513932,
+  "provider": "gemini_1",
+  "model": "gemini-3.5-flash-lite",
+  "input_tokens": 908,
+  "output_tokens": 364,
+  "cost_usd": 0.0016359999999999999,
+  "parse_ok": true,
+  "diagnosis": {
+    "primary_cause": "The embedded web server's request processing thread pool is insufficiently sized for the incoming load, causing requests to queue up before execution.",
+    "evidence": [
+      "locust_summary.p50_ms: 1200ms, vastly exceeding the 200ms SLA due to request queuing.",
+      "jvm.threads_live: 50.0 threads, indicating a restricted concurrency limit relative to the 1400 RPS workload."
+    ],
+    "ruled_out": [
+      {
+        "hypothesis": "Database connection pool exhaustion",
+        "reason": "HikariCP active connections are at 0.0 and pending connections are 0.0, ruling out database bottlenecks."
+      },
+      {
+        "hypothesis": "JVM Garbage Collection pauses",
+        "reason": "Total GC pause time is only 0.149ms across 5 collections with a max pause of 0.053ms, which is negligible."
+      }
+    ],
+    "proposed_change": {
+      "parameter": "server.tomcat.threads.max",
+      "current_value": "200",
+      "proposed_value": "500",
+      "rationale": "Increasing the maximum worker threads allows the server to process concurrent requests in parallel rather than serializing them in a queue."
+    },
+    "predicted_p99_ms": 180,
+    "confidence": "high",
+    "confidence_reason": "Database and GC metrics are completely healthy, pointing directly to thread concurrency limitations as the source of high latency under high RPS."
+  }
+}

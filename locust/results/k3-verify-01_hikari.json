@@ -1,0 +1,8 @@
+=== hikaricp.connections.pending ===
+{"name":"hikaricp.connections.pending","description":"Pending threads","measurements":[{"statistic":"VALUE","value":0.0}],"availableTags":[{"tag":"application","values":["perf-lab"]},{"tag":"pool","values":["perflab-pool"]}]}
+=== hikaricp.connections.acquire ===
+{"name":"hikaricp.connections.acquire","description":"Connection acquire time","baseUnit":"seconds","measurements":[{"statistic":"COUNT","value":16233.0},{"statistic":"TOTAL_TIME","value":1.7982884},{"statistic":"MAX","value":0.1004835}],"availableTags":[{"tag":"application","values":["perf-lab"]},{"tag":"pool","values":["perflab-pool"]}]}
+=== hikaricp.connections.active ===
+{"name":"hikaricp.connections.active","description":"Active connections","measurements":[{"statistic":"VALUE","value":0.0}],"availableTags":[{"tag":"application","values":["perf-lab"]},{"tag":"pool","values":["perflab-pool"]}]}
+=== hikaricp.connections.max ===
+{"name":"hikaricp.connections.max","description":"Max connections","measurements":[{"statistic":"VALUE","value":20.0}],"availableTags":[{"tag":"application","values":["perf-lab"]},{"tag":"pool","values":["perflab-pool"]}]}
