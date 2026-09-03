@@ -252,3 +252,65 @@ def test_failed_file_read_is_visible_to_the_final_answer(app_client, monkeypatch
         "prompt": "Open missing.txt and report its contents."}).json()
     assert body["graph"]["nodes"]["attempt_read"]["state"] == "failed"
     assert "does not exist" in body["answer"]
+
+
+# --- capability workers with almost no coverage -----------------------------
+# retriever and validate_work are both planner-selectable but were silently
+# broken for months by the worker extraction (69c48c4): run_retriever lost its
+# `recall` binding and run_validate_work its `import os`. Nothing exercised
+# them. These are the smoke tests that would have caught it.
+
+
+def test_retriever_capability_runs_and_returns_scoped_memory(app_client, monkeypatch):
+    app_client.app.state.runtime.memory.embedder = DeterministicEmbedder(128)
+
+    def decide(context):
+        states = _states(context)
+        if not states:
+            return _patch([_task("retrieve", "retriever", {"query": context["goal"]})])
+        if states.get("retrieve") == "succeeded" and "answer" not in states:
+            return _patch([_task("answer", "answer_with_evidence",
+                                 {"query": context["goal"]}, ["retrieve"])])
+        return {"add": [], "cancel": [], "finish": True, "reason": "retrieved and answered"}
+
+    _install_agent(monkeypatch, decide, answer="You are comparing Rust and Go. [source: chat://n/1]")
+    scope = {"tenant_id": "acme", "project_id": "langs", "user_id": "rohan"}
+    assert app_client.post("/v1/agent/facts", json={
+        **scope, "text": "Rohan is comparing Rust and Go for a systems project.",
+        "source_uri": "chat://n/1"}).status_code == 200
+
+    body = app_client.post("/v1/agent/runs", json={**scope, "prompt": "What am I comparing?"}).json()
+    node = body["graph"]["nodes"]["retrieve"]
+    assert node["state"] == "succeeded", node.get("result")
+    assert node["result"]["hits"], "retriever returned no scoped-memory hits"
+    assert body["graph"]["nodes"]["answer"]["state"] == "succeeded"
+
+
+def test_validate_work_capability_spawns_a_validator_child(app_client, monkeypatch, tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "calc.py").write_text("def add(a, b):\n    return a + b\n")
+    monkeypatch.setenv("CRUCIBLE_WORKSPACE", str(workspace))
+    app_client.app.state.runtime.memory.embedder = DeterministicEmbedder(128)
+
+    def decide(context):
+        states = _states(context)
+        # The validator child runs with its own goal; drive it straight to an answer.
+        if "Validate that this requirement" in context["goal"]:
+            if not states:
+                return _patch([_task("checked", "answer_with_evidence", {"query": context["goal"]})])
+            return {"add": [], "cancel": [], "finish": True, "reason": "validator reported"}
+        if not states:
+            return _patch([_task("validate", "validate_work",
+                                 {"requirement": "add(a, b) returns a + b", "paths": ["calc.py"]})])
+        return {"add": [], "cancel": [], "finish": True, "reason": "validation done"}
+
+    _install_agent(monkeypatch, decide, answer="Ran it. add() returns a + b; nothing is broken.")
+    body = app_client.post("/v1/agent/runs", json={
+        "tenant_id": "acme", "project_id": "coding", "user_id": "rohan",
+        "prompt": "Confirm add() is correct.",
+        "allowed_side_effects": ["validate_work"]}).json()
+    node = body["graph"]["nodes"]["validate"]
+    assert node["state"] == "succeeded", node.get("result")
+    assert node["result"]["validator_status"] == "completed"
+    assert "summary" in node["result"]
