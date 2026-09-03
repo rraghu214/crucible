@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-asyncio>=0.23", "ruff>=0.6"]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "pytest-rerunfailures>=14", "ruff>=0.6"]
 # Load generator. Runs from the control host, driven as a subprocess during
 # campaigns (see CRUCIBLE_ALLOWED_COMMANDS). Not imported by the package.
 load = ["locust>=2.32,<3"]

@@ -25,7 +25,11 @@ from crucible.coding.guard import is_protected
 
 
 @pytest.fixture
-def repo(tmp_path: Path) -> Workspace:
+def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Workspace:
+    # A local .env (via load_dotenv on app startup) can leak a narrow
+    # CRUCIBLE_PROTECTED_PATHS process-wide; these tests assert on the
+    # shipped DEFAULT_PROTECTED set, so pin it back to unset.
+    monkeypatch.delenv("CRUCIBLE_PROTECTED_PATHS", raising=False)
     (tmp_path / "tests").mkdir()
     (tmp_path / "calc.py").write_text(
         "def average(numbers):\n    return sum(numbers) / len(numbers)\n")
