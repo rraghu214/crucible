@@ -4,7 +4,11 @@ as the JSON payload the agent will later receive.
 
 Run against the BOTTLENECK app (pool=2, after a 90s Locust run).
 """
-import json, requests, sys, time
+import json
+import sys
+import time
+
+import requests
 
 BASE = "http://localhost:8080"
 ACTUATOR = f"{BASE}/actuator"

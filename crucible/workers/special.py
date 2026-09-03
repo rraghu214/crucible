@@ -9,6 +9,7 @@ closures happened the first time.
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
 from crucible.core.live_graph import TaskSpec
@@ -28,7 +29,7 @@ async def run_validate_work(ctx: RunContext, task: TaskSpec) -> dict[str, Any]:
     must not get is the ability to fix anything: a validator that can
     edit will eventually validate what it can edit.
     """
-    from crucible.coding.validate import VALIDATOR_SYSTEM, summarise, validator_goal
+    from crucible.coding.validate import summarise, validator_goal
 
     if int(os.getenv("_CRUCIBLE_VALIDATION_DEPTH", "0")) >= 1:
         return {"summary": "validators do not spawn validators", "passed": True,

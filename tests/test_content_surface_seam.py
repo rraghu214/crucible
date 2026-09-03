@@ -12,8 +12,7 @@ from __future__ import annotations
 
 import json
 
-from crucible.runtime import _as_section, _parse_json_array
-
+from crucible.workers.parsing import _as_section, _parse_json_array
 
 QUESTIONS = [
     {"id": "Q1", "stem": "A solid sphere rolls without slipping. Its acceleration is:",

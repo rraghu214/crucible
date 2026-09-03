@@ -11,8 +11,14 @@ from pathlib import Path
 import pytest
 
 from crucible.coding import (
-    CommandError, EditError, GuardError, Workspace, WorkspaceError,
-    glob_files, grep_code, run_command,
+    CommandError,
+    EditError,
+    GuardError,
+    Workspace,
+    WorkspaceError,
+    glob_files,
+    grep_code,
+    run_command,
 )
 from crucible.coding.edit import EditLedger, apply_edit, create_file, read_code
 from crucible.coding.guard import is_protected

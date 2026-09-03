@@ -19,7 +19,6 @@ arithmetic at all.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from .guard import guard_path
 from .workspace import Workspace

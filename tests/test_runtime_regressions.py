@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 
 import crucible.routes as agent_route
-import crucible.runtime as runtime_module
 import crucible.workers.general as general_workers
 from crucible.core.memory.embeddings import DeterministicEmbedder
 from crucible.tools import file_uri_to_path
@@ -69,8 +68,8 @@ def test_search_outcome_expands_into_fetches_only_after_urls_exist(app_client, m
     async def fetch(url):
         return {"url": url, "status": 200, "content_type": "text/plain", "text": f"content from {url}"}
 
-    monkeypatch.setattr(runtime_module, "web_search", search)
-    monkeypatch.setattr(runtime_module, "fetch_url", fetch)
+    monkeypatch.setattr(general_workers, "web_search", search)
+    monkeypatch.setattr(general_workers, "fetch_url", fetch)
     result = app_client.post("/v1/agent/runs", json={"tenant_id": "t", "project_id": "p",
         "prompt": "Look up current Python asyncio best practices and summarize three reliable sources."}).json()
     patches = [event["payload"]["add"] for event in result["events"] if event["kind"] == "graph_patched"]
@@ -128,7 +127,7 @@ def test_unseen_comparison_launches_independent_agents_then_synthesizes(app_clie
     _install_agent(monkeypatch, decide)
     async def search(query, max_results=3):
         return {"query": query, "hits": [{"title": query, "url": "https://language.test", "snippet": "evidence"}]}
-    monkeypatch.setattr(runtime_module, "web_search", search)
+    monkeypatch.setattr(general_workers, "web_search", search)
     body = app_client.post("/v1/agent/runs", json={"tenant_id": "t", "project_id": "compare",
         "prompt": "Research Rust and Go, then compare their concurrency models."}).json()
     starts = [event["node_id"] for event in body["events"] if event["kind"] == "task_started"]

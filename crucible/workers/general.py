@@ -22,14 +22,24 @@ import httpx
 from crucible.core.a2a import A2AClient
 from crucible.core.a2a.trust import AgentCardTrustPolicy
 from crucible.core.live_graph import Deferred, TaskSpec
-from crucible.core.memory import MemoryKind, MemoryRecord
-from crucible.workers.parsing import _as_section, _parse_json_array, _parse_json_object, _slug
 from crucible.tools import (
-    calculate, copy_file, current_datetime, date_shift, fetch_url, file_sha256,
-    file_uri_to_path, query_csv, sandbox_directories, sandbox_files, sandbox_path,
-    web_search, write_text_file,
+    calculate,
+    copy_file,
+    current_datetime,
+    date_shift,
+    fetch_url,
+    file_sha256,
+    file_uri_to_path,
+    query_csv,
+    sandbox_directories,
+    sandbox_files,
+    sandbox_path,
+    web_search,
+    write_text_file,
 )
+from crucible.workers import special
 from crucible.workers.context import RunContext
+from crucible.workers.parsing import _as_section, _parse_json_array, _parse_json_object, _slug
 
 __all__ = ['run_calculate', 'run_current_datetime', 'run_date_shift', 'run_fetch', 'run_file_sha256', 'run_query_csv', 'run_search', 'run_copy_file', 'run_read_file', 'run_write_file', 'run_index', 'list_channels', 'request_approval', 'run_retriever', 'list_directory', 'run_verify_artifact', 'send_channel_message', 'a2a_delegate', 'create_calendar_events', 'load_skill', 'launch_job', 'run_content', 'run_researcher']
 
@@ -98,7 +108,8 @@ async def request_approval(ctx: RunContext, task: TaskSpec) -> Deferred:
 
 
 async def run_retriever(ctx: RunContext, task: TaskSpec) -> dict[str, Any]:
-    hits = await recall(TaskSpec(task.id, "memory_recall", {"query": task.input.get("query", ctx.goal)}))
+    recall_task = TaskSpec(task.id, "memory_recall", {"query": task.input.get("query", ctx.goal)})
+    hits = await special.recall(ctx, recall_task, inbound_id=None)
     result = await ctx.llm(json.dumps(hits), "You are the retriever role. Summarise only supplied scoped memory evidence.")
     return {**hits, "text": result.get("text", ""), "provider": result.get("provider"),
             "model": result.get("model"), "agent": task.skill}

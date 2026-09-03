@@ -12,11 +12,16 @@ Run it against the throwaway repo the script builds:
 Exits non-zero unless the loop actually iterated: at least two verification runs,
 at least one of them red, one of them green, and no cycle in the graph.
 """
-import asyncio, json, shutil, sys
-shutil.rmtree("/tmp/crucibleloop", ignore_errors=True)
-from crucible.runtime import AgentRuntime
+import asyncio
+import json
+import shutil
+import sys
+
 from crucible.core.memory import MemoryScope
 from crucible.core.memory.embeddings import DeterministicEmbedder
+from crucible.runtime import AgentRuntime
+
+shutil.rmtree("/tmp/crucibleloop", ignore_errors=True)
 
 ATTEMPTS = [
   ("    return sum(numbers) / len(numbers)", "    if numbers is None:\n        return 0\n    return sum(numbers) / len(numbers)"),

@@ -15,7 +15,7 @@ import pytest
 
 from crucible.capabilities import default_registry
 from crucible.planner import GeneralAgentPlanner
-from crucible.skills import GenericSkill, SkillError, SkillManager
+from crucible.skills import SkillError, SkillManager
 
 
 def write(tmp_path, folder: str, text: str, refs: dict[str, str] | None = None):

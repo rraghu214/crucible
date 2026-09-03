@@ -21,9 +21,9 @@ cheap one is unavailable:
 Running System 2 over code that already has a passing suite is paying a model to
 have opinions about something you can already prove.
 """
-from .verifier import Verdict, Verifier
-from .engine import ReasoningEngine, Reasoned
+from .engine import Reasoned, ReasoningEngine
 from .jitrl import OptimizedQuery, QueryOptimizer
+from .verifier import Verdict, Verifier
 
 __all__ = [
     "Verifier", "Verdict", "ReasoningEngine", "Reasoned",

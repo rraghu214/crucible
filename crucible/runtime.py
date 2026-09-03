@@ -5,27 +5,21 @@ carried-forward core components into the code path used by HTTP and channel mess
 """
 from __future__ import annotations
 
-import asyncio
-import hashlib
 import json
 import logging
 import os
-import re
 import uuid
 from collections.abc import Awaitable, Callable
-from datetime import date
+from functools import partial
 from pathlib import Path
 from typing import Any
-
-import httpx
 
 from crucible.capabilities import (
     default_registry,
     generic_evidence,
     project_evidence,
 )
-from crucible.core.a2a import A2AClient
-from crucible.core.a2a.trust import AgentCardTrustPolicy
+from crucible.coding import EditLedger, Workspace
 from crucible.core.live_graph import Deferred, GraphStore, LiveGraphExecutor, TaskSpec
 from crucible.core.memory import MemoryKind, MemoryRecord, MemoryScope, MemoryStore, Principal, SourceRef
 from crucible.core.memory.embeddings import OllamaNomicEmbedder
@@ -38,38 +32,14 @@ from crucible.economics import (
     RunBudget,
     call_site,
 )
-from crucible.coding import EditLedger, Workspace, glob_files, grep_code, run_command
-from crucible.coding.edit import apply_edit, create_file as coding_create_file, read_code
 from crucible.events.outbox import ActionOutbox
-from functools import partial
-
 from crucible.planner import GeneralAgentPlanner
-from crucible.workers import RunContext
-from crucible.workers import coding as coding_workers
-from crucible.ui import compose as ui_compose
-from crucible.workers import general
-from crucible.workers import special
-from crucible.workers.parsing import (
-    _as_section, _parse_json_array, _parse_json_object, _slug,
-)
 from crucible.skills import SkillManager
+from crucible.ui import compose as ui_compose
+from crucible.workers import RunContext, general, special
+from crucible.workers import coding as coding_workers
 
 log = logging.getLogger(__name__)
-from crucible.tools import (
-    calculate,
-    copy_file,
-    current_datetime,
-    date_shift,
-    fetch_url,
-    file_sha256,
-    file_uri_to_path,
-    query_csv,
-    sandbox_directories,
-    sandbox_files,
-    sandbox_path,
-    web_search,
-    write_text_file,
-)
 
 TextLLM = Callable[[str, str], Awaitable[dict[str, Any]]]
 Skill = Callable[[TaskSpec], Awaitable[dict[str, Any] | Deferred]]
@@ -212,7 +182,6 @@ class AgentRuntime:
         # the run proceeds on the untouched prompt. Off by default, because it
         # costs one model call before any work starts.
         restated_goal = prompt
-        query_rewrite: dict[str, Any] = {"rewritten": False, "reason": "disabled"}
         if os.getenv("CRUCIBLE_QUERY_OPTIMIZER", "0").lower() in {"1", "true", "yes"} and not resume:
             from crucible.reasoning import QueryOptimizer
 
@@ -222,7 +191,6 @@ class AgentRuntime:
 
             optimized = await QueryOptimizer(_optimizer_llm).optimize(prompt)
             restated_goal = optimized.planning_goal()
-            query_rewrite = optimized.as_dict()
             log.info("query optimizer: rewritten=%s %s",
                      optimized.rewritten, optimized.rejected_because or "")
 

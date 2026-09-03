@@ -3,8 +3,11 @@ Perf Lab — Spike Load Profile
 Targets /api/db exclusively (the bottleneck endpoint).
 Do not mix /api/fast here — we want a pure signal.
 """
-from locust import HttpUser, task, between, events
-import json, time, os
+import json
+import os
+import time
+
+from locust import HttpUser, between, events, task
 
 RUN_ID = os.getenv("RUN_ID", f"run-{int(time.time())}")
 

@@ -1,6 +1,10 @@
 import asyncio
-import json, os, time
+import json
+import os
+import time
+
 from crucible.gateway import GatewayClient
+
 
 async def run():
     with open("k3_probe/snapshot.json") as f:

@@ -4,9 +4,9 @@ import json
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
+import conftest
 import httpx
 
-import conftest
 import crucible.routes as agent_route
 from crucible.core.live_graph import Deferred, GraphPatch, TaskSpec
 from crucible.core.memory.embeddings import DeterministicEmbedder
