@@ -43,14 +43,15 @@ in-memory answers in microseconds, so without a held connection the pool never
 queues regardless of size. The sleep simulates realistic Postgres round-trip
 latency and is what makes pool size a tunable variable.
 
-**Flag for later (not a spike blocker):** the "healthy" baseline currently uses
-`maximum-pool-size=10`. At 50 users / 50ms hold that is a ~200 rps ceiling, and
-K1 measured ~170 rps with `acquire_mean` already ~21ms — i.e. baseline runs at
-~85% of pool capacity, so the healthy state is not fully idle. The K1/K3 signal
-is still unambiguous (bottleneck p99 is 8.7× baseline), so proceed as-is for the
-spike. For the full capstone, consider `maximum-pool-size=20` as the healthy
-state for a cleaner baseline, and set the K3 `baseline_reference` from measured
-p99 (140–160ms), not an assumed 50ms floor.
+**Resolved (K3 verification, 2026-09-03):** the healthy baseline is
+`maximum-pool-size=20`, not 10. K1's pool=10 baseline ran at ~85% of pool capacity
+(~170 rps against a ~200 rps ceiling, `acquire_mean` ~21ms) — not fully idle. The
+K3 verification run at pool=20 measured 186 rps and p99 93ms with `acquire_mean`
+0.11ms and no pending queue — a genuinely idle baseline. New campaigns use pool=20
+and set the K3 `baseline_reference` from a measured pool=20 p99 (~90ms), not an
+assumed floor. K1 and K3 themselves were run with a pool=10 baseline and their
+result stands (bottleneck p99 is 8.7× baseline either way; see `docs/K1_RESULT.md`,
+`docs/K3_RESULT.md`).
 
 ### 2. Metrics collector
 
@@ -191,7 +192,7 @@ The top-level loop. Coordinates all components. Writes the manifest.
 
 ```
 START campaign
-  └─ SET baseline (3 runs, pool=10) → compute p99 median
+  └─ SET baseline (3 runs, pool=20) → compute p99 median
   └─ INJECT bottleneck (change one property)
   └─ CONFIRM SLA breach (1 run → p99 > PERFLAB_SLA_P99_MS)
   └─ LOOP (max 5 experiments per campaign):
