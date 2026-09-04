@@ -305,6 +305,9 @@ User          Orchestrator    DiagnosisEngine    ChangeApplicator    PerfLab    
 
 ---
 
+
+Evaluation design: see docs/EVALUATION.md. Flow diagrams: see docs/FLOW.md
+
 ## Week-by-week plan
 
 **Week 1 (Sep 7–13):** Spike + rename + PerfLab + Locust + K1/K3 gates
