@@ -390,6 +390,41 @@ figure{margin:0}
   padding:.2cqw .6cqw;border-radius:2px;font-weight:700;
 }
 
+/* ---------- 8 · appendix: course concept map ---------- */
+
+.maps{display:grid;grid-template-columns:1.72fr 1fr;gap:2.2cqw;margin-top:1cqw;min-height:0}
+.maps > div{display:flex;flex-direction:column;min-height:0}
+.maphead{
+  font-family:var(--mono);font-size:.86cqw;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--ink3);font-weight:500;border-top:.2cqw solid var(--rule);
+  padding-top:.55cqw;margin:0 0 .55cqw;
+}
+.maps .built .maphead{border-top-color:var(--teal);color:var(--teal)}
+.maps .later .maphead{border-top-color:var(--steel);color:var(--steel)}
+
+.srow{
+  display:grid;grid-template-columns:2.5cqw 1fr;gap:.7cqw;align-items:baseline;
+  padding:.3cqw 0;border-bottom:1px solid var(--rule2);
+}
+.srow:last-child{border-bottom:none}
+.snum{
+  font-family:var(--mono);font-size:.92cqw;font-weight:700;color:var(--steel);
+  font-variant-numeric:tabular-nums;
+}
+.built .srow.key .snum{color:var(--amber)}
+.sname{font-size:.9cqw;color:var(--ink3);line-height:1.25;display:block}
+.tags{font-family:var(--mono);font-size:.94cqw;line-height:1.3;color:var(--ink);display:block}
+.tags i{font-style:normal;color:var(--ink3)}
+.built .srow.key .tags{color:var(--ink)}
+.built .srow.key .tags b{color:var(--amber);font-weight:700}
+.later .tags{color:var(--ink2)}
+
+.mapfoot{
+  font-size:1cqw;line-height:1.45;color:var(--ink2);
+  border-left:.24cqw solid var(--amber);padding-left:1cqw;margin-top:1cqw;
+}
+.mapfoot b{color:var(--ink);font-weight:600}
+
 /* ---------- chrome ---------- */
 
 .bar{
@@ -804,6 +839,100 @@ figure{margin:0}
     <div class="spacer"></div>
   </section>
 
+  <!-- ============ 8 · APPENDIX — COURSE CONCEPT MAP ============ -->
+  <section class="slide">
+    <p class="eyebrow"><span class="appx">Appendix</span> &nbsp;what this build takes from the course</p>
+    <h1 class="title" style="font-size:2.3cqw">Fourteen of nineteen sessions are load-bearing.<span class="lo"> Three more are roadmap. Two are background.</span></h1>
+
+    <div class="maps">
+      <div class="built">
+        <p class="maphead">In the four-week build</p>
+
+        <div class="srow"><span class="snum">S3</span><span>
+          <span class="sname">Developer Foundations &amp; First Agent</span>
+          <span class="tags">#TypedContracts #AgentSkeleton</span></span></div>
+
+        <div class="srow"><span class="snum">S5</span><span>
+          <span class="sname">Planning &amp; Reasoning with LLMs</span>
+          <span class="tags">#SingleReasoningCall #StructuredJSON #uv</span></span></div>
+
+        <div class="srow key"><span class="snum">S6</span><span>
+          <span class="sname">Agentic Architecture</span>
+          <span class="tags"><b>#Perception #Decision #Action</b> #PydanticContracts</span></span></div>
+
+        <div class="srow"><span class="snum">S7</span><span>
+          <span class="sname">Memory &amp; Retrieval — Embeddings, FAISS</span>
+          <span class="tags">#JournalRAG #Embeddings #RoleBoundary</span></span></div>
+
+        <div class="srow key"><span class="snum">S8</span><span>
+          <span class="sname">Multi-Agent DAG Orchestration</span>
+          <span class="tags"><b>#RubberStampCritic #MechanismVsPolicy</b> #NoLLMSelfJudging</span></span></div>
+
+        <div class="srow"><span class="snum">S11</span><span>
+          <span class="sname">Channels, Voice and Gateway</span>
+          <span class="tags">#ChannelAdapters #TelegramApproval #OneGateway</span></span></div>
+
+        <div class="srow key"><span class="snum">S12</span><span>
+          <span class="sname">Cybersecurity, Sandboxes, Adversary's Mindset</span>
+          <span class="tags"><b>#MisplacedTrust</b> #ThreatModel #SandboxRoot #PromptInjection</span></span></div>
+
+        <div class="srow"><span class="snum">S13</span><span>
+          <span class="sname">Graphs, Memory, Semantic Chunking, A2A</span>
+          <span class="tags">#GraphGrowsFromOutcomes #Provenance</span></span></div>
+
+        <div class="srow"><span class="snum">S14</span><span>
+          <span class="sname">Generative UI, A2UI and AG-UI</span>
+          <span class="tags">#ObserverChat #LiveEventStream #TrustedCatalog</span></span></div>
+
+        <div class="srow"><span class="snum">S15</span><span>
+          <span class="sname">Model Routing, Agent Economics, Observability</span>
+          <span class="tags">#ModelPinned #CostPerResolvedTask #Budget #Spans</span></span></div>
+
+        <div class="srow key"><span class="snum">S16</span><span>
+          <span class="sname">Event Driven Autonomous Agents</span>
+          <span class="tags"><b>#StopsInTheRightState</b> #ExperimentCeiling #BudgetAbort</span></span></div>
+
+        <div class="srow key"><span class="snum">S17</span><span>
+          <span class="sname">Agentic Coding &amp; Markdown-as-Code Skills</span>
+          <span class="tags"><b>#S17CodeIsTheBase</b> #ProtectedPathGuard #FailureCeiling</span></span></div>
+
+        <div class="srow key"><span class="snum">S18</span><span>
+          <span class="sname">Evaluating Agents, and Why Benchmarks Lie</span>
+          <span class="tags"><b>#VerifiedPass #FalseSuccess #Reachability</b> #Manifest #Scorer</span></span></div>
+
+        <div class="srow"><span class="snum">S19</span><span>
+          <span class="sname">Capstone scoping</span>
+          <span class="tags">#FiveAsks #FourWeeksNotFourMonths</span></span></div>
+      </div>
+
+      <div class="later">
+        <p class="maphead">Roadmap &amp; background</p>
+
+        <div class="srow"><span class="snum">S4</span><span>
+          <span class="sname">Model Context Protocol</span>
+          <span class="tags">#DotenvSecrets <i>· in use</i><br>#MCPInterface <i>· roadmap</i></span></span></div>
+
+        <div class="srow"><span class="snum">S9</span><span>
+          <span class="sname">Browser Agents &amp; Autonomous Web</span>
+          <span class="tags">#CheapFirstThenEscalate<br>#PluggableSkill <i>· adapter seams</i></span></span></div>
+
+        <div class="srow"><span class="snum">S10</span><span>
+          <span class="sname">Computer-Use Agent</span>
+          <span class="tags"><i>unused — every action is a config edit or an HTTP call.</i> #APMConsole <i>· if a vendor has no API</i></span></span></div>
+
+        <div class="srow"><span class="snum">S1<br>S2</span><span>
+          <span class="sname">Transformers · LLM Internals &amp; the 2026 Landscape</span>
+          <span class="tags"><i>background —</i> #WhyASmallPinnedModelSuffices</span></span></div>
+
+        <p class="mapfoot">Three of these are not "applied a concept" — they are direct
+        lineage. <b>S17Code is the codebase.</b> <b>S18's four outcomes are kept by name.</b>
+        And S8's rubber-stamp Critic is why the verdict is a measurement, never a model
+        grading its own work.</p>
+      </div>
+    </div>
+    <div class="spacer"></div>
+  </section>
+
 </div>
 
 <div class="bar">
@@ -899,6 +1028,15 @@ figure{margin:0}
       '<span class="beat">The line that matters:</span> "The reasoning trail is the product, not the number. Anyone can produce \'p99 is now 93 milliseconds.\' What it ruled out, and on what evidence, is what makes the fix trustworthy — and what makes the next campaign faster."',
       '<span class="beat">Point at the refusal.</span> "And the shortcut it declined is on the report too. A report with zero refusals is not a clean report — it may just mean nothing tempted it."',
       '<span class="beat">Say this if there is any doubt in the room:</span> "That is illustrative — the week-two deliverable shape, not a recorded run." Be first to say it. Do not let someone else point it out.'
+    ]},
+    {t:'APPENDIX · course concept map — not in the five minutes', h:[
+      '<span class="beat">Only if asked "what from the course are you actually using?" Do not walk the table — point at the three amber ones.</span>',
+      '"Fourteen of the nineteen sessions are load-bearing in the build. Three more are roadmap. Only the two transformer sessions are pure background."',
+      '<span class="beat">S17.</span> "This one isn\'t \'inspired by\' — S17Code <i>is</i> the codebase. The protected-path guard and the failure ceiling are inherited, not rebuilt."',
+      '<span class="beat">S18.</span> "The four outcomes are the session\'s, kept by name. And <i>a zero means something only when the event was possible</i> is what became my reachability contract — the reason T3 checks the trap was reachable before scoring the refusal."',
+      '<span class="beat">S8 — the one people don\'t expect.</span> "In Session 8 the Critic, an LLM judging another LLM\'s output, turned out to be a rubber stamp. The lesson was that the wiring is mechanism and the verdict quality is policy, and they belong in separate places. That is exactly why Crucible\'s verdict is a measurement and the scorer is a separate process that never calls a model."',
+      '<span class="beat">If asked about Session 12:</span> "The attacker\'s question from that session is <i>where has someone misplaced their trust?</i> Asked of my own agent it has one answer — the SLA definition. So it is protected."',
+      '<span class="beat">If asked what you are NOT using:</span> "Computer-use. Every action here is a config edit or an HTTP call — deliberately narrower, because narrower is auditable."'
     ]}
   ];
 
