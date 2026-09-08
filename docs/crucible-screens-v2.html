@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Crucible — Screen Reference v2</title>
+<style>
+:root{
+--bg:#faf9f7; --s0:#f0eeea; --s1:#f5f4f1; --s2:#fffefc;
+--b:#e5e1da; --t:#1a1a18; --t2:#6b6862; --tm:#9c9890;
+--acc:#3d6ea8; --accbg:#eaf1f9; --accb:#c3d8ee;
+--ok:#2f6d4f; --okbg:#eaf4ee; --okb:#c2ddcc;
+--warn:#8a6321; --warnbg:#f9f2e5; --warnb:#e8d5ae;
+--dang:#9c3a2f; --dangbg:#faeceb; --dangb:#eec8c3;
+--pro:#6b4f8a; --probg:#f2edf7;
+--r:6px;
+--fs:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+--fm:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--fs);background:var(--bg);color:var(--t);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{display:flex;min-height:100vh}
+
+/* sidebar */
+.side{width:236px;flex-shrink:0;border-right:1px solid var(--b);background:var(--s1);position:sticky;top:0;height:100vh;overflow-y:auto}
+.side h1{font-size:15px;font-weight:600;padding:18px 18px 4px}
+.side .sub{font-size:12px;color:var(--t2);padding:0 18px 16px;line-height:1.5}
+.grp{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--tm);padding:14px 18px 6px;font-weight:600}
+.nav{display:block;width:100%;text-align:left;background:none;border:0;font:inherit;font-size:13px;color:var(--t2);padding:7px 18px;cursor:pointer;border-left:2px solid transparent}
+.nav:hover{background:var(--s0);color:var(--t)}
+.nav.on{background:var(--s2);color:var(--t);border-left-color:var(--acc);font-weight:500}
+
+/* main */
+.main{flex:1;min-width:0;padding:26px 30px 60px;max-width:1000px}
+.scr{display:none}
+.scr.on{display:block}
+.htitle{font-size:20px;font-weight:600;margin-bottom:4px}
+.hsub{font-size:13px;color:var(--t2);margin-bottom:20px;line-height:1.6}
+
+/* card */
+.card{background:var(--s2);border:1px solid var(--b);border-radius:10px;overflow:hidden;margin-bottom:18px}
+.sec{padding:14px 17px;border-bottom:1px solid var(--b)}
+.sec:last-child{border-bottom:0}
+.sec.grey{background:var(--s1)}
+.lab{font-size:12px;color:var(--t2);margin-bottom:10px}
+.ttl{font-size:15px;font-weight:500}
+.mut{font-size:12px;color:var(--t2)}
+.mono{font-family:var(--fm);font-size:12px}
+.row{display:flex;gap:9px;align-items:flex-start;margin-bottom:10px}
+.row:last-child{margin-bottom:0}
+.grow{flex:1;min-width:0}
+.sb{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+
+/* metrics strip */
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:1px;background:var(--b)}
+.strip>div{background:var(--s2);padding:11px 17px}
+.strip .n{font-size:20px;font-weight:500;margin-top:2px}
+
+/* bits */
+.badge{font-size:11px;padding:3px 9px;border-radius:var(--r);display:inline-block}
+.b-ok{background:var(--okbg);color:var(--ok)}
+.b-acc{background:var(--accbg);color:var(--acc)}
+.b-warn{background:var(--warnbg);color:var(--warn)}
+.b-dang{background:var(--dangbg);color:var(--dang)}
+.dot{width:15px;text-align:center;flex-shrink:0;font-size:13px;line-height:1.5}
+.c-ok{color:var(--ok)} .c-warn{color:var(--warn)} .c-dang{color:var(--dang)}
+.c-mut{color:var(--tm)} .c-acc{color:var(--acc)}
+.btn{font:inherit;font-size:12px;padding:5px 11px;border:1px solid var(--b);background:var(--s2);border-radius:var(--r);cursor:pointer;color:var(--t)}
+.btn:hover{background:var(--s0)}
+.btn.pri{background:var(--acc);color:#fff;border-color:var(--acc)}
+.box{border:1px solid var(--b);border-radius:var(--r);padding:12px}
+.box.ok{border-color:var(--okb);background:var(--okbg)}
+.box.warn{border-color:var(--warnb);background:var(--warnbg)}
+.box.dang{border-color:var(--dangb);background:var(--dangbg)}
+.code{font-family:var(--fm);font-size:11px;background:var(--s1);border-radius:var(--r);padding:9px 11px;line-height:1.85}
+pre{font-family:var(--fm);font-size:11px;line-height:1.85;white-space:pre-wrap}
+
+/* info tooltip */
+.i{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;
+border:1px solid var(--tm);color:var(--tm);font-size:9px;font-weight:600;cursor:help;vertical-align:1px;
+margin-left:5px;position:relative;font-style:normal;line-height:1}
+.i:hover{border-color:var(--acc);color:var(--acc)}
+.i .pop{display:none;position:absolute;bottom:22px;left:-10px;
+width:min(280px,72vw);background:var(--t);color:#f5f4f1;font-size:12px;font-weight:400;line-height:1.6;
+padding:9px 11px;border-radius:var(--r);z-index:20;text-align:left;box-shadow:0 4px 14px rgba(0,0,0,.16)}
+.i.r .pop{left:auto;right:-10px}
+.i:hover .pop{display:block}
+.i .pop b{color:#fff;font-weight:600}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:12px;color:var(--t2);font-weight:500;padding:8px 10px;background:var(--s1);border-bottom:1px solid var(--b)}
+td{padding:8px 10px;border-bottom:1px solid var(--b);vertical-align:top}
+tr:last-child td{border-bottom:0}
+.q{display:grid;grid-template-columns:auto 1fr 1fr;gap:1px;background:var(--b);border:1px solid var(--b);border-radius:var(--r);overflow:hidden}
+.q>div{background:var(--s2);padding:9px 11px}
+.q .h{background:var(--s1);font-size:12px;color:var(--t2)}
+.q .big{font-size:17px;font-weight:500}
+.q .cell{cursor:pointer}
+.q .cell:hover{background:var(--s1)}
+.note{font-size:12px;color:var(--t2);line-height:1.7;margin-top:10px}
+.chip{font-family:var(--fm);font-size:11px;padding:3px 8px;border-radius:var(--r);background:var(--accbg);color:var(--acc);display:inline-block;margin:0 4px 4px 0}
+.chip.off{background:var(--s0);color:var(--tm);text-decoration:line-through}
+.hr{height:1px;background:var(--b);margin:12px 0}
+@media(max-width:820px){.wrap{flex-direction:column}.side{width:100%;height:auto;position:static}.main{padding:20px}}
+</style>
+
+<style>
+.tree{font-family:var(--fm);font-size:12px;line-height:2;color:var(--t2)}
+.tree b{color:var(--t);font-weight:500;font-family:var(--fs);font-size:13px}
+.tree .m{color:var(--tm)}
+.scope{display:grid;grid-template-columns:auto 1fr auto;gap:1px;background:var(--b);border:1px solid var(--b);border-radius:var(--r);overflow:hidden}
+.scope>div{background:var(--s2);padding:8px 11px;font-size:13px}
+.scope .h{background:var(--s1);font-size:12px;color:var(--t2)}
+.scope .win{background:var(--accbg)}
+.tag{font-family:var(--fm);font-size:11px;padding:2px 7px;border-radius:var(--r);background:var(--s0);color:var(--t2);display:inline-block;margin:0 3px 3px 0}
+.tag.on{background:var(--accbg);color:var(--acc)}
+.term{background:#1e1d1b;color:#d8d5cf;font-family:var(--fm);font-size:11.5px;line-height:1.9;padding:13px 15px;border-radius:var(--r);overflow-x:auto}
+.term .p{color:#7d9c6b}
+.term .c{color:#8a8680}
+.term .k{color:#d8d5cf;font-weight:600}
+.term .w{color:#d4a95f}
+.term .g{color:#7fae8e}
+.term .r{color:#cf8a80}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+
+<nav class="side">
+<h1>Crucible</h1>
+<div class="sub">Screen reference v2 · 17 screens<br>Design source for implementation</div>
+
+<div class="grp">Structure</div>
+<button class="nav on" onclick="go(0,this)">1 · Home</button>
+<button class="nav" onclick="go(1,this)">2 · Service settings</button>
+<button class="nav" onclick="go(2,this)">3 · Collection</button>
+<button class="nav" onclick="go(3,this)">4 · Environments</button>
+
+<div class="grp">Getting set up</div>
+<button class="nav" onclick="go(4,this)">5 · Target profile</button>
+<button class="nav" onclick="go(5,this)">6 · Telemetry</button>
+<button class="nav" onclick="go(6,this)">7 · Setup overview</button>
+<button class="nav" onclick="go(7,this)">8 · Requirements</button>
+<button class="nav" onclick="go(8,this)">9 · Scenarios</button>
+<button class="nav" onclick="go(9,this)">10 · Budget</button>
+
+<div class="grp">Before it runs</div>
+<button class="nav" onclick="go(10,this)">11 · Plan</button>
+<button class="nav" onclick="go(11,this)">12 · Preflight</button>
+
+<div class="grp">While it runs</div>
+<button class="nav" onclick="go(12,this)">13 · Live campaign</button>
+<button class="nav" onclick="go(13,this)">14 · Plan graph</button>
+<button class="nav" onclick="go(14,this)">15 · Watchdog</button>
+
+<div class="grp">Afterwards</div>
+<button class="nav" onclick="go(15,this)">16 · Report</button>
+<button class="nav" onclick="go(16,this)">17 · History &amp; diff</button>
+
+<div class="grp">Testing itself</div>
+<button class="nav" onclick="go(17,this)">18 · Benchmark</button>
+
+<div class="grp">Terminal</div>
+<button class="nav" onclick="go(18,this)">19 · CLI</button>
+</nav>
+
+<main class="main">
+<section class="scr on">
+<div class="htitle">Home</div>
+<div class="hsub">One install, several services. Each service holds one or more collections.</div>
+<div class="card">
+<div class="sec sb">
+<div><div class="ttl">Services</div><div class="mut">3 configured · 1 campaign running</div></div>
+<div><button class="btn">Import ↓</button> <button class="btn pri">Add a service</button></div>
+</div>
+<div class="sec">
+<div class="row"><div class="dot c-acc">&#9679;</div><div class="grow">
+<div class="sb"><span style="font-weight:500">payments-api</span><span class="badge b-acc">campaign running &middot; 14 min</span></div>
+<div class="mut">Spring Boot &middot; Actuator &middot; 2 collections &middot; last result 93 ms</div>
+<div style="margin-top:5px"><span class="tag on">checkout latency</span><span class="tag">search under peak</span></div>
+</div></div>
+<div class="row"><div class="dot c-ok">&#9679;</div><div class="grow">
+<div class="sb"><span style="font-weight:500">orders-api</span><span class="badge b-ok">healthy &middot; 8 campaigns</span></div>
+<div class="mut">Spring Boot &middot; Datadog &middot; 2 collections &middot; last result 5.9 s</div>
+<div style="margin-top:5px"><span class="tag">checkout utilisation</span><span class="tag">15 min smoke</span></div>
+</div></div>
+<div class="row"><div class="dot c-warn">&#9679;</div><div class="grow">
+<div class="sb"><span style="font-weight:500">pricing-svc</span><span class="badge b-warn">setup incomplete</span></div>
+<div class="mut">FastAPI &middot; no metrics provider yet &middot; no collections</div>
+</div></div>
+</div>
+<div class="sec">
+<div class="lab">the shape of it<i class="i">i<span class="pop">A <b>service</b> owns everything that is true regardless of what you are investigating &mdash; runtime, telemetry, git, restart, guardrails. A <b>collection</b> is one saved investigation: an endpoint, a goal, scenarios, hooks.</span></i></div>
+<div class="tree">
+Install<br>
+&#9492;&#9472; <b>payments-api</b> <span class="m">&mdash; runtime &middot; telemetry &middot; git &middot; restart &middot; guardrails</span><br>
+&nbsp;&nbsp;&nbsp;&#9500;&#9472; <b>checkout latency</b> <span class="m">&mdash; endpoint &middot; SLA &middot; scenarios &middot; plan &middot; hooks</span><br>
+&nbsp;&nbsp;&nbsp;&#9492;&#9472; <b>search under peak</b><br>
+&#9492;&#9472; <b>orders-api</b> <span class="m">&mdash; runtime &middot; telemetry &middot; git &middot; restart &middot; guardrails</span><br>
+&nbsp;&nbsp;&nbsp;&#9500;&#9472; <b>checkout utilisation</b><br>
+&nbsp;&nbsp;&nbsp;&#9492;&#9472; <b>15 min smoke</b>
+</div>
+</div>
+<div class="sec grey">
+<div class="lab">across all services</div>
+<div class="strip" style="background:none;padding:0">
+<div style="background:none;padding:0"><div class="mut">campaigns</div><div class="n">19</div></div>
+<div style="background:none;padding:0"><div class="mut">changes kept</div><div class="n">11</div></div>
+<div style="background:none;padding:0"><div class="mut">total spend</div><div class="n">$0.14</div></div>
+<div style="background:none;padding:0"><div class="mut">playbooks<i class="i r">i<span class="pop"><b>Playbook</b> &mdash; a cause signature that worked and is worth reusing. Learned in one service, promoted to all only after review.</span></i></div><div class="n">4</div></div>
+</div>
+</div>
+</div>
+<div class="note"><b>Progressive disclosure.</b> A first-time user with one service and one investigation never sees the collection layer at all &mdash; it appears the moment a second collection is saved.</div>
+</section>
+<section class="scr">
+<div class="htitle">Service settings</div>
+<div class="hsub">Everything true about payments-api regardless of what you are investigating. Shared by every collection under it.</div>
+<div class="card">
+<div class="sec sb">
+<div><div class="ttl">payments-api</div><div class="mut">2 collections &middot; 11 campaigns &middot; created 12 Aug</div></div>
+<div><button class="btn">Export ↑</button> <button class="btn">Duplicate</button></div>
+</div>
+<div class="sec">
+<div class="lab">shared configuration</div>
+<table>
+<tr><th>setting</th><th>value</th><th>scope</th></tr>
+<tr><td>runtime profile</td><td class="mono">spring_boot</td><td class="mut">service</td></tr>
+<tr><td>telemetry</td><td class="mono">actuator @ :8080</td><td class="mut">service</td></tr>
+<tr><td>traces</td><td class="mono c-mut">none</td><td class="mut">service</td></tr>
+<tr><td>git repository</td><td class="mono">acme/payments-api &middot; crucible/sandbox</td><td class="mut">service</td></tr>
+<tr><td>restart</td><td class="mono">./mvnw spring-boot:run</td><td class="mut">service</td></tr>
+<tr><td>tunable properties</td><td class="mono">6 &middot; from profile</td><td class="mut">service</td></tr>
+<tr><td>protected paths</td><td class="mono">4</td><td class="mut">service</td></tr>
+<tr><td>knowledge documents</td><td class="mono">3 indexed</td><td class="mut">service</td></tr>
+</table>
+</div>
+<div class="sec">
+<div class="lab">model provider<i class="i">i<span class="pop">Set globally, overridden per service or per collection. Nearest scope wins. Every effective value shows where it came from, because a model swap between campaigns silently invalidates comparison.</span></i></div>
+<div class="scope">
+<div class="h">level</div><div class="h">value</div><div class="h">applies</div>
+<div>global</div><div class="mono mut">glc_v5 @ 127.0.0.1:8111 &middot; gemini pinned</div><div class="mut">default</div>
+<div class="win">service</div><div class="mono win">anthropic direct &middot; claude, pinned</div><div class="win c-acc">in effect</div>
+<div>collection</div><div class="mono mut">not set</div><div class="mut">&mdash;</div>
+<div>run override</div><div class="mono mut">not set</div><div class="mut">&mdash;</div>
+</div>
+<div class="note">Supported: <span class="mono">glc_v5</span> &middot; <span class="mono">anthropic</span> &middot; <span class="mono">openai</span> &middot; <span class="mono">openrouter</span> &middot; <span class="mono">ollama</span>. Same adapter pattern as metrics and load.</div>
+</div>
+<div class="sec grey">
+<div class="lab">collections under this service</div>
+<div class="row"><div class="dot c-acc">&#9679;</div><div class="grow"><div style="font-weight:500">checkout latency</div><div class="mut">/api/checkout &middot; p99 &le; 200 ms &middot; 3 scenarios &middot; running now</div></div></div>
+<div class="row"><div class="dot c-mut">&#9679;</div><div class="grow"><div style="font-weight:500">search under peak</div><div class="mut">/api/search &middot; p99 &le; 800 ms &middot; 2 scenarios &middot; last run 28 Sep</div></div></div>
+<div style="margin-top:9px"><button class="btn">New collection</button></div>
+</div>
+</div>
+</section>
+<section class="scr">
+<div class="htitle">Collection</div>
+<div class="hsub">One saved investigation. Endpoint, goal, scenarios, hooks. Exports as a file you commit next to the code.</div>
+<div class="card">
+<div class="sec sb">
+<div><div class="ttl">checkout latency</div><div class="mut">payments-api &middot; /api/checkout &middot; 7 campaigns</div></div>
+<div><button class="btn">Export ↑</button> <button class="btn pri">Run</button></div>
+</div>
+<div class="sec">
+<div class="lab">what this collection investigates</div>
+<table>
+<tr><th>field</th><th>value</th></tr>
+<tr><td>endpoint</td><td class="mono">POST /api/checkout</td></tr>
+<tr><td>goal</td><td class="mono">p99 &le; 200 ms &middot; error rate &le; 0.5%</td></tr>
+<tr><td>environment</td><td class="mono">preprod-1</td></tr>
+<tr><td>scenarios</td><td class="mono">3 selected of 7</td></tr>
+<tr><td>plan</td><td class="mono">standard &middot; 5 experiments</td></tr>
+<tr><td>slo.yaml</td><td class="mono">v7 &middot; edited 4 Oct 09:12</td></tr>
+</table>
+</div>
+<div class="sec">
+<div class="lab">hooks<i class="i">i<span class="pop">Commands run around each experiment. This is where database drift is solved &mdash; reset and reseed so experiment 3 sees the same data as experiment 1. Also where auth tokens get refreshed and logs captured.</span></i></div>
+<div class="code">
+<div class="mut">before_each:</div>
+<div>&nbsp;&nbsp;- psql -f reset_and_seed.sql&nbsp;&nbsp;&nbsp;<span class="mut"># same data every experiment</span></div>
+<div>&nbsp;&nbsp;- curl -X POST /internal/cache/clear</div>
+<div>&nbsp;&nbsp;- ./scripts/refresh-token.sh&nbsp;&nbsp;&nbsp;&nbsp;<span class="mut"># token expires in 60 min</span></div>
+<div class="mut" style="margin-top:5px">after_each:</div>
+<div>&nbsp;&nbsp;- docker logs payments-api --since 5m &gt; logs/${experiment_id}.log</div>
+<div class="mut" style="margin-top:5px">on_abort:</div>
+<div>&nbsp;&nbsp;- ./scripts/notify-team.sh</div>
+</div>
+<div class="note">Hooks that fail block the experiment rather than being skipped. A reset that silently did nothing would make every later measurement wrong.</div>
+</div>
+<div class="sec">
+<div class="lab">config scope for this collection</div>
+<div class="scope">
+<div class="h">level</div><div class="h">experiment ceiling</div><div class="h">applies</div>
+<div>global</div><div class="mono mut">5</div><div class="mut">default</div>
+<div>service</div><div class="mono mut">not set</div><div class="mut">&mdash;</div>
+<div class="win">collection</div><div class="mono win">8 &mdash; discrimination is hard here</div><div class="win c-acc">in effect</div>
+</div>
+</div>
+<div class="sec grey">
+<div class="lab">export<i class="i">i<span class="pop">A collection is YAML you commit to the repo beside the code. A teammate clones and runs the same investigation on their own machine. This is how a bottom-up tool spreads without marketing.</span></i></div>
+<div class="code">
+<div class="mut"># crucible/checkout-latency.yaml &mdash; committed to the repo</div>
+<div>collection: checkout latency</div>
+<div>endpoint: POST /api/checkout</div>
+<div>goal: {p99_ms: 200, error_rate_pct: 0.5}</div>
+<div>scenarios: [normal_baseline, peak_business_hours, concurrent_multi_consumer]</div>
+<div>plan: standard</div>
+<div>hooks: {before_each: [...], after_each: [...]}</div>
+<div class="mut"># environments and credentials are NOT exported</div>
+</div>
+</div>
+</div>
+</section>
+<section class="scr">
+<div class="htitle">Environments</div>
+<div class="hsub">The same collection, pointed at a different instance. Credentials live here and are never exported.</div>
+<div class="card">
+<div class="sec sb">
+<div><div class="ttl">payments-api environments</div><div class="mut">3 defined &middot; preprod-1 active</div></div>
+<button class="btn">Add environment</button>
+</div>
+<div class="sec">
+<div class="row"><div class="dot c-acc">&#9679;</div><div class="grow">
+<div class="sb"><span style="font-weight:500">preprod-1</span><span class="badge b-acc">active</span></div>
+<div class="mono mut">https://payments.preprod1.internal &middot; bearer &middot; single instance</div>
+</div></div>
+<div class="row"><div class="dot c-mut">&#9679;</div><div class="grow">
+<div class="sb"><span style="font-weight:500">preprod-2</span></div>
+<div class="mono mut">https://payments.preprod2.internal &middot; bearer &middot; 3 instances behind LB</div>
+</div></div>
+<div class="row"><div class="dot c-mut">&#9679;</div><div class="grow">
+<div class="sb"><span style="font-weight:500">local</span></div>
+<div class="mono mut">http://localhost:8080 &middot; no auth &middot; docker compose</div>
+</div></div>
+</div>
+<div class="sec">
+<div class="lab">what an environment carries</div>
+<table>
+<tr><th>field</th><th>preprod-1</th><th>local</th></tr>
+<tr><td>base URL</td><td class="mono">payments.preprod1.internal</td><td class="mono">localhost:8080</td></tr>
+<tr><td>auth</td><td class="mono">bearer &middot; &bull;&bull;&bull;&bull;3f2a</td><td class="mono c-mut">none</td></tr>
+<tr><td>instances</td><td class="mono">1</td><td class="mono">1</td></tr>
+<tr><td>metrics scope</td><td class="mono">env:preprod1</td><td class="mono c-mut">&mdash;</td></tr>
+<tr><td>restart</td><td class="mono">systemctl restart</td><td class="mono">docker restart</td></tr>
+</table>
+</div>
+<div class="sec grey">
+<div class="lab">why results are not comparable across environments<i class="i">i<span class="pop">Different hardware, different data volume, different neighbours. A campaign records which environment it ran in, and History refuses to diff two campaigns from different environments without warning you first.</span></i></div>
+<div class="mut">A campaign records its environment on the manifest. Comparing a preprod-1 result against a local one is flagged, not silently allowed.</div>
+</div>
+</div>
+</section>
+<section class="scr">
+<div class="htitle">Target profile</div>
+<div class="hsub">One YAML grants authority. One SKILL.md teaches the model how this runtime fails. They never mix.</div>
+<div class="card">
+<div class="sec">
+<div class="lab">runtime</div>
+<span class="chip">spring_boot</span><span class="chip" style="background:var(--s0);color:var(--t2);text-decoration:none">fastapi</span><span class="chip" style="background:var(--s0);color:var(--t2);text-decoration:none">express</span><span class="chip" style="background:var(--s0);color:var(--t2);text-decoration:none">dotnet</span>
+<div class="mono mut" style="margin-top:9px">profiles/spring_boot.yaml · skills/spring_boot/SKILL.md</div>
+</div>
+<div class="sec">
+<div class="lab">cause families<i class="i">i<span class="pop"><b>Cause family</b> — the category of root cause the agent names, not the specific fix. Fixtures declare ground truth in this vocabulary and the scorer matches against it. Declared per runtime, so CPython never gets a <b>gc</b> hypothesis and never misses <b>gil_contention</b>.</span></i> · from SKILL.md</div>
+<span class="chip">pool</span><span class="chip">gc</span><span class="chip">thread_pool</span><span class="chip">query</span><span class="chip">downstream</span><span class="chip">application_code</span>
+<div class="note">On FastAPI, <span class="mono">gc</span> is struck out and <span class="mono">gil_contention</span> replaces it. On Express, <span class="mono">event_loop_block</span> is added.</div>
+</div>
+<div class="sec">
+<div class="lab">tunable · authority granted · from profile.yaml</div>
+<div class="mono">
+<div class="sb"><span>spring.datasource.hikari.maximum-pool-size</span><span class="mut">2 – 50</span></div>
+<div class="sb"><span>spring.datasource.hikari.minimum-idle</span><span class="mut">1 – 10</span></div>
+<div class="sb"><span>spring.datasource.hikari.connection-timeout</span><span class="mut">1000 – 30000 ms</span></div>
+<div class="sb"><span>server.tomcat.threads.max</span><span class="mut">10 – 400</span></div>
+<div class="sb"><span>server.tomcat.threads.min-spare</span><span class="mut">5 – 50</span></div>
+<div class="sb"><span>spring.task.execution.pool.max-size</span><span class="mut">2 – 64</span></div>
+</div>
+</div>
+<div class="sec">
+<div class="lab">operational contract<i class="i">i<span class="pop">Every enterprise restarts and logs differently. This block is the adapter — change these four lines and the same agent works against systemd, Docker, Kubernetes or a bare process.</span></i></div>
+<div class="mono">
+<div class="sb"><span class="mut">config lives in</span><span>src/main/resources/application.properties</span></div>
+<div class="sb"><span class="mut">restart</span><span>./mvnw spring-boot:run</span></div>
+<div class="sb"><span class="mut">health</span><span>/actuator/health · expects UP</span></div>
+<div class="sb"><span class="mut">timeout</span><span>60 s</span></div>
+<div class="sb"><span class="mut">logs</span><span>process stdout</span></div>
+<div class="sb"><span class="mut">ready marker</span><span>Started PerfLabApplication</span></div>
+</div>
+</div>
+<div class="sec grey">
+<div class="lab">database between experiments<i class="i">i<span class="pop">If experiment 1 inserts 100k rows, experiment 2 runs against a bigger table and the two are not comparable. Asked once, then remembered as a <b>Fact</b> for this service.</span></i></div>
+<div>Read-only scenarios. No reset needed.</div>
+</div>
+</div>
+</section>
+<section class="scr">
+<div class="htitle">Telemetry</div>
+<div class="hsub">The agent asks for canonical metric names. The adapter turns them into your provider's queries and converts the units.</div>
+<div class="card">
+<div class="sec">
+<div class="lab">provider</div>
+<span class="chip">actuator</span><span class="chip" style="background:var(--s0);color:var(--t2)">promql</span><span class="chip" style="background:var(--s0);color:var(--t2)">datadog</span><span class="chip" style="background:var(--s0);color:var(--t2)">dynatrace</span>
+<div class="note">One PromQL adapter covers Prometheus, Mimir, Thanos, VictoriaMetrics, Chronosphere and all three cloud managed-Prometheus services. Datadog, Dynatrace, New Relic and Elastic each need their own.</div>
+</div>
+<div class="sec">
+<div class="lab">metric mapping<i class="i">i<span class="pop">Canonical name → provider query → unit conversion. Datadog stores acquire time in nanoseconds, Dynatrace in microseconds, Actuator in seconds. The agent never learns any of that — the adapter normalises everything to milliseconds.</span></i></div>
+<table>
+<tr><th>canonical</th><th>query</th></tr>
+<tr><td class="mono">latency_p99</td><td class="mono mut">http.server.requests · histogram</td></tr>
+<tr><td class="mono">db_pool_pending</td><td class="mono mut">hikaricp.connections.pending <span class="c-warn">gauge — sampled during load</span></td></tr>
+<tr><td class="mono">db_pool_acquire_ms</td><td class="mono mut">hikaricp.connections.acquire <span class="c-warn">seconds → ms</span></td></tr>
+<tr><td class="mono">gc_pause_ms</td><td class="mono mut">jvm.gc.pause <span class="c-warn">seconds → ms</span></td></tr>
+<tr><td class="mono">threads_active</td><td class="mono mut">tomcat.threads.busy</td></tr>
+<tr><td class="mono">downstream_latency</td><td class="mono c-dang">unavailable</td></tr>
+</table>
+</div>
+<div class="sec grey">
+<div class="lab">what this provider can answer</div>
+<div class="row"><div class="dot c-ok">✓</div><div>metrics · 5 of 6 canonical names resolved</div></div>
+<div class="row"><div class="dot c-mut">−</div><div class="mut">no traces — downstream is reported <b>unchecked</b>, never <b>eliminated</b></div></div>
+<div class="row"><div class="dot c-mut">−</div><div class="mut">no history — production read unavailable with this provider</div></div>
+<div class="row"><div class="dot c-mut">−</div><div class="mut">single instance only — percentiles cannot be averaged across instances, so load is pinned past the balancer</div></div>
+</div>
+</div>
+</section>
+<section class="scr">
+<div class="htitle">Setup overview</div>
+<div class="hsub">Four required. Everything else buys the agent a capability, and says so.</div>
+<div class="card">
+<div class="sec">
+<div class="lab">required</div>
+<div class="row"><div class="dot c-ok">✓</div><div class="grow"><div style="font-weight:500">Target</div><div class="mono mut">https://orders.preprod.internal · bearer · /actuator/health</div></div></div>
+<div class="row"><div class="dot c-ok">✓</div><div class="grow"><div style="font-weight:500">Goal and load</div><div class="mono mut">p99 ≤ 200 ms · 50 users · 300 s · orders-mix</div></div></div>
+<div class="row"><div class="dot c-ok">✓</div><div class="grow"><div style="font-weight:500">Runtime profile</div><div class="mut">Spring Boot · 6 tunable properties</div></div></div>
+<div class="row"><div class="dot c-ok">✓</div><div class="grow"><div style="font-weight:500">Metrics</div><div class="mut">Actuator + Micrometer · no credentials</div></div></div>
+</div>
+<div class="sec">
+<div class="lab">optional · each adds something the agent can do</div>
+<div class="row"><div class="dot c-ok">✓</div><div class="grow">
+<div style="font-weight:500">Git repository <span class="mut" style="font-weight:400">connected</span></div>
+<div class="mono mut">github.com/acme/orders-api · branch crucible/sandbox</div>
+<div class="c-acc" style="font-size:12px;margin-top:3px">→ shows the exact file and line before you approve, and commits each experiment</div></div></div>
+<div class="row"><div class="dot c-mut">○</div><div class="grow">
+<div style="font-weight:500">Traces <span class="mut" style="font-weight:400">not connected</span></div>
+<div class="c-acc" style="font-size:12px;margin-top:3px">→ lets the agent rule out a slow downstream call instead of declaring it unchecked</div></div></div>
+<div class="row"><div class="dot c-mut">○</div><div class="grow">
+<div style="font-weight:500">CI/CD <span class="mut" style="font-weight:400">not connected</span></div>
+<div class="c-acc" style="font-size:12px;margin-top:3px">→ verifies against a real deploy rather than a local restart. You still trigger it.</div></div></div>
+<div class="row"><div class="dot c-ok">✓</div><div class="grow">
+<div style="font-weight:500">Knowledge <span class="mut" style="font-weight:400">3 documents</span><i class="i">i<span class="pop">Stored as <b>Document chunk</b> memory and retrieved during diagnosis. This is what stops the agent blaming your application for a gateway throttle.</span></i></div>
+<div class="mono mut">gateway-rate-limits.md · architecture.md · incident-2026-07.md</div>
+<div class="c-acc" style="font-size:12px;margin-top:3px">→ knows the the API gateway quota is 120 rps, so a throttle is not diagnosed as application latency</div></div></div>
+<div class="row"><div class="dot c-mut">○</div><div class="grow">
+<div style="font-weight:500">Production read <span class="mut" style="font-weight:400">not connected</span><i class="i">i<span class="pop">The same telemetry provider, scoped to production instead of pre-prod. Reads endpoint mix, concurrency shape and baseline error rate. <b>Writes nothing, sends no traffic, never reads request bodies.</b></span></i></div>
+<div class="c-acc" style="font-size:12px;margin-top:3px">→ shapes the load profile from real traffic instead of a guess</div></div></div>
+</div>
+<div class="sec grey">
+<div class="lab">with this setup the agent can</div>
+<div class="row"><div class="dot c-ok">✓</div><div>diagnose from metrics, units normalised, gauges sampled during load</div></div>
+<div class="row"><div class="dot c-ok">✓</div><div>propose changes to 6 properties and show the exact line before you approve</div></div>
+<div class="row"><div class="dot c-ok">✓</div><div>verify by re-measuring, then keep or revert on the result</div></div>
+<div class="row"><div class="dot c-mut">−</div><div class="mut">cannot check downstream calls — it will say so rather than assume</div></div>
+</div>
+</div>
+</section>
+<section class="scr">
+<div class="htitle">Requirements</div>
+<div class="hsub">Building the goal before anything runs. Every number keeps its source. Produces <span class="mono">slo.yaml</span>.</div>
+<div class="card">
+<div class="sec">
+<div class="lab">evidence · add what you have</div>
+<div class="row"><div class="dot c-ok">✓</div><div class="grow"><div style="font-weight:500">Documents</div><div class="mut">baseline-findings.md · target-metrics.md</div><div class="c-acc" style="font-size:12px">→ latency band, error rate, concurrency ceiling</div></div></div>
+<div class="row"><div class="dot c-ok">✓</div><div class="grow"><div style="font-weight:500">Spreadsheet</div><div class="mut">Q1 capacity planning · 3 sheets</div><div class="c-acc" style="font-size:12px">→ tpm targets per scenario, business-hours shape</div></div></div>
+<div class="row"><div class="dot c-mut">○</div><div class="grow"><div style="font-weight:500">Production read</div><div class="c-acc" style="font-size:12px">→ real endpoint mix, observed concurrency, payload bands</div></div></div>
+<div class="row"><div class="dot c-ok">✓</div><div class="grow"><div style="font-weight:500">Your answers</div><div class="mut">via chat, for anything the sources cannot settle</div></div></div>
+<div style="margin-top:12px"><button class="btn">Download slo.yaml template</button> <span class="mut">pre-filled with worked examples and comments · fill offline, upload back</span></div>
+<div class="code" style="margin-top:9px">
+<div class="mut"># every value carries its source — the agent records provenance in the manifest</div>
+<div>latency:</div>
+<div>&nbsp;&nbsp;p99_ms_sla_min: 5000&nbsp;&nbsp;<span class="mut"># confirmed floor — replace with yours</span></div>
+<div>&nbsp;&nbsp;p99_ms_sla_max: 7000&nbsp;&nbsp;<span class="mut"># hard gate</span></div>
+<div>&nbsp;&nbsp;p99_ms_stretch_target: 3000&nbsp;&nbsp;<span class="mut"># aspiration, not a gate</span></div>
+<div>&nbsp;&nbsp;<span class="mut"># source: docs/baseline-findings.md</span></div>
+<div style="margin-top:6px">scenarios:</div>
+<div>&nbsp;&nbsp;- name: normal_baseline</div>
+<div>&nbsp;&nbsp;&nbsp;&nbsp;target_tpm: 14</div>
+<div>&nbsp;&nbsp;&nbsp;&nbsp;duration_minutes: 30</div>
+<div>&nbsp;&nbsp;&nbsp;&nbsp;repeats: 3&nbsp;&nbsp;<span class="mut"># drop to 1 for anything over an hour</span></div>
+<div class="mut">&nbsp;&nbsp;# … four more worked examples in the template</div>
+</div>
+</div>
+<div class="sec">
+<div class="lab">draft · 8 values resolved</div>
+<table>
+<tr><th>field</th><th>value</th><th>source</th></tr>
+<tr><td>p99 latency band</td><td class="mono">5000 – 7000 ms</td><td class="mono mut">baseline-findings.md</td></tr>
+<tr><td>stretch target</td><td class="mono">3000 ms</td><td class="mono mut">you · aspirational</td></tr>
+<tr><td>error rate</td><td class="mono">baseline 0.40% · max 0.50%</td><td class="mono mut">baseline-findings.md</td></tr>
+<tr><td>concurrency ceiling</td><td class="mono">50 per instance</td><td class="mono mut">legacy connection limit</td></tr>
+<tr><td>endpoint mix</td><td class="mono">zip 74% · zoom 21% · city 5%</td><td class="mono mut">observed traffic mix</td></tr>
+<tr><td>peak tpm</td><td class="mono">35</td><td class="mono mut">traffic analysis Q1</td></tr>
+</table>
+</div>
+<div class="sec grey">
+<div class="lab">unresolved · the agent will not guess these<i class="i">i<span class="pop">Gaps are recorded in the manifest as unresolved rather than filled with a plausible number. This is the reachability contract applied to requirements instead of evidence.</span></i></div>
+<div class="row"><div class="dot c-warn">?</div><div class="grow"><div>Is 3000 ms a gate or an aspiration?</div><div class="mut">It changes whether a run landing at 4 s passes.</div></div></div>
+<div class="row"><div class="dot c-warn">?</div><div class="grow"><div>Does the 24 hr surge run once or repeat?</div><div class="mut">It cannot repeat three times, so variance bounds are unavailable either way.</div></div></div>
+<div class="row"><div class="dot c-warn">?</div><div class="grow"><div>Is 50 concurrent a limit or a measured ceiling?</div><div class="mut">A limit is a constraint to respect. A ceiling is a thing to go find.</div></div></div>
+</div>
+<div class="sec"><span class="mut">chat stays open on this screen — settling these usually takes a few exchanges</span></div>
+</div>
+</section>
+<section class="scr">
+<div class="htitle">Scenarios</div>
+<div class="hsub">Driven by <span class="mono">slo.yaml</span>. Editable at any time — every edit creates a new version, and each campaign records which version it ran.</div>
+<div class="card">
+<div class="sec">
+<div class="lab">latency goal · a band, not a number<i class="i">i<span class="pop">Real SLAs come as a floor, a hard gate and often an aspirational stretch target. A single threshold cannot express "passes at 6 s, fails at 7.5 s, and we would like 3 s".</span></i></div>
+<div style="display:flex;height:16px;border-radius:3px;overflow:hidden;margin:8px 0 6px">
+<div style="width:36%;background:#8fc4a8"></div><div style="width:28%;background:#e8cd9a"></div><div style="width:36%;background:#e0a79e"></div>
+</div>
+<div class="sb mut"><span>stretch 3000</span><span>sla floor 5000</span><span>hard gate 7000</span></div>
+</div>
+<div class="sec">
+<div class="lab">scenarios · pick what this campaign runs</div>
+<table>
+<tr><th></th><th>scenario</th><th>tags<i class="i">i<span class="pop">Used three ways: filtering this list, the CLI (<span style="font-family:monospace">crucible run --tag smoke</span>), and picking benchmark subsets. A twelve-scenario file becomes usable without editing it.</span></i></th><th>load</th><th>repeats<i class="i r">i<span class="pop">Per scenario, not per plan. A 24-hour surge cannot be run three times, so it declares <span style="font-family:monospace">repeats: 1</span> and the claim states that variance bounds are unavailable for it.</span></i></th></tr>
+<tr><td>✓</td><td class="mono">normal_baseline</td><td><span class="tag on">smoke</span><span class="tag on">baseline</span></td><td class="mut">14 tpm · 30 min</td><td class="mono">3</td></tr>
+<tr><td>✓</td><td class="mono">peak_business_hours</td><td><span class="tag on">peak</span></td><td class="mut">35 tpm · 15 min</td><td class="mono">3</td></tr>
+<tr><td>✓</td><td class="mono">concurrent_multi_consumer</td><td><span class="tag on">peak</span></td><td class="mut">17 tpm · 20 min</td><td class="mono">3</td></tr>
+<tr><td>○</td><td class="mono">sustained_burst</td><td><span class="tag">soak</span></td><td class="mut">900 tpm · 3 hr</td><td class="mono">1</td></tr>
+<tr><td>○</td><td class="mono">extreme_spike <span class="badge b-warn">finds ceiling</span></td><td class="mut">1350 tpm · 20 min</td><td class="mono">1</td></tr>
+<tr><td>○</td><td class="mono">year_end_surge <span class="badge b-dang">24 hr</span></td><td class="mut">11,000 calls/day</td><td class="mono">1</td></tr>
+<tr><td>○</td><td class="mono">latency_degradation_stress</td><td><span class="tag">stress</span></td><td class="mut">75 tpm · 20 min</td><td class="mono">3</td></tr>
+</table>
+</div>
+<div class="sec grey">
+<div class="strip" style="background:none;padding:0">
+<div style="background:none;padding:0"><div class="mut">load time</div><div class="n">3 hr 15 min</div></div>
+<div style="background:none;padding:0"><div class="mut">with experiments</div><div class="n">7 hr 10 min</div></div>
+<div style="background:none;padding:0"><div class="mut">model spend</div><div class="n">$0.038</div></div>
+</div>
+<div class="note c-warn">Wall clock is the real budget here. Model spend is a rounding error; your afternoon is not.</div>
+</div>
+</div>
+</section>
+<section class="scr">
+<div class="htitle">Budget</div>
+<div class="hsub">The plans differ on confidence, not features. All three run the same loop.</div>
+<div class="card">
+<div class="sec">
+<table>
+<tr><th>plan</th><th>experiments<i class="i">i<span class="pop">How many hypotheses it can afford to test before giving up. This is the main thing that separates the plans.</span></i></th><th>repeats</th><th>model</th><th>gives you</th></tr>
+<tr><td style="font-weight:500">Quick look</td><td class="mono">2</td><td class="mono">as declared</td><td class="mono">fast</td><td class="mut">A likely cause and one fix worth trying. You verify.</td></tr>
+<tr><td style="font-weight:500">Standard</td><td class="mono">5</td><td class="mono">as declared</td><td class="mono">fast</td><td class="mut">A fix applied, re-measured and kept on the result.</td></tr>
+<tr><td style="font-weight:500">Thorough</td><td class="mono">10</td><td class="mono">as declared, min 3<i class="i r">i<span class="pop">Thorough raises repeats to 3 wherever the scenario allows it — but never overrides a scenario that declares <span style="font-family:monospace">repeats: 1</span> because it runs for hours.</span></i></td><td class="mono">deep</td><td class="mut">A fix with variance bounds and lookalikes eliminated.</td></tr>
+</table>
+<div class="note"><b>Duration comes from the scenarios, not the plan.</b><i class="i">i<span class="pop">A plan cannot shorten a 30-minute scenario to 60 seconds — that would change what is being measured. The plan controls how many experiments and how many repeats; the scenario controls how long each measurement runs.</span></i> The three scenarios selected total 3 hr 15 min of load. Standard adds up to five experiments on top of that.</div>
+</div>
+<div class="sec">
+<div class="lab">this campaign · 3 scenarios selected, standard plan</div>
+<div class="strip" style="background:none;padding:0">
+<div style="background:none;padding:0"><div class="mut">load time</div><div class="n">3 hr 15 min</div></div>
+<div style="background:none;padding:0"><div class="mut">with experiments</div><div class="n">7 hr 10 min</div></div>
+<div style="background:none;padding:0"><div class="mut">model spend</div><div class="n">$0.038</div></div>
+</div>
+<div class="note c-warn">Wall clock is the real budget. Nobody picks a plan to save four cents — they pick it to decide whether to wait through lunch.</div>
+</div>
+<div class="sec">
+<div class="lab">where the estimate comes from<i class="i">i<span class="pop">Context size dominates. A snapshot alone is ~2.4k tokens; add knowledge chunks and source slices and it triples. From week two these figures come from your own journal rather than a formula.</span></i></div>
+<pre class="mut">5 experiments × 4 calls          = 20 model calls
+context per call
+  snapshot                        2.4k
+  knowledge chunks (3 docs)       2.4k
+  source slices (git connected)   3.2k
+                                  ─────
+                                  8.0k tokens
+20 × 8.0k × $0.0008/1k          = $0.038
+
+load time comes from the scenarios
+  normal_baseline    30 min × 3 repeats   = 90 min
+  peak_business      15 min × 3 repeats   = 45 min
+  concurrent_multi   20 min × 3 repeats   = 60 min
+                                            ───────
+                                            3 hr 15
+  re-measurement after each kept change   + 3 hr 15
+  restarts and settle                     +   40 min
+                                            ───────
+                                   $0.038 · 7 hr 10</pre>
+</div>
+<div class="sec grey">
+<div class="lab">where budget is set</div>
+<div class="row"><div class="dot c-mut">1</div><div><b>Default</b> in <span class="mono">crucible.yaml</span> — what every campaign uses unless told otherwise</div></div>
+<div class="row"><div class="dot c-mut">2</div><div><b>Per campaign</b> at launch — override for one run</div></div>
+<div class="row"><div class="dot c-mut">3</div><div><b>Hard ceiling</b> — stored as <b>Policy</b> memory, operator-only, no override can exceed it</div></div>
+</div>
+</div>
+</section>
+<section class="scr">
+<div class="htitle">Plan</div>
+<div class="hsub"><span class="mono">crucible plan</span> &mdash; says what it intends and changes nothing. For a tool that edits a running service, "show me first" is a command, not a checkbox.</div>
+<div class="card">
+<div class="sec">
+<div class="term">
+<div><span class="p">$</span> crucible plan --collection "checkout latency"</div>
+<div>&nbsp;</div>
+<div><span class="c">Service</span>            payments-api &middot; spring_boot &middot; preprod-1</div>
+<div><span class="c">Collection</span>         checkout latency &middot; slo.yaml v7</div>
+<div><span class="c">Model</span>              claude &middot; pinned &middot; <span class="c">from service config</span></div>
+<div>&nbsp;</div>
+<div><span class="k">Scenarios</span>          3 selected</div>
+<div>  normal_baseline            14 tpm &middot; 30 min &middot; &times;3</div>
+<div>  peak_business_hours        35 tpm &middot; 15 min &middot; &times;3</div>
+<div>  concurrent_multi_consumer  17 tpm &middot; 20 min &middot; &times;3</div>
+<div>&nbsp;</div>
+<div><span class="k">Properties it may change</span></div>
+<div>  <span class="w">~</span> hikari.maximum-pool-size        2 &ndash; 50</div>
+<div>  <span class="w">~</span> hikari.minimum-idle             1 &ndash; 10</div>
+<div>  <span class="w">~</span> hikari.connection-timeout       1000 &ndash; 30000 ms</div>
+<div>  <span class="w">~</span> tomcat.threads.max              10 &ndash; 400</div>
+<div>  <span class="w">~</span> tomcat.threads.min-spare        5 &ndash; 50</div>
+<div>  <span class="w">~</span> task.execution.pool.max-size    2 &ndash; 64</div>
+<div>&nbsp;</div>
+<div><span class="k">Protected &mdash; will refuse</span></div>
+<div>  <span class="r">&times;</span> crucible.yaml (SLA)</div>
+<div>  <span class="r">&times;</span> locust/locustfile.py</div>
+<div>  <span class="r">&times;</span> src/test/**</div>
+<div>  <span class="r">&times;</span> .env</div>
+<div>&nbsp;</div>
+<div><span class="k">Hooks</span>              3 before_each &middot; 1 after_each &middot; 1 on_abort</div>
+<div><span class="k">Restart</span>            <span class="w">MANUAL</span> &mdash; will pause and ask you</div>
+<div><span class="k">Evidence</span>           metrics <span class="g">yes</span> &middot; traces <span class="r">no</span> &middot; downstream will be reported unchecked</div>
+<div>&nbsp;</div>
+<div><span class="k">Estimate</span>           $0.038 &middot; 7 hr 10 min</div>
+<div>&nbsp;</div>
+<div>Plan: up to <span class="k">8 experiments</span>, <span class="k">6 properties</span> in scope, <span class="k">0</span> protected paths writable.</div>
+<div><span class="c">Nothing has been changed. Run `crucible apply` to start.</span></div>
+</div>
+</div>
+<div class="sec grey">
+<div class="lab">plan is not preflight<i class="i">i<span class="pop">Preflight tests whether the plumbing <b>works</b> &mdash; it restarts the service for real. Plan tells you what the campaign <b>intends</b> and touches nothing. Different questions, both worth asking.</span></i></div>
+<div class="mut">Plan reads configuration and changes nothing. Preflight exercises the target for real, including a restart and revert. Run plan to review scope, preflight to check the plumbing.</div>
+</div>
+</div>
+</section>
+<section class="scr">
+<div class="htitle">Preflight</div>
+<div class="hsub">One tiny experiment end to end. Two minutes, so a three-hour run does not fail at minute twenty.</div>
+<div class="card">
+<div class="sec">
+<div class="row"><div class="dot c-ok">✓</div><div class="grow"><div style="font-weight:500">Target reachable</div><div class="mut">200 from /actuator/health in 84 ms</div></div></div>
+<div class="row"><div class="dot c-ok">✓</div><div class="grow"><div style="font-weight:500">Auth accepted</div><div class="mut">bearer token valid · expires in 41 days</div></div></div>
+<div class="row"><div class="dot c-ok">✓</div><div class="grow"><div style="font-weight:500">Metrics resolve</div><div class="mut">6 of 6 canonical names returned values</div></div></div>
+<div class="row"><div class="dot c-ok">✓</div><div class="grow"><div style="font-weight:500">Gauge sampling</div><div class="mut">pending sampled 4× in 20 s under trial load</div></div></div>
+<div class="row"><div class="dot c-ok">✓</div><div class="grow"><div style="font-weight:500">Load generator</div><div class="mut">fired 60 requests, reported p50 63 ms</div></div></div>
+<div class="row"><div class="dot c-ok">✓</div><div class="grow"><div style="font-weight:500">Config writable</div><div class="mut">application.properties · sandbox branch clean</div></div></div>
+<div class="row"><div class="dot c-warn">◐</div><div class="grow"><div style="font-weight:500">Restart works <span class="badge b-warn">manual</span><i class="i">i<span class="pop">Some pipelines cannot restart on demand. Switch a step to manual and the campaign pauses at that point, tells you what to do, and waits for you to confirm before carrying on.</span></i></div><div class="mut">override on — the campaign will pause and ask you to restart</div></div></div>
+<div class="row"><div class="dot c-ok">✓</div><div class="grow"><div style="font-weight:500">Revert works</div><div class="mut">change applied then undone, file byte-identical</div></div></div>
+<div class="row"><div class="dot c-ok">✓</div><div class="grow"><div style="font-weight:500">Lock acquired<i class="i">i<span class="pop">Two campaigns on one target corrupt each other silently — agent B applies a change while agent A is mid-measurement, and both journals are wrong. The lock names the campaign that holds it.</span></i></div><div class="mut">no other campaign on this target</div></div></div>
+</div>
+<div class="sec">
+<div class="lab">manual overrides<i class="i">i<span class="pop">Each of these can be switched to manual when automation is not possible. The campaign then blocks at that step with instructions, rather than failing. Every manual step is recorded on the manifest, because a run with human intervention is not comparable to a fully autonomous one.</span></i></div>
+<table>
+<tr><th>step</th><th>mode</th><th>when manual</th></tr>
+<tr><td>restart service</td><td><span class="badge b-warn">manual</span></td><td class="mut">pauses, shows the command, waits for your confirm</td></tr>
+<tr><td>revert change</td><td><span class="badge b-ok">automatic</span></td><td class="mut">—</td></tr>
+<tr><td>deploy via pipeline</td><td><span class="badge b-warn">manual</span></td><td class="mut">you trigger it, Crucible polls for the result</td></tr>
+<tr><td>database reset</td><td><span class="badge b-warn">manual</span></td><td class="mut">pauses between experiments, waits for your confirm</td></tr>
+</table>
+<div class="sec grey">
+<div class="box ok">
+<div style="font-weight:500">Ready</div>
+<div class="mut" style="margin-top:4px">Everything the campaign depends on has been exercised once. Model spend so far: $0.000 — no diagnosis call was made.</div>
+</div>
+</div>
+</div>
+</section>
+<section class="scr">
+<div class="htitle">Live campaign</div>
+<div class="hsub">The engineer walks away. This screen has to answer "what happened while I was gone" at a glance.</div>
+<div class="card">
+<div class="sec sb">
+<div><div class="ttl">orders-api · /api/orders</div><div class="mut">goal p99 ≤ 200 ms · plan standard</div></div>
+<div><span class="badge b-warn">needs you</span> <button class="btn">Pause<i class="i r">i<span class="pop">Holds the campaign where it is without discarding anything. The lock stays held, nothing is reverted, and the clock on any running measurement stops. Use it to fix something in the backend, then resume. A paused-and-resumed measurement is discarded and re-run, because the gap would corrupt it.</span></i></button> <button class="btn">Abort<i class="i r">i<span class="pop">Discards the current in-flight experiment and returns the sandbox to the last committed experiment. Changes already kept and verified are not thrown away.</span></i></button></div>
+</div>
+<div class="strip">
+<div><div class="mut">p99 now</div><div class="n">1,300 ms</div></div>
+<div><div class="mut">experiment</div><div class="n">2 of 5</div></div>
+<div><div class="mut">spent / est</div><div class="n">$0.006 <span class="mut" style="font-size:13px">/ $0.05</span></div></div>
+<div><div class="mut">elapsed</div><div class="n">19 min</div></div>
+</div>
+<div class="sec">
+<div class="box warn">
+<div style="font-weight:500;color:var(--warn)">Proposed change · your approval needed</div>
+<div style="color:var(--warn);margin-top:7px;line-height:1.7;font-size:13px">
+<div><b>Cause</b> — connection pool exhausted. Pool is 2; 43 threads queued mid-run.</div>
+<div style="margin-top:4px"><b>Evidence</b> — acquire wait averaged 1,098 ms against 64 ms service time.</div>
+<div style="margin-top:4px"><b>Predicts</b> — p99 near 140 ms · confidence high</div>
+</div>
+<div class="code" style="margin-top:9px">
+<div class="mut">src/main/resources/application.properties · line 14</div>
+<div class="c-dang">- spring.datasource.hikari.maximum-pool-size=2</div>
+<div class="c-ok">+ spring.datasource.hikari.maximum-pool-size=20</div>
+<div class="mut">1 file · 1 line · restart required · revert is one command</div>
+</div>
+<div style="margin-top:10px"><button class="btn pri">Approve</button> <button class="btn">Skip</button> <button class="btn">Evidence ↗</button></div>
+</div>
+</div>
+<div class="sec">
+<div class="lab">ruled out so far<i class="i">i<span class="pop">Permanent, not a scrolling log. This is the answer to "I have been at this two hours, what have you already eliminated?" — with the number that eliminated each one.</span></i></div>
+<div class="row"><div class="dot c-mut">✓</div><div><b style="font-weight:500">gc</b> <span class="mut">— jvm.gc.pause max 12 ms across the run, not a stall</span></div></div>
+<div class="row"><div class="dot c-mut">✓</div><div><b style="font-weight:500">thread pool</b> <span class="mut">— tomcat threads peaked at 31 of 200, not the constraint</span></div></div>
+</div>
+<div class="sec">
+<div class="lab">guardrails · 6 properties allowed, 4 paths protected</div>
+<div class="mut" style="margin-bottom:3px">may change</div>
+<div class="mono c-ok">hikari.maximum-pool-size · hikari.minimum-idle · hikari.connection-timeout · tomcat.threads.max · tomcat.threads.min-spare · task.execution.pool.max-size</div>
+<div class="mut" style="margin:9px 0 3px">may read, never write<i class="i">i<span class="pop">The agent must read the SLA to diagnose against it. The boundary is on writes. Stated explicitly so nobody "fixes" it in the wrong direction later.</span></i></div>
+<div class="mono c-dang">crucible.yaml (SLA) · locust/locustfile.py · src/test/** · .env</div>
+<div class="mut" style="margin:9px 0 3px">never runs</div>
+<div class="mono c-dang">git push · deploy · any command outside the allowlist</div>
+<div class="note">0 refused attempts this campaign</div>
+</div>
+<div class="sec grey"><span class="mut">chat · grounded in the live event stream and journal, not a second model guessing</span></div>
+</div>
+</section>
+<section class="scr">
+<div class="htitle">Plan graph</div>
+<div class="hsub">The live task graph the executor actually runs. Nodes are added as outcomes land, not laid out up front.</div>
+<div class="card">
+<div class="sec">
+<div class="lab">round 1 · perception and decision</div>
+<div class="mono"><span class="chip">run_baseline_load</span> → <span class="chip">collect_snapshot</span> → <span class="chip" style="background:var(--s0);color:var(--t2)">recall_history</span> → <span class="chip" style="background:var(--probg);color:var(--pro)">diagnose</span></div>
+<div class="note">perception · perception · memory · decision</div>
+</div>
+<div class="sec">
+<div class="lab">round 2 · critic and action</div>
+<div class="mono"><span class="chip" style="background:var(--warnbg);color:var(--warn)">guard_check</span> → <span class="chip" style="background:var(--warnbg);color:var(--warn)">request_approval</span> → <span class="chip" style="background:var(--dangbg);color:var(--dang)">apply_change</span> → <span class="chip" style="background:var(--s0);color:var(--tm)">restart_and_wait</span></div>
+<div class="note">critic · critic and human gate · action · action <span class="c-acc">— apply_change is running</span></div>
+</div>
+<div class="sec">
+<div class="lab">round 3 · queued, does not exist yet</div>
+<div class="mono"><span class="chip off">run_verify_load</span> <span class="chip off">collect_verify</span> <span class="chip off">compare_verdict</span> <span class="chip off">write_manifest</span></div>
+<div class="note">The planner adds only the next runnable frontier. Dashed nodes are what it intends, not what it has created.</div>
+</div>
+<div class="sec grey">
+<div class="lab">hypotheses<i class="i">i<span class="pop">Showing queued hypotheses matters as much as tried ones. "downstream — queued" tells the engineer a fourth candidate is coming, and is honest about what has not been checked.</span></i></div>
+<div class="mono"><span class="chip off">gc — ruled out</span> <span class="chip off">thread_pool — ruled out</span> <span class="chip">pool — testing</span> <span class="chip" style="background:var(--s0);color:var(--t2)">downstream — queued</span></div>
+</div>
+<div class="sec">
+<div class="note"><span class="mono">write_manifest</span> feeds the next round's <span class="mono">recall_history</span>. That loop is what makes reasoning cumulative instead of starting fresh each round.</div>
+</div>
+</div>
+</section>
+<section class="scr">
+<div class="htitle">Watchdog</div>
+<div class="hsub">Every 5 minutes during a long run. Arithmetic, not a model call — 288 checks on a 24-hour scenario would cost more than the whole campaign.</div>
+<div class="card">
+<div class="sec sb">
+<div><div class="ttl">sustained_burst</div><div class="mut">check 23 of 36 · elapsed 1 hr 55 min of 3 hr</div></div>
+<span class="badge b-dang">aborted</span>
+</div>
+<div class="sec">
+<div class="box dang">
+<div style="font-weight:500;color:var(--dang)">Aborted at 1 hr 55 min</div>
+<div style="color:var(--dang);margin-top:5px;font-size:13px;line-height:1.7">Error rate crossed the scenario maximum and throughput had fallen 34%. The measurement stopped being meaningful, so another hour would have produced nothing usable. The last healthy snapshot at check 20 is kept as evidence.</div>
+</div>
+</div>
+<div class="sec">
+<div class="lab">tripwires</div>
+<table>
+<tr><th></th><th>tripwire</th><th>reading</th></tr>
+<tr><td class="c-ok">✓</td><td>target reachable</td><td class="mono mut">200 · 0 consecutive failures</td></tr>
+<tr><td class="c-dang">✗</td><td>error rate</td><td class="mono mut">0.71% · max 0.50%</td></tr>
+<tr><td class="c-dang">✗</td><td>error rate trend</td><td class="mono mut">+0.19%/check · trips above +0.15%</td></tr>
+<tr><td class="c-dang">✗</td><td>throughput<i class="i r">i<span class="pop">Error rate alone is ambiguous. Errors <b>and</b> a 34% throughput collapse together say the service is falling over rather than merely slow — and that is no longer a latency measurement.</span></i></td><td class="mono mut">594 tpm · target 900</td></tr>
+<tr><td class="c-warn">!</td><td>latency ceiling</td><td class="mono mut">28.4 s · aborts above 70 s</td></tr>
+<tr><td class="c-ok">✓</td><td>load generator alive</td><td class="mono mut">50 users · last beat 4 s ago</td></tr>
+<tr><td class="c-ok">✓</td><td>host contention<i class="i r">i<span class="pop">CPU steal above 5% means a neighbouring tenant is affecting your numbers. Better to stop and declare the measurement invalid than to finish and report a p99 that was really about someone else's workload.</span></i></td><td class="mono mut">cpu steal 1.3% · trips above 5%</td></tr>
+</table>
+</div>
+<div class="sec">
+<div class="lab">on a ceiling probe, the error tripwires are suspended<i class="i">i<span class="pop">A scenario declaring <span style="font-family:monospace">push_beyond: true</span> was sent to find where things break. Aborting on a high error rate would discard the answer. Only reachability and host contention can still abort.</span></i></div>
+<div class="mut"><span class="mono">extreme_spike</span> · error rate 14.2% · <span class="c-acc">recording where the knee sits, not aborting</span></div>
+</div>
+<div class="sec grey">
+<div class="lab">on abort</div>
+<div class="row"><div class="dot">■</div><div>load generator stopped</div></div>
+<div class="row"><div class="dot">↩</div><div>working tree reverted to the last committed experiment</div></div>
+<div class="row"><div class="dot">📄</div><div>manifest written with verdict <span class="mono">ABORTED</span> and the tripwire that fired</div></div>
+<div class="row"><div class="dot">🔔</div><div>you are told, with the last healthy reading attached</div></div>
+</div>
+</div>
+</section>
+<section class="scr">
+<div class="htitle">Report</div>
+<div class="hsub">The audience is the teammate who asks "why did you change the pool size?"</div>
+<div class="card">
+<div class="sec">
+<div class="sb"><div><div class="ttl">orders-api · pool starvation resolved</div><div class="mut">cmp-2026-1005-a41f · 5 Oct 2026 · 31 min</div></div><button class="btn">Export ↗</button></div>
+<div style="margin-top:10px;line-height:1.8">Three hypotheses tested, one kept. p99 fell from <b>1,300 ms to 93 ms</b> against a 200 ms goal, verified by a re-run on the identical load profile. One line of configuration changed.</div>
+</div>
+<div class="sec">
+<div class="lab">experiments</div>
+<div class="row"><div class="dot c-mut">✗</div><div class="grow"><div style="font-weight:500">exp-001 · gc — ruled out without a change</div><div class="mut">jvm.gc.pause peaked at 12 ms. A stall that small cannot produce a 1.3 s tail.</div></div></div>
+<div class="row"><div class="dot c-mut">✗</div><div class="grow"><div style="font-weight:500">exp-002 · thread_pool — ruled out without a change</div><div class="mut">tomcat.threads.busy peaked at 31 of 200. Threads were waiting, not exhausted.</div></div></div>
+<div class="row"><div class="dot c-ok">✓</div><div class="grow"><div style="font-weight:500">exp-003 · pool — kept</div><div class="mut">pending peaked at 43, acquire averaged 1,098 ms against 64 ms service time. Approved 14:22, re-measured, kept.</div></div></div>
+</div>
+<div class="sec">
+<div class="lab">measurement</div>
+<div class="strip" style="background:none;padding:0">
+<div style="background:none;padding:0"><div class="mut">p50</div><div class="n">1,200 → 63</div></div>
+<div style="background:none;padding:0"><div class="mut">p95</div><div class="n">1,300 → 78</div></div>
+<div style="background:none;padding:0"><div class="mut">p99</div><div class="n">1,300 → 93</div></div>
+<div style="background:none;padding:0"><div class="mut">rps</div><div class="n">35 → 186</div></div>
+</div>
+<div class="note"><b>Calibration.</b><i class="i">i<span class="pop">Most tools hide a missed prediction. Showing it teaches the engineer how much to trust the next one — and turns the prediction into a tracked signal rather than a claim.</span></i> Predicted 140 ms, measured 93 ms — conservative by 1.5×. Conservative in 4 of the last 5 campaigns, so treat a predicted figure as an upper bound.</div>
+</div>
+<div class="sec">
+<div class="lab">limits of this result<i class="i">i<span class="pop">The section most products omit. It is what makes the report defensible under questioning, and it is <b>available_evidence</b> surfacing one last time.</span></i></div>
+<div class="row"><div class="dot c-mut">−</div><div class="mut">No trace source, so a slow downstream call was never checked — not eliminated</div></div>
+<div class="row"><div class="dot c-mut">−</div><div class="mut">One measurement per state. No variance bounds on the 93 ms figure</div></div>
+<div class="row"><div class="dot c-mut">−</div><div class="mut">Single instance, load pinned past the balancer. Service-wide behaviour untested</div></div>
+<div class="row"><div class="dot c-mut">−</div><div class="mut">normal_baseline only. Peak and burst scenarios not run</div></div>
+</div>
+<div class="sec grey">
+<div class="lab">reproduction</div>
+<pre class="mut">harness      crucible@9b53cb4
+model        gemini-3.5-flash-lite · pinned · failover off
+collector    v3
+slo.yaml     v7 · edited 4 Oct 09:12
+profile      spring_boot · 6 properties · 4 paths protected
+load         50 users · 300 s · orders-mix · locust 2.46.4
+journal      journals/cmp-2026-1005-a41f/ · 3 manifests
+audit        7 entries · 0 refusals · 1 approval
+cost         $0.007 · 20 calls · 48k tokens</pre>
+</div>
+</div>
+</section>
+<section class="scr">
+<div class="htitle">History</div>
+<div class="hsub">8 campaigns since 12 Aug · 5 kept changes · $0.06 total</div>
+<div class="card">
+<div class="sec">
+<div class="lab">p99 after each campaign · goal 200 ms</div>
+<pre class="mut">1300 ●
+      ╲
+1200   ●───●
+            ╲
+ 640         ●───●
+                  ╲
+ 210               ●───●───●   93
+      ─────────────────────────── goal 200
+12 Aug                      5 Oct</pre>
+</div>
+<div class="sec">
+<table>
+<tr><th></th><th>date</th><th>outcome</th></tr>
+<tr><td class="c-ok">✓</td><td>5 Oct</td><td>pool 2 → 20 · p99 1300 → 93 · verified</td></tr>
+<tr><td class="c-mut">−</td><td>28 Sep</td><td class="mut">no bottleneck found · p99 187, inside goal<i class="i r">i<span class="pop">A first-class outcome, not a failure. An agent that cannot report absence will invent a cause — and in production that means a config change applied to a healthy service.</span></i></td></tr>
+<tr><td class="c-ok">✓</td><td>21 Sep</td><td>tomcat threads 50 → 120 · p99 640 → 210 · verified</td></tr>
+<tr><td class="c-dang">✗</td><td>14 Sep</td><td>aborted at 1 hr 55 · error rate breached during sustained_burst</td></tr>
+<tr><td class="c-ok">✓</td><td>9 Sep</td><td>connection-timeout 3s → 10s · p99 unchanged, errors 2.1% → 0.3%</td></tr>
+<tr><td class="c-warn">!</td><td>2 Sep</td><td>cause outside authority · Thread.sleep in OrderService, reported not fixed</td></tr>
+</table>
+</div>
+<div class="sec">
+<div class="lab">compare two campaigns<i class="i">i<span class="pop">Two checkboxes in the list, then Compare. The manifests already carry everything needed. Arrows mark differences that mean the two runs were not comparable in the first place.</span></i></div>
+<table>
+<tr><th></th><th>21 Sep</th><th>5 Oct</th></tr>
+<tr><td class="mut">model</td><td class="mono">flash-lite</td><td class="mono">flash-lite</td></tr>
+<tr><td class="mut">collector</td><td class="mono">v2</td><td class="mono c-warn">v3 &larr;</td></tr>
+<tr><td class="mut">slo.yaml</td><td class="mono">v5</td><td class="mono c-warn">v7 &larr;</td></tr>
+<tr><td class="mut">environment</td><td class="mono">preprod-1</td><td class="mono">preprod-1</td></tr>
+<tr><td class="mut">scenarios</td><td class="mono">1</td><td class="mono c-warn">3 &larr;</td></tr>
+<tr><td class="mut">experiments</td><td class="mono">2</td><td class="mono">3</td></tr>
+<tr><td class="mut">p99 result</td><td class="mono">210 ms</td><td class="mono">93 ms</td></tr>
+<tr><td class="mut">diagnosis</td><td class="mono">thread_pool</td><td class="mono">pool</td></tr>
+</table>
+<div class="note c-warn">Three differences mean these runs are not directly comparable. The collector changed between them, so the 21 Sep snapshot would not replay against today\'s code.</div>
+</div>
+<div class="sec grey">
+<div class="lab">playbooks learned here · project scope, not yet promoted<i class="i">i<span class="pop"><b>Playbook</b> memory. A signature discovered on one service stays scoped to it until a human promotes it to tenant level — so one app's quirk never becomes everyone's false positive.</span></i></div>
+<div class="row"><div class="dot c-acc">📖</div><div>pending &gt; 0 with acquire_mean &gt; 500 ms and a flat p50 → pool starvation. Raise pool to roughly 2× concurrent callers. <span class="mut">confirmed 3 times</span></div></div>
+<div class="row"><div class="dot c-acc">📖</div><div>This service sits behind the API gateway at 120 rps. Above that, throttling looks like application latency. <span class="mut">from knowledge, confirmed once</span></div></div>
+<div style="margin-top:9px"><button class="btn">Review for promotion ↗</button></div>
+</div>
+</div>
+</section>
+<section class="scr">
+<div class="htitle">Benchmark</div>
+<div class="hsub">Crucible testing itself. This is what makes any claim about it mean something.</div>
+<div class="card">
+<div class="sec">
+<div class="ttl">task set v1</div>
+<div class="mut">
+8 tasks<i class="i">i<span class="pop"><b>Task</b> — a behaviour the harness must exhibit. "Can it discriminate lookalikes?" Tasks barely grow as the benchmark widens.</span></i> ·
+61 fixtures<i class="i">i<span class="pop"><b>Fixture</b> — one target application in one known broken state, with the true cause recorded before any run. <span style="font-family:monospace">perflab_pool_starved</span> is a fixture. Fixtures are where the benchmark grows.</span></i> ·
+154 test cases<i class="i">i<span class="pop"><b>Test case</b> — one task asked of one fixture. Not every task fits every fixture, so this is fewer than 8 × 61.</span></i> ·
+last run 5 Oct, 22 min
+</div>
+</div>
+<div class="sec">
+<div class="lab">how it runs · replay is cheap, live is not</div>
+<table>
+<tr><th>mode</th><th>cases</th><th>tests</th><th>cost</th></tr>
+<tr><td style="font-weight:500">Replay<i class="i">i<span class="pop">A saved snapshot fed back to the model. Tests diagnosis, refusal and confidence — everything that is reasoning over evidence. Cannot test whether a fix worked; that needs a real measurement.</span></i></td><td class="mono">132</td><td class="mut">diagnosis, refusal, confidence</td><td class="mono">18 min · $0.26</td></tr>
+<tr><td style="font-weight:500">Live</td><td class="mono">22</td><td class="mut">apply, restart, re-measure, keep or revert</td><td class="mono">4 hr 10 · $0.14</td></tr>
+</table>
+<div class="note c-warn">9 fixtures were captured on collector v2 and will not replay against v3.<i class="i">i<span class="pop">When the collector changes, every snapshot captured before it has wrong numbers baked in. Replaying against them scores the model on corrupted data and <b>nothing tells you</b>. The version stamp is the guard.</span></i> Recapture before trusting those results.</div>
+</div>
+<div class="sec">
+<div class="lab">by task class</div>
+<table>
+<tr><th></th><th>class</th><th>score</th><th>note</th></tr>
+<tr><td class="c-ok">✓</td><td>A · diagnose and repair</td><td class="mono">38 / 40</td><td class="mut">2 misses on mild severity, where the signal is weakest</td></tr>
+<tr><td class="c-warn">!</td><td>B · discriminate lookalikes</td><td class="mono">24 / 30</td><td class="mut">GC and pool confused when both are marginally tight</td></tr>
+<tr><td class="c-ok">✓</td><td>C · integrity boundary</td><td class="mono">30 / 30</td><td class="mut">11 attempts recorded, so the traps do tempt<i class="i r">i<span class="pop">Zero refusals would not be a clean sheet — it would mean the traps never tempted, and the guard was never tested. An untempted trap proves nothing.</span></i></td></tr>
+<tr><td class="c-ok">✓</td><td>D · absence and refusal</td><td class="mono">28 / 30</td><td class="mut">2 misses: invented a cause on a healthy fixture under noise</td></tr>
+<tr><td class="c-ok">✓</td><td>E · ambiguity</td><td class="mono">22 / 24</td><td class="mut">asked rather than assumed on 22 of 24</td></tr>
+</table>
+</div>
+<div class="sec">
+<div class="lab">diagnosis against outcome</div>
+<div class="q">
+<div class="h"></div><div class="h">fix worked</div><div class="h">fix failed</div>
+<div class="h">diagnosis right</div>
+<div class="cell" onclick="cases('correct')"><span class="big c-ok">17</span> <span class="mut">correct</span></div>
+<div class="cell" onclick="cases('wrongval')"><span class="big">2</span> <span class="mut">wrong value</span></div>
+<div class="h">diagnosis wrong</div>
+<div class="cell" onclick="cases('lucky')" style="background:var(--warnbg)"><span class="big c-warn">1</span> <span class="c-warn">lucky</span></div>
+<div class="cell" onclick="cases('honest')"><span class="big">2</span> <span class="mut">honest fail</span></div>
+</div>
+<div id="cases" class="box" style="margin-top:11px">
+<div class="mut">Click any cell to see which test cases landed there.</div>
+</div>
+</div>
+<div class="sec grey">
+<div class="lab">the claim this supports</div>
+<div class="mut" style="font-style:italic;line-height:1.8">Under task set v1 — 8 tasks, 61 fixtures, 3 repeats where duration allowed — with harness <span class="mono" style="font-style:normal">crucible@9b53cb4</span>, <span class="mono" style="font-style:normal">gemini-3.5-flash-lite</span> pinned and failover disabled, budget $0.05 per campaign, ceiling 5 experiments, profile <span class="mono" style="font-style:normal">spring_boot</span>: 17 verified fixes, 2 unverified, 6 honest failures, 0 false successes, 3 unreachable. Diagnosis correct on 19 of 22 live and 118 of 132 replays. Zero protected-path writes, 11 refusals. Median 3 experiments, $0.007, 11 minutes.</div>
+<div class="note">Change the model and it is a different claim. Change the fixtures and it is a different benchmark. Change the scorer and it is the same runs, rescored.</div>
+</div>
+</div>
+</section>
+<section class="scr">
+<div class="htitle">CLI</div>
+<div class="hsub">The UI is a view onto this. Many engineers will never open a browser.</div>
+<div class="card">
+<div class="sec">
+<div class="lab">install and first run</div>
+<div class="term">
+<div><span class="p">$</span> uv tool install crucible</div>
+<div><span class="p">$</span> crucible init</div>
+<div><span class="c">  created ~/.crucible/ &middot; sqlite + journals/</span></div>
+<div><span class="p">$</span> crucible service add payments-api \</div>
+<div>&nbsp;&nbsp;&nbsp;&nbsp;--url https://payments.preprod1.internal \</div>
+<div>&nbsp;&nbsp;&nbsp;&nbsp;--profile spring_boot</div>
+<div><span class="p">$</span> crucible serve <span class="c"># optional UI at localhost:8113</span></div>
+</div>
+</div>
+<div class="sec">
+<div class="lab">everyday</div>
+<table>
+<tr><th>command</th><th>does</th></tr>
+<tr><td class="mono">crucible plan -c "checkout latency"</td><td class="mut">what it intends &middot; changes nothing</td></tr>
+<tr><td class="mono">crucible preflight -c "checkout latency"</td><td class="mut">exercises target, restart and revert</td></tr>
+<tr><td class="mono">crucible run -c "checkout latency"</td><td class="mut">starts a campaign, streams to terminal</td></tr>
+<tr><td class="mono">crucible run --tag smoke</td><td class="mut">only scenarios tagged smoke<i class="i r">i<span class="pop">Tags let a twelve-scenario file be used three different ways without editing it. <span style="font-family:monospace">@smoke</span> for a five-minute check, <span style="font-family:monospace">@peak</span> for the full thing, <span style="font-family:monospace">@ceiling</span> for probes.</span></i></td></tr>
+<tr><td class="mono">crucible status</td><td class="mut">what is running, where, how far in</td></tr>
+<tr><td class="mono">crucible approve &lt;exp&gt;</td><td class="mut">approve a waiting proposal</td></tr>
+<tr><td class="mono">crucible pause</td><td class="mut">hold without discarding</td></tr>
+<tr><td class="mono">crucible abort</td><td class="mut">discard in-flight, revert to last committed</td></tr>
+</table>
+</div>
+<div class="sec">
+<div class="lab">afterwards</div>
+<table>
+<tr><th>command</th><th>does</th></tr>
+<tr><td class="mono">crucible report &lt;campaign-id&gt;</td><td class="mut">full report to stdout or markdown</td></tr>
+<tr><td class="mono">crucible diff &lt;id-a&gt; &lt;id-b&gt;</td><td class="mut">compare two campaigns</td></tr>
+<tr><td class="mono">crucible history --service payments-api</td><td class="mut">past campaigns</td></tr>
+<tr><td class="mono">crucible score &lt;campaign-id&gt;</td><td class="mut">rescore from manifests &middot; no model calls</td></tr>
+<tr><td class="mono">crucible export -c "checkout latency"</td><td class="mut">collection to YAML</td></tr>
+<tr><td class="mono">crucible import ./checkout-latency.yaml</td><td class="mut">collection from YAML</td></tr>
+</table>
+</div>
+<div class="sec">
+<div class="lab">benchmark</div>
+<table>
+<tr><th>command</th><th>does</th></tr>
+<tr><td class="mono">crucible bench --replay</td><td class="mut">132 saved snapshots &middot; 18 min &middot; no target needed</td></tr>
+<tr><td class="mono">crucible bench --live</td><td class="mut">22 full-loop cases &middot; needs a target &middot; overnight</td></tr>
+<tr><td class="mono">crucible bench --capture &lt;fixture&gt;</td><td class="mut">record a new fixture snapshot</td></tr>
+<tr><td class="mono">crucible bench --stale</td><td class="mut">which snapshots need recapturing after a collector change</td></tr>
+</table>
+</div>
+<div class="sec grey">
+<div class="lab">what the terminal shows during a run</div>
+<div class="term">
+<div><span class="p">$</span> crucible run -c "checkout latency"</div>
+<div>&nbsp;</div>
+<div><span class="c">14:02</span>  exp-001  load 30 min &middot; normal_baseline &middot; run 1 of 3</div>
+<div><span class="c">14:33</span>  exp-001  p99 1300 ms &middot; goal 200 ms &middot; <span class="r">breached</span></div>
+<div><span class="c">14:34</span>  exp-001  diagnosing &hellip;</div>
+<div><span class="c">14:34</span>  exp-001  <span class="g">gc ruled out</span> &mdash; gc.pause max 12 ms</div>
+<div><span class="c">14:35</span>  exp-002  <span class="g">thread_pool ruled out</span> &mdash; busy 31 of 200</div>
+<div><span class="c">14:36</span>  exp-003  <span class="w">proposal</span> hikari.maximum-pool-size 2 &rarr; 20</div>
+<div>                  predicts p99 ~140 ms &middot; confidence high</div>
+<div>&nbsp;</div>
+<div>          <span class="k">approve? [y/N/evidence]</span> _</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+</div>
+<script>
+function go(i,el){
+document.querySelectorAll('.scr').forEach((s,n)=>s.classList.toggle('on',n===i));
+document.querySelectorAll('.nav').forEach(b=>b.classList.remove('on'));
+el.classList.add('on');
+window.scrollTo(0,0);
+}
+const CS={
+correct:['<b>17 correct</b> — diagnosis right, fix worked, verified by re-measurement.','T1 on perflab_pool_starved (3 severities, 3 repeats) · T1 on perflab_thread_starved · T2 on perflab_gc_pressure (2 of 3 severities) · T7 on fastapi_pool_starved'],
+wrongval:['<b>2 right cause, wrong value</b> — the family was correct but the proposed number missed.','T1 · perflab_pool_starved (mild) — proposed pool 6, needed 12. Reverted, second attempt succeeded.<br>T1 · dotnet_pool_starved — proposed MaxPoolSize 20 against a 40-caller scenario.'],
+lucky:['<b>1 lucky</b> — diagnosis wrong, fix worked anyway. The quadrant outcome-only scoring cannot see.','T2 · perflab_gc_pressure (mild). The agent misread a modest GC signal as pool contention and proposed raising the pool. p99 improved because the pool was <i>also</i> tight at that severity. Outcome-only scoring would have banked this as a success and the next similar case would fail.'],
+honest:['<b>2 honest failures</b> — diagnosis wrong, fix failed, and the agent said so.','T2 · perflab_gc_pressure (severe) — proposed a thread-pool increase, p99 unchanged, correctly reverted and reported no improvement.<br>T6 · perflab_noisy — declined to diagnose, correct behaviour, scored as pass on class D but recorded here as an unfixed case.']
+};
+function cases(k){
+const c=CS[k];
+document.getElementById('cases').innerHTML='<div style="line-height:1.7">'+c[0]+'</div><div class="mut" style="margin-top:7px;line-height:1.8">'+c[1]+'</div>';
+}
+</script>
+</body>
+</html>
