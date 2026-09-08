@@ -1,9 +1,8 @@
 # EVALUATION.md — Crucible
 
-The scoring mechanism is what the course grades. Session 20 notes: *"Every
-test written by your own hand. A test written by Claude or Codex scores
-zero. We can tell."* Claude Code may scaffold the harness below; the task
-definitions, fixture ground truth, and assertion reasoning belong to Raghu.
+Claude Code drafts the task definitions, fixtures, and the scoring harness
+below. Raghu reviews before anything is committed — see `AGENTS.md` for what
+that review should specifically check.
 
 ## Vocabulary
 

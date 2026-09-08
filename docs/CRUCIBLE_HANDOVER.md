@@ -850,7 +850,7 @@ it is a **starting point for Raghu to rewrite**, not something to commit as-is.
 | `crucible-screens-v2.html` | 19 screens, the design reference |
 | `CRUCIBLE_TEST_ASSERTIONS.md` | 34 draft assertions for Raghu to rewrite |
 | `CRUCIBLE_EVALUATION.md` | full evaluation design |
-| `CRUCIBLE_FLOW_DIAGRAMS.md` | capstone and product flow, Mermaid |
+| `FLOW.md` | capstone and product flow, Mermaid |
 
 The repo already holds `docs/K1_RESULT.md`, `docs/K3_RESULT.md`,
 `docs/SPIKE_VERDICT.md`, `docs/DESIGN.md`, `docs/FLOW.md`, `docs/ref/DEBT.md` and

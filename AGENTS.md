@@ -14,15 +14,18 @@ to protect one of them.
 
 ## The rule that overrides everything
 
-**Raghu writes the test assertions and their reasoning. Claude Code
-implements against them.** A test written by Claude Code (or any AI) scores
-zero in the course this project is submitted to — assertions and their
-reasoning must be in Raghu's own hand.
+**Claude Code drafts test assertions and their reasoning. Raghu reviews
+before anything is committed.** For each assertion, flag what needs
+checking — not a diff to skim, a specific question: does the reasoning
+match the actual failure mode it's testing for, is it testing behaviour or
+implementation detail, is there an edge case it's missing. Raghu decides
+what's correct; Claude Code doesn't self-approve its own tests.
+`CRUCIBLE_TEST_ASSERTIONS.md` is the existing draft — start from there
+rather than rewriting from scratch.
 
-Claude Code may scaffold test files, set up fixtures, and run suites. It must
-never decide what "correct" means. `CRUCIBLE_TEST_ASSERTIONS.md` (34 draft
-assertions across 8 groups) is a **starting point for Raghu to rewrite**, not
-something to commit as-is.
+`CRUCIBLE_TEST_ASSERTIONS.md` (34 draft assertions across 8 groups) is the
+starting point — extend it rather than starting fresh, and keep it current
+as new test areas come up.
 
 ## Session discipline
 
