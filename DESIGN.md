@@ -192,9 +192,19 @@ steal).
   to the sandbox branch. Aborting experiment 11 discards the uncommitted
   change and leaves HEAD at experiment 10 — verified improvements are not
   thrown away, and reverted experiments have already reverted themselves.
-- **Pause holds without discarding**, alongside abort. Lock stays held,
-  nothing reverts. A measurement interrupted by a pause is discarded and
-  re-run, because the gap would corrupt it.
+  **Once a change has been pushed and deployed, abort is no longer purely
+  local**: the box is running experiment 11 even though HEAD is back at 10,
+  so abort must also redeploy the last good commit. See §19.9.
+- **Pause holds without discarding**, alongside abort — this is the
+  mechanism for exactly the "24-hour run, something unrelated breaks
+  mid-way" case: pausing stops the load generator and freezes the
+  scenario's elapsed-time clock; the lock stays held and nothing already
+  measured reverts. You fix whatever's wrong, then resume, and the scenario
+  continues from where it paused rather than restarting. Only the single
+  measurement window that was actively in flight at the moment of pause is
+  discarded and re-run — a gap inside that one window would corrupt its
+  numbers — everything measured before the pause stands as-is. A full
+  24-hour re-run is never the cost of a pause.
 - **Duration and repeats belong to the scenario, not the plan.** A plan
   cannot shorten a scenario without changing what's actually measured. Plans
   control experiment count and model tier; scenarios control duration and
@@ -225,6 +235,19 @@ A collection YAML committed to a repo has no secrets. Teammates import the
 investigation and supply their own environment. Campaigns record which
 environment they ran against, and History flags a diff across environments
 rather than silently allowing comparison across them.
+
+**Every environment declares its kind, and production is refused.** Crucible
+edits configuration on a running service and restarts it; the entire safety
+argument in §19 assumes the target is pre-prod. That assumption must be
+stated by the environment and enforced by the campaign, not held as a
+convention in someone's head — a campaign refuses to start against an
+environment declared `production`.
+
+**Credentials are held in a form that cannot become a printable string.**
+Snapshots reach a model and journals are replayed hundreds of times (§12), so
+an HTTPS token embedded in a remote URL is one careless log line from
+disclosure. An SSH deploy key referenced by path is not: the path is safe to
+log, the key never enters argv or the environment. See §19.8.
 
 ## 9 · Plan vs preflight
 
@@ -284,11 +307,36 @@ everyone's false positive.
 - **Knowledge RAG** — runbooks, architecture, incident notes. What stops the
   agent blaming the application for an API-gateway throttle.
 
-Embedding note: `OllamaNomicEmbedder` needs Ollama on `localhost:11434`,
-which is a real memory cost on a small cloud box and has already broken one
-CI test. Check whether `glc_v5` exposes `/v1/embed`; `gemini-embedding-001`
-at `outputDimensionality=768` is a candidate fallback in the same vector
-space.
+**Embedding.** `OllamaNomicEmbedder` needs Ollama on `localhost:11434`, which
+is a real memory cost on a small cloud box and has already broken one CI test.
+`glc_v5` does expose `/v1/embed` and `/v1/embedders` (verified against the
+running gateway, 11 September 2026), so the gateway is the first choice;
+`gemini-embedding-001` at `outputDimensionality=768` is the fallback, and any
+free provider of a comparable model is acceptable in its place.
+
+**Correction — matching dimensionality is not the same vector space.** An
+earlier draft of this note called the 768-dimension fallback "a candidate
+fallback in the same vector space". That was wrong. Two different models at
+768 dimensions produce vectors that are simply incomparable, and querying one
+corpus with the other returns nearest neighbours that are noise wearing the
+shape of an answer — no error, no warning, just quietly wrong retrieval, in
+the component whose whole job is to stop the agent re-proposing a disproven
+hypothesis. Changing embedder means **re-indexing** the corpus, never querying
+across the two.
+
+**The embedder is pinned per campaign, exactly as the chat model is (§3.2),
+and every stored vector carries its `embedder_id`** — provider, model,
+dimensionality and normalisation. Retrieval against a different `embedder_id`
+refuses and names what needs re-indexing rather than silently returning wrong
+neighbours. This is the `collector_version` rule (§7) applied to memory: a
+corpus embedded under one model is exactly as stale to another as a snapshot
+is to a changed collector.
+
+`outputDimensionality` is a *request parameter*, so one model id can produce
+incompatible vectors at different settings — `gemini-embedding-001` at 768 and
+at 3072 are both truthfully "gemini-embedding-001". A startup canary that
+embeds a fixed sentence and compares it against a stored reference vector for
+that `embedder_id` catches this in a single call.
 
 ## 15 · Screens → capability mapping
 
@@ -393,3 +441,84 @@ under `~/.crucible/`. Deployment target: Hetzner CX32 (~₹1,000 for the
 capstone period) or Oracle Always Free, both chosen to keep everything on
 free or near-free tiers per §16 — the only ongoing spend in the whole
 architecture is that one box.
+
+## 19 · Deploy and the push boundary
+
+Crucible's sandbox is not where performance is measured. The agent edits
+configuration in its own workspace; the **target** runs on a separate pre-prod
+box (Oracle Cloud or Hetzner, §18). A change reaches that box by being pushed
+to a dedicated branch and deployed from it. Without that there is no
+autonomous loop at all — which is why `git push` cannot simply be forbidden,
+and why it cannot simply be allowed either.
+
+**19.1 Pre-prod is a precondition, not a convention.** Every rule below
+assumes the target is a pre-prod environment that can be broken and restored.
+Crucible is never pointed at production. The environment declares its kind
+(§8) and a campaign refuses to start against one declared `production`. If
+this rule is ever relaxed, none of the remaining guardrails are sufficient on
+their own. *(Candidate for promotion to an AGENTS.md non-negotiable.)*
+
+**19.2 The refspec is configuration, never model output.** Deploy is its own
+capability, with remote and branch pinned by `profile.yaml`
+(`deploy.remote`, `deploy.branch`, e.g. `perftest_sandbox`). The model decides
+*whether* to deploy; it never decides *where*. `git push` stays out of
+`GIT_SUBCOMMANDS`, because that list governs argv the **model composes** — and
+the risk was never that push exists. Pushing a commit to a sandbox branch on
+pre-prod is reversible. The risk is a model composing `HEAD:main` or
+`--force`, which no argv-parsing allowlist reliably catches.
+
+**19.3 Force-push is refused, always.** Reverting means deploying an earlier
+commit, never rewriting history. A force-push would destroy the experiment
+history that the journal and every manifest depend on, making prior results
+unreproducible — the same class of loss as editing a manifest after the fact
+(§6.1 of the assertions).
+
+**19.4 The human gate is on the change, not on the transport.** The operator
+already approves the proposed configuration change. Deploying that approved
+change is a mechanical consequence, not a second decision, and a second gate
+would cost autonomy while adding no safety. First contact with an environment
+is covered by **preflight** (§9), which exercises deploy, restart and revert
+once, end to end, before any campaign relies on them.
+
+**19.5 Deploy automation is declared, never guessed.** Where the operator has
+wired a pipeline — Jenkins, GitHub Actions, or anything equivalent — deploy is
+autonomous. Where they declare it manual, the campaign blocks with
+instructions and records the manual step on the manifest (§11). The agent
+never infers which mode it is in; an agent that guessed wrong would either
+stall a working pipeline or silently skip a deploy that never happened.
+
+**19.6 No measurement begins until the target proves it is running the new
+commit.** Measuring before a deploy lands attributes the *old* configuration's
+numbers to the *new* change — a silent error of exactly the K3 class (§4), and
+one that no later check would catch, because the resulting number is perfectly
+plausible. The target exposes its running commit (PerfLab: `/api/version`),
+the runner polls until it matches the deployed sha, and refuses to measure if
+it never does. Deploy latency is charged to wall clock (§7), never to the
+measured window.
+
+**19.7 Every experiment records the commit it ran against.** The deployed sha
+is carried per experiment in Episode memory (§13), so "which change produced
+this number" is answered from the journal rather than reconstructed by
+inference. This is also what makes revert mechanical rather than a judgement
+call: the last good commit is a recorded fact, not a guess.
+
+**19.8 Credentials never become a printable string.** Prefer an SSH deploy key
+referenced by path over an HTTPS token embedded in a remote URL — a key path
+is safe to log, a token is not, and journals are replayed hundreds of times
+(§12). The key is repo-scoped and write-only; branch protection on the remote
+keeps it off `main` and off feature branches even if §19.2 fails. Where CI
+performs the deploy, Crucible holds no credential for the box at all: it can
+write to a sandbox branch, and only the pipeline can touch the environment.
+Any `.env` holds non-secret pointers only — remote name, branch, key path.
+
+**19.9 Abort is no longer purely local.** §7's abort discards the in-flight
+experiment and leaves HEAD at the last good one. Once a change has been pushed
+and deployed, the box is running experiment 11 even though HEAD is back at 10,
+so abort must **also redeploy the last good commit**. An abort that stops at
+the local revert leaves the environment in a state no manifest describes,
+which is worse than not aborting: the next campaign would measure it and
+attribute the result to something else.
+
+**19.10 One campaign per deploy branch at a time.** Two campaigns pushing to
+the same branch would interleave commits and invalidate both. The experiment
+lock (§7) extends to the deploy branch, not just the workspace.
