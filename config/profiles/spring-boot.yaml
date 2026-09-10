@@ -1,0 +1,151 @@
+# ---------------------------------------------------------------------------
+# TargetProfile: Spring Boot on the JVM
+#
+# Read by the guard, the applicator and the scorer. This file GRANTS AUTHORITY:
+# a property absent from allowed_properties cannot be changed by the agent, and
+# a value outside its bounds is refused before anything is applied.
+#
+# Prose about how this runtime fails lives in SKILL.md next to this file. That
+# file is rendered into the model's system prompt and nowhere else, and grants
+# nothing (DESIGN.md section 5). Do not move authority into it.
+# ---------------------------------------------------------------------------
+
+name: spring-boot
+runtime: jvm
+
+# Declared by the profile, never by a global constant. `gc` is a JVM/CLR concept;
+# CPython's analogue is `gil_contention` and Node's is `event_loop_block`. A
+# hardcoded list would make the agent propose impossible hypotheses on one
+# runtime and miss real ones on another (DESIGN.md section 5).
+cause_families:
+  - connection_pool_exhaustion
+  - thread_pool_saturation
+  - gc_pressure
+  - inefficient_query
+  - cache_miss
+  - downstream_latency
+  - lock_contention
+  - payload_serialization
+
+config_file: perf-lab/src/main/resources/application.properties
+
+# The agent may change these and nothing else. Bounds are the profile's judgement,
+# not the model's: the agent argues for a value, this file decides whether the
+# value is sane for this runtime.
+allowed_properties:
+  spring.datasource.hikari.maximum-pool-size:
+    type: int
+    min: 1
+    max: 100
+  spring.datasource.hikari.minimum-idle:
+    type: int
+    min: 0
+    max: 100
+  spring.datasource.hikari.connection-timeout:
+    type: int
+    min: 1000
+    max: 60000
+  server.tomcat.threads.max:
+    type: int
+    min: 4
+    max: 800
+  server.tomcat.threads.min-spare:
+    type: int
+    min: 1
+    max: 200
+  spring.task.execution.pool.core-size:
+    type: int
+    min: 1
+    max: 200
+  spring.task.execution.pool.max-size:
+    type: int
+    min: 1
+    max: 400
+  spring.task.execution.pool.queue-capacity:
+    type: int
+    min: 0
+    max: 10000
+  spring.jpa.properties.hibernate.jdbc.batch_size:
+    type: int
+    min: 1
+    max: 500
+  spring.jpa.properties.hibernate.default_batch_fetch_size:
+    type: int
+    min: 1
+    max: 500
+  perflab.cache.enabled:
+    type: bool
+  perflab.downstream.timeout-ms:
+    type: int
+    min: 100
+    max: 30000
+
+# The first half of the SLA protection. The second half is the Policy memory kind,
+# which the agent has no write permission for. Both exist because a file guard can
+# be bypassed if config moves, and a memory permission cannot -- and neither is to
+# be weakened independently of the other (DESIGN.md section 4.4).
+protected_paths:
+  - config/slo.yaml
+  - config/profiles/**
+  - locust/**
+  - tests/**
+  - docs/CRUCIBLE_TEST_ASSERTIONS.md
+
+restart:
+  command: ["./mvnw", "spring-boot:run"]
+  manual: false
+  instructions: |
+    If automation is unavailable: stop the running perf-lab process, then start it
+    with ./mvnw spring-boot:run from the perf-lab directory. A manual restart is
+    recorded on the manifest -- a run with human intervention is not comparable to
+    a fully autonomous one.
+  health_url: http://localhost:8080/actuator/health
+  health_timeout_s: 120
+  settle_s: 5
+
+# Provider metric name -> the cause family it speaks to. The collector uses the
+# names; this mapping is what lets the agent say which evidence it actually has.
+metric_map:
+  hikaricp.connections.acquire: connection_pool_exhaustion
+  hikaricp.connections.pending: connection_pool_exhaustion
+  hikaricp.connections.active: connection_pool_exhaustion
+  hikaricp.connections.idle: connection_pool_exhaustion
+  hikaricp.connections.timeout: connection_pool_exhaustion
+  tomcat.threads.busy: thread_pool_saturation
+  tomcat.threads.config.max: thread_pool_saturation
+  executor.active: thread_pool_saturation
+  executor.queued: thread_pool_saturation
+  jvm.gc.pause: gc_pressure
+  jvm.memory.used: gc_pressure
+  jvm.memory.max: gc_pressure
+  hibernate.query.executions: inefficient_query
+  cache.gets: cache_miss
+  cache.puts: cache_miss
+  http.client.requests: downstream_latency
+  jvm.threads.states: lock_contention
+  http.server.requests: payload_serialization
+
+# Allowlist, never blocklist (DESIGN.md section 12). /actuator/env returns every
+# property on the target, including datasource passwords and API keys. Only the
+# keys named here survive into a snapshot, a prompt or a journal. A blocklist
+# fails open on the one key nobody thought of; this fails closed.
+redaction_allowlist:
+  - spring.application.name
+  - server.port
+  - perflab.version
+  - perflab.cache.enabled
+  - perflab.downstream.timeout-ms
+  - spring.datasource.hikari.maximum-pool-size
+  - spring.datasource.hikari.minimum-idle
+  - spring.datasource.hikari.connection-timeout
+  - spring.datasource.hikari.pool-name
+  - server.tomcat.threads.max
+  - server.tomcat.threads.min-spare
+  - spring.task.execution.pool.core-size
+  - spring.task.execution.pool.max-size
+  - spring.task.execution.pool.queue-capacity
+  - spring.jpa.properties.hibernate.jdbc.batch_size
+  - spring.jpa.properties.hibernate.default_batch_fetch_size
+  - spring.jpa.open-in-view
+
+skill_file: spring-boot.SKILL.md
