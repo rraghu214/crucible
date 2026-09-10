@@ -1,0 +1,73 @@
+# ---------------------------------------------------------------------------
+# Model quota, and the shape of a campaign in model calls.
+#
+# WHY THIS IS A FILE AND NOT A NUMBER IN A DOC
+#
+# Google stopped publishing per-model free-tier limits on
+# ai.google.dev/gemini-api/docs/rate-limits -- the page now says limits depend on
+# your usage tier and points at AI Studio. Third-party trackers disagree with
+# each other (10 RPM / 500 RPD vs 15 RPM / 1500 RPD for 2.5 Flash), and Google
+# cut free quotas by 50-80% on 7 December 2025. So the numbers below are
+# UNVERIFIED defaults, deliberately set to the most pessimistic figures found.
+#
+# ACTION REQUIRED: replace them with your own, read from
+#   https://aistudio.google.com/rate-limit
+# and set `verified: true`. crucible.perf.quota refuses to plan a campaign
+# against unverified limits without being asked to -- planning a four-week
+# capstone on a number nobody checked is how week 4 discovers it cannot run the
+# benchmark.
+# ---------------------------------------------------------------------------
+
+verified: false
+checked_on: null          # ISO date you read these off AI Studio
+keys_in_rotation: 3       # AGENTS.md: multiple keys, rotated
+
+limits:
+  # The campaign model. Pinned per campaign -- no cross-provider failover, ever
+  # (DESIGN.md section 3.2), so this is the only quota that matters mid-campaign.
+  gemini-2.5-flash:
+    rpm: 10
+    rpd: 500
+    tpm: 250000
+  gemini-2.5-pro:
+    rpm: 5
+    rpd: 100
+    tpm: 250000
+  gemini-2.5-flash-lite:
+    rpm: 15
+    rpd: 1000
+    tpm: 250000
+
+# AGENTS.md requires 2-3 s between LLM calls in any loop. That is its own
+# ceiling: at 3 s the loop cannot exceed 20 RPM whatever the quota says.
+min_seconds_between_calls: 3.0
+
+# How many model calls one campaign actually costs. Derived from the loop in
+# DESIGN.md sections 6 and 7, not guessed:
+#   - one diagnosis and one proposal per experiment
+#   - one verdict per experiment, after the re-measurement
+#   - the watchdog is arithmetic, and calls a model only when a tripwire trips
+#     ambiguously: roughly twice per long scenario
+#   - one campaign summary at the end
+campaign:
+  # An UPPER CAP, not a target. A campaign that meets the SLA at experiment 7
+  # stops at 7 -- principle 1 says stop when the goal is met and verified, and
+  # burning 13 more experiments to reach a number is the opposite of the point.
+  # This figure exists to answer one planning question: if a campaign DID run to
+  # the cap, would the free tier survive it? Reaching the cap without meeting the
+  # SLA ends the campaign as an honest failure (assertion 7.1), not a draw.
+  max_experiments: 20
+  diagnosis_calls_per_experiment: 1
+  proposal_calls_per_experiment: 1
+  verdict_calls_per_experiment: 1
+  watchdog_calls_per_campaign: 2
+  summary_calls_per_campaign: 1
+  tokens_per_call: 8000
+
+# The replay benchmark. Snapshots are replayed rather than re-run, which is what
+# makes a wide benchmark affordable (DESIGN.md section 7): ~2 s and $0.002 each
+# against ~15 minutes for a live experiment.
+benchmark:
+  snapshots: 300
+  calls_per_snapshot: 1
+  tokens_per_call: 8000
