@@ -20,10 +20,12 @@ checking — not a diff to skim, a specific question: does the reasoning
 match the actual failure mode it's testing for, is it testing behaviour or
 implementation detail, is there an edge case it's missing. Raghu decides
 what's correct; Claude Code doesn't self-approve its own tests.
-`CRUCIBLE_TEST_ASSERTIONS.md` is the existing draft — start from there
-rather than rewriting from scratch.
+`docs/CRUCIBLE_TEST_ASSERTIONS.md` is the existing draft — start from there
+rather than rewriting from scratch. That full path is the only copy; an
+identical second copy under `docs/ref/` existed until week 1 and was deleted,
+because two files with the same name drift apart silently.
 
-`CRUCIBLE_TEST_ASSERTIONS.md` (34 draft assertions across 8 groups) is the
+`docs/CRUCIBLE_TEST_ASSERTIONS.md` (34 draft assertions across 8 groups) is the
 starting point — extend it rather than starting fresh, and keep it current
 as new test areas come up.
 
@@ -34,8 +36,13 @@ as new test areas come up.
   `@DESIGN.md` imports, so this should already be loaded — confirm it, don't
   assume it.)
 - Reference files by path. Never paste file contents into the prompt.
-- `/clear` between phases (e.g. between "implement the collector" and
-  "implement diagnosis") — don't let one phase's context bleed into the next.
+- Start a **new chat window** between phases (e.g. between "implement the
+  collector" and "implement diagnosis") rather than `/clear` — don't let one
+  phase's context bleed into the next. (`/clear` itself doesn't delete
+  anything either — Claude Code keeps the old session resumable via
+  `/resume` — but a new window keeps each phase as its own visible,
+  browsable transcript instead of relying on picking the right one out of a
+  resume list later.)
 - If you're about to propose something that isn't in AGENTS.md or DESIGN.md,
   stop and ask why before writing code.
 - Run `uv run pytest -q` and `uv run ruff check .` before every commit. Both

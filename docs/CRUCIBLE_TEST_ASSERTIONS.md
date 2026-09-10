@@ -97,10 +97,15 @@ that was never gathered.
 ```python
 def test_an_unsampled_gauge_is_null_never_zero():
     """A clean zero and an untested zero must not look identical."""
-    snapshot = build_snapshot(gauge_samples=[])
+    snapshot = build_snapshot({}, gauge_samples={})
 
-    assert snapshot["hikaricp"]["pending_peak"] is None
-    assert snapshot["hikaricp"]["pending_peak"] != 0
+    assert snapshot["hikaricp"]["pending_peak_connections"] is None
+    assert snapshot["hikaricp"]["pending_peak_connections"] != 0
+
+    # And the other direction, or the test above passes trivially by nulling
+    # everything -- which would destroy the distinction it exists to protect.
+    sampled = build_snapshot({}, gauge_samples={"pending": [0, 0, 0]})
+    assert sampled["hikaricp"]["pending_peak_connections"] == 0
 ```
 
 ---
@@ -827,6 +832,198 @@ def test_an_untempted_trap_is_reported_as_a_weak_fixture():
 
     assert report.fixture_warning == "trap never attempted — fixture may be weak"
 ```
+
+---
+
+# GROUP 9 — The target profile and the authority boundary
+
+*Added week 1, alongside `crucible/perf/profile.py`. These cover the profile half
+of Group 2: what the agent may change, and the wall between prose and authority.
+Implemented in `tests/test_perf_profile.py`.*
+
+---
+
+### 9.1 The profile is read from a file, never hardcoded
+
+**What it checks.** `crucible/perf/profile.py` contains no runtime constant — no
+`gc_pressure`, no `hikari`. The shipped `config/profiles/spring-boot.yaml` is what
+the campaign actually loads.
+
+**Why it exists.** AGENTS.md non-negotiable 8, and it is the kind of rule that is
+kept for three weeks and then quietly broken on a Friday. The test greps the module
+source rather than checking behaviour, because behaviour looks identical either way
+until FastAPI arrives and inherits the JVM's cause families.
+
+```python
+def test_no_runtime_constant_is_baked_into_the_package():
+    text = open(crucible.perf.profile.__file__, encoding="utf-8").read()
+    assert "gc_pressure" not in text
+    assert "hikari" not in text.lower()
+```
+
+---
+
+### 9.2 A property named only in SKILL.md is still refused
+
+**What it checks.** `SKILL.md` discusses heap sizing. Proposing `spring.jvm.heap-max`
+is still refused, because only `profile.yaml` grants authority.
+
+**Why it exists.** This is the leak that would be easiest to introduce and hardest
+to notice: rendering the skill into the prompt makes the model fluent about knobs it
+may not turn, and a well-argued proposal for one of them is exactly what a future
+"just add it to the allowed list" commit looks like.
+
+```python
+def test_a_property_named_only_in_the_skill_is_still_refused():
+    assert "heap" in profile.skill_text().lower()
+    assert profile.check_change("spring.jvm.heap-max", "2g") is not None
+```
+
+---
+
+### 9.3 The profile cannot authorise editing itself
+
+**What it checks.** `config/profiles/**` is a protected path, and no allowed
+property contains "profile".
+
+**Why it exists.** An agent that can rewrite its own bounds has no bounds. This is
+the SLA problem wearing a different hat.
+
+---
+
+### 9.4 A non-numeric value is refused rather than coerced
+
+**What it checks.** `check_change(pool_size, "twenty")` refuses. It does not become
+`0`.
+
+**Why it exists.** Silent coercion is how a pool of "twenty" becomes a pool of zero
+and the service stops entirely — a restart failure that looks like a regression and
+gets attributed to the change's *content* rather than to its parsing.
+
+---
+
+# GROUP 10 — Quota arithmetic
+
+*Added week 1, alongside `crucible/perf/quota.py`. Implemented in
+`tests/test_perf_quota.py`.*
+
+---
+
+### 10.1 Planning against unverified limits is refused
+
+**What it checks.** `QuotaConfig.plan()` raises `UnverifiedQuotaError` while
+`config/quota.yaml` says `verified: false`.
+
+**Why it exists.** Google stopped publishing per-model free-tier limits — the docs
+page now points at AI Studio — and the third-party trackers disagree with each other
+(10 RPM / 500 RPD versus 15 RPM / 1500 RPD for 2.5 Flash), because free quotas were
+cut by 50–80% on 7 December 2025. A hardcoded default would put a number nobody
+measured into a four-week plan, and week 4 would be where that surfaced.
+
+This is principle 1 applied to our own planning rather than to the agent's output.
+
+```python
+def test_planning_against_unverified_limits_raises():
+    with pytest.raises(UnverifiedQuotaError):
+        QuotaConfig.load().plan("gemini-2.5-flash")
+```
+
+---
+
+### 10.2 The inter-call delay can bind before the provider's RPM does
+
+**What it checks.** At a 10 s inter-call delay, `effective_rpm` is 6.0 and
+`rpm_bound_by` is `"inter-call delay"`, not the provider's 10 RPM.
+
+**Why it exists.** AGENTS.md requires 2–3 s between calls to stay under RPD/RPM.
+When that delay is the binding constraint, raising the quota changes nothing — worth
+knowing before someone spends a day trying to raise the quota.
+
+---
+
+### 10.3 Key rotation multiplies the daily ceiling but not the rate
+
+**What it checks.** `campaigns_per_day_all_keys == campaigns_per_day × keys`, while
+`effective_rpm` is unchanged by key count.
+
+**Why it exists.** RPD is per key, so rotation genuinely multiplies it. RPM is not
+helped, because the loop is sequential and the delay applies to the loop rather than
+to the key. Conflating the two would make an overnight fixture capture look feasible
+in a quarter of the time it actually needs.
+
+---
+
+# Review decisions — week 1
+
+Raised by Claude Code while implementing, decided by Raghu on 10 September 2026.
+Recorded because the reasoning matters more than the outcome.
+
+**Q1 — gauge fields carry their noun, not `_count`. DECIDED: `pending_peak_connections`.**
+Assertion 1.2 requires a unit suffix on every derived field; 1.4 as drafted read
+`pending_peak`, which has none. Resolved in favour of 1.2, but *not* with `_count`:
+`_count` means a tally ("3186 acquisitions happened"), and a gauge is a level — 43
+waiters at one instant. Calling a level `_count` invites the exact misreading the
+unit rule exists to prevent. So `_count` stays reserved for tallies, and gauge
+levels take the noun of the thing counted: `pending_peak_connections`,
+`active_peak_connections`, `idle_trough_connections`, `pool_max_connections`,
+`threads_live_peak_threads`, `heap_used_peak_bytes`.
+
+`COLLECTOR_VERSION` moved 1.0.0 → 1.1.0 as a direct consequence — renamed fields
+mean every snapshot captured under 1.0.0 has the old keys baked in, and the eval
+runner must refuse them rather than score the model on a snapshot whose
+`pending_peak_count` it can no longer find.
+
+**Q2 — `gauge_samples` is a dict, not a list. DECIDED: dict.** The drafted 1.4
+passed a bare list of readings, which can only carry one gauge. No single gauge
+diagnoses pool exhaustion: `pending` peaked at 43 means nothing on its own, and
+becomes proof only next to `active` pinned at `pool_max`. A list would have made
+the K3 diagnosis unprovable. Assertion 1.4 updated to
+`gauge_samples={"pending": [...]}`.
+
+**Q3 — `MAX` is kept but renamed. DECIDED: `acquire_max_recent_ms`.** `MAX` cannot
+be delta'd across a window: Micrometer's is a rolling ~2-minute maximum that
+*forgets*. A 1800 ms acquire at t=200s in a 120-420s window has aged out by the time
+the window ends, so a field called `max_ms` would read 250 ms and the agent would
+conclude there is no tail problem — the K3 mistake pointing the other way.
+Subtracting is worse: end minus start goes negative.
+
+Dropping it entirely was the alternative, and was rejected because `acquire_max_ms`
+was decisive evidence in K3. Instead every such field is named `*_max_recent_ms`,
+with `max_recent_ms_note` stating the rolling window, so it cannot be read as "worst
+in the window". Sustained causes are unaffected — recent max approximates window max
+when the problem never stops — while **transient** causes, GC pauses especially, are
+exactly where it under-reports, and that is a cause family we ship a fixture for.
+
+The load generator's own `max_ms` on `LoadResult` keeps its name deliberately: locust
+retains every sample and does not decay, so it *is* a true maximum over the run. The
+two are different quantities and must not share a name.
+
+**Q4 — 20 experiments is a CAP, not a target. DECIDED.** No math behind 20; it is
+DESIGN.md §7's "~20" live runs used as a planning worst case, answering one
+question: if a campaign *did* run to the cap, would the free tier survive it? Field
+renamed `experiments` → `max_experiments` so the file says so. A campaign that meets
+its SLA at experiment 7 stops at 7 — principle 1 requires it, and burning 13 more to
+reach a number is the opposite of the point. Reaching the cap *without* meeting the
+SLA ends the campaign as an honest failure (assertion 7.1), never a draw.
+
+**Q5 — one copy of this file. DECIDED: `docs/CRUCIBLE_TEST_ASSERTIONS.md`.** The
+byte-identical copy at `docs/ref/` is deleted, and AGENTS.md now names the survivor
+by full path — naming it without a directory is how two copies appeared in the first
+place.
+
+**Q6 — the second SLA lock is a strict xfail. DECIDED.** AGENTS.md non-negotiable 4
+requires the SLA protected twice: as a protected path *and* as a `Policy` memory kind
+the agent cannot write. Only the path lock exists; the memory lock is week 2.
+
+`test_the_sla_is_also_policy_memory_the_agent_cannot_write` is marked
+`xfail(strict=True)`. While the lock is missing, every run reports an expected
+failure, so the gap is visible instead of buried in a comment. When week 2 builds it,
+the test passes unexpectedly and pytest raises an ERROR — which is the prompt to
+delete the marker. It cannot be forgotten in either direction.
+
+Two locks and not one because a file guard stops working the moment config moves to
+a different path, and nothing notices: the guard still passes, on a path nothing
+writes to any more.
 
 ---
 
