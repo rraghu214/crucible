@@ -36,8 +36,25 @@
         </dependency>
 
         <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
+        <!-- H2 stays the zero-config default so the app runs with no containers.
+             Postgres is used under the `lab` profile (docker-compose), which is
+             what the cloud box runs. Both drivers ship; the URL picks one. -->
+        <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
 
