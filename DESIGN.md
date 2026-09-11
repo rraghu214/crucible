@@ -61,10 +61,40 @@ explicitly permitted. S17Code already carries the guarded coding loop,
 economics, event engine, HITL, telemetry, FAISS memory and the gateway seam —
 rebuilding those would cost a week of four.
 
-**3.2 Model pinned per campaign, no failover.** `glc_v5` supports fallback
-providers on 429/502/503; **this is disabled for Crucible.**
-Cross-provider failover resolves to a different model family mid-campaign,
-which silently invalidates every experiment-to-experiment comparison.
+**3.2 No error-driven failover; budget-driven downgrade is permitted, but
+never silently.** Two different mechanisms can change which model answers, and
+they are treated differently.
+
+**Error-driven cross-provider failover is disabled, always.** `glc_v5` supports
+fallback providers on 429/502/503; Crucible never uses them. Verified in the
+gateway's own source on 11 September 2026: when a request names a provider,
+`candidates()` expands to that provider's own key pool only (`gemini` becomes
+`gemini_1`..`gemini_5`, all the same model), `auto_route` is skipped, and tier
+escalation cannot fire because `tier` stays `None`. Crucible names both a
+provider and a model on every request, so two independent mechanisms hold it in
+place. Failover across the five Gemini keys is key rotation, not model change.
+
+**Budget-driven downgrade is allowed.** The tier ladder is deliberately
+cross-model (`config/tiers.yaml`), and under budget pressure the controller
+walks it down — Gemini to Groq — rather than refusing outright. The free-tier
+constraint (§16) leaves no cheaper rung of the *same* model to fall back to, so
+the alternative to changing model is stopping the campaign, and a campaign that
+completes on a weaker model is worth more than one that halts.
+
+**What that costs, and the control that pays for it.** The reason the original
+rule existed still holds: a campaign whose experiments were diagnosed by
+different models is not internally comparable. Permitting the downgrade
+therefore requires that it can never happen *invisibly*:
+
+- every experiment records the provider and model that actually served it, taken
+  from the gateway's response rather than from what was requested;
+- the report and the scorer flag a campaign whose experiments span models,
+  instead of comparing them as though they were alike.
+
+This is the same trade the rest of the design makes everywhere else: prevention
+where it is cheap, and where it is not, measurement plus disclosure. A result
+that says which model produced it is honest; one that quietly averages two is
+not (principles 1 and 2).
 
 ## 4 · Measurement integrity
 
