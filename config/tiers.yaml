@@ -8,7 +8,7 @@
 # run is under budget pressure, so the order is the only thing that defines what
 # "downgrade" means.
 
-order: [economy, standard, frontier]
+order: [economy, standard]
 default_tier: standard
 
 # ── The ladder is CROSS-MODEL ────────────────────────────────────────────────
@@ -32,6 +32,21 @@ default_tier: standard
 # call (the number admission actually uses) is $0.000564 / $0.002161 / $0.044768
 # — a 79x spread across the ladder, where the same-model ladder managed 5x.
 #
+# NOTE, 11 September 2026. The table above is the 2026-07-30 measurement and is
+# left exactly as measured -- it is a record of what was observed, not a
+# statement about today. Two things have since changed and the `tiers` block
+# below reflects them, not the table:
+#
+#   - gemini moved from gemini-3.1-flash-lite to gemini-3.5-flash-lite, which
+#     glc_v5 prices at 0.20 / 1.20 rather than the 0.25 / 1.50 measured above.
+#   - `github` no longer provides an API, so the frontier rung's provider is
+#     gone. glc_v5 does not load a `github` provider at all, which means a
+#     frontier request currently fails with 400 unknown provider -- and
+#     role_tiers maps `planner` to frontier, so planner calls fail with it.
+#     UNRESOLVED: nothing glc_v5 can currently reach scores above gemini
+#     (quality 0.66), so a three-rung ascending ladder is not expressible
+#     until a direct provider is added (DESIGN.md section 16 allows one).
+
 # Two facts worth keeping, both learned the hard way:
 #
 #   `reasoning: "off"` is not decoration on the cheap rung. gpt-oss-120b thinks
@@ -50,6 +65,31 @@ default_tier: standard
 #   also slow: gemma4:31b took 39.6 s (and 86.4 s under load) for the same
 #   prompt the frontier rung answered in 2.9 s, so the cheapest rung on a price
 #   ladder is not the cheapest rung on a latency ladder.
+
+# THE LADDER IS TWO RUNGS, NOT THREE, as of 12 September 2026.
+#
+# The third rung has no occupant. Every candidate was tried and MEASURED:
+#
+#   github / openai/gpt-4.1   GitHub no longer serves an API; glc_v5 does not
+#                             load the provider, so the rung returned
+#                             400 unknown provider on every call.
+#   cerebras / qwen-3.8-27b   Announced on "Cerebras PayGo" with a per-token
+#                             price; free-tier entitlement unconfirmed, and
+#                             DESIGN.md section 16 constrains us to free tier.
+#   openrouter (free models)  Genuinely $0, but glc_v5 meters openrouter at
+#                             50 requests PER DAY against gemini's 5000. Too
+#                             scarce for a rung the planner would touch.
+#   nvidia / deepseek-v4      MEASURED 12 Sep 2026, 10 consecutive calls:
+#     -flash-0731             1 succeeded (1.01 s), 1 hung 180 s and returned
+#                             502, and that single failure benched the provider
+#                             for 600 s, killing the remaining 8. The model
+#                             itself answers correctly when it answers; the
+#                             endpoint is not dependable enough for a rung.
+#
+# So the ladder is groq -> gemini: both measured, both priced, both reliable,
+# and cost still rises along it. Adding a third rung later is a config edit;
+# pricing rows for the rejected candidates are kept in pricing.yaml so the
+# measurements are not lost.
 
 tiers:
   economy:
@@ -73,32 +113,28 @@ tiers:
   standard:
     request:
       provider: gemini
-      model: gemini-3.1-flash-lite
+      model: gemini-3.5-flash-lite
       reasoning: "off"
       max_tokens: 1024
       temperature: 0
-    price_model: gemini-3.1-flash-lite
+    price_model: gemini-3.5-flash-lite
     projected_input_tokens: 2500
     projected_output_tokens: 800
-
-  frontier:
-    request:
-      provider: github
-      model: openai/gpt-4.1
-      # gpt-4.1 has no thinking channel to switch off, so the dial is left
-      # alone here rather than sent and ignored.
-      max_tokens: 4096
-      temperature: 0
-    price_model: openai/gpt-4.1
-    projected_input_tokens: 6000
-    projected_output_tokens: 2000
 
 # Which tier a graph ROLE asks for. Keys are the runtime's own skill/role names
 # (never task content), so a node "declares the tier it needs" by declaring its
 # role. `default` covers every role not listed.
 role_tiers:
   default: standard
-  planner: frontier
+  # planner moved off frontier on 11 September 2026. Two reasons, both evidence
+  # rather than preference:
+  #   - gemini is the only model on this ladder whose quality has been MEASURED
+  #     here (0.66, vs groq 0.60; the openrouter free rung is unrated). Putting
+  #     the planner on an unmeasured model is a capability claim we cannot make.
+  #   - frontier is metered at 50 requests/day by glc_v5, against gemini's 5000
+  #     (1000 x 5 keys). The planner runs for every task graph, so it is the
+  #     worst possible role to put on the scarcest rung.
+  planner: standard
   memory_recall: economy
   remember_explicit_fact: economy
   web_search: economy
@@ -124,4 +160,4 @@ role_tiers:
   content: standard
   coder_validator: standard
   compose_surface: standard
-  answer_with_evidence: frontier
+  answer_with_evidence: standard

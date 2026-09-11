@@ -26,6 +26,15 @@ models:
     measured_latency_ms: 1236
     measured_reference_usd: 0.00014125
     measured_non_empty: true
+  # LADDER rung 2 (standard) as of 11 September 2026. gemini moved from
+  # 3.1-flash-lite to 3.5-flash-lite; rates read from the running glc_v5's
+  # /v1/pricing rather than guessed. Without this row the model falls through to
+  # `default` (1.00/5.00) -- a 5x overestimate that makes budget admission
+  # refuse affordable calls and trips the downgrade threshold far too early.
+  gemini-3.5-flash-lite:
+    input: 0.20
+    output: 1.20
+    measured_non_empty: true
   gemini-3.1-flash: {input: 0.50, output: 3.00}
   gemini-3.1-pro: {input: 2.00, output: 12.00}
   # Open weight / hosted (the other models this gateway serves today)
@@ -35,6 +44,27 @@ models:
   # 3/3 attempts. glc_v4's routing.yaml benches the provider with that reason.
   # meta/llama-3.1-8b-instruct on the same key answers in 1.37 s.
   deepseek-ai/deepseek-v4-pro: {input: 0.14, output: 0.28}
+  # LADDER rung 3 (frontier) from 11 September 2026.
+  #
+  # MEASURED through glc_v5 on 11 Sep 2026: 38 in / 93 out, 9.41 s, answered the
+  # arithmetic probe correctly. Free on NVIDIA's build platform, so genuinely
+  # 0.00/0.00 -- NOT a placeholder, and deliberately not invented to keep the
+  # cost ladder monotonic. See tiers.yaml for what that costs us.
+  #
+  # DO NOT set `reasoning: "off"` on this model. Measured: the off dial returns
+  # an empty 502 from the provider AND trips a 600-second backoff in glc_v5,
+  # taking nvidia out entirely for ten minutes. It answers correctly with no
+  # reasoning field at all, and returns a non-empty `content` alongside its
+  # `reasoning_content`, so it does NOT need the dial the way gpt-oss-120b does.
+  # It is therefore deliberately NOT annotated `measured_needs_reasoning_off`.
+  #
+  # The date suffix is load-bearing: plain `deepseek-v4-flash` and
+  # `deepseek-v4-pro` both returned HTTP 410 (end of life 2026-08-07).
+  deepseek-ai/deepseek-v4-flash-0731:
+    input: 0.0
+    output: 0.0
+    measured_latency_ms: 9410
+    measured_non_empty: true
   meta/llama-3.1-8b-instruct: {input: 0.0, output: 0.0}
   # LADDER rung 1 (economy). MEASURED: 101 in / 117 out, $0.0001029, 744 ms —
   # and only with reasoning off. Left to itself it spends the whole output
@@ -51,8 +81,31 @@ models:
   # Rate corrected from 0.20/0.80 to the 0.50/0.50 Cerebras actually bills,
   # which is what glc_v4's own pricing table reports for it.
   zai-glm-4.7: {input: 0.50, output: 0.50}
+  # LADDER rung 3 (frontier) from 11 September 2026, replacing openai/gpt-4.1 --
+  # GitHub no longer serves an API, so the old frontier provider is gone.
+  # Rates read off Cerebras's own console (screenshot, 11 Sep 2026), NOT guessed.
+  #
+  # PRICED AS PAID, DELIBERATELY. The console announces this model on "Cerebras
+  # PayGo" and quotes a per-token rate, so we do not assume a free allowance we
+  # have not verified. If it turns out to be free, we merely over-account and the
+  # budget ceiling bites slightly early; if it is billed and we had priced it at
+  # zero, the ceiling would not bite at all. Over-estimating is the safe error.
+  qwen-3.8-27b:
+    input: 0.99
+    output: 1.49
+    price_source_note: "cerebras console, 11 Sep 2026"
+
   # Free tier. MEASURED 47 in / 108 out at 1849 ms with reasoning off.
   nvidia/nemotron-3-super-120b-a12b:free: {input: 0.0, output: 0.0}
+  # LADDER rung 3 (frontier) from 11 September 2026. Genuinely $0/$0 -- confirmed
+  # against openrouter.ai/api/v1/models, not inferred from a console screenshot.
+  #
+  # UNMEASURED on this gateway. It is chosen for CONTEXT (1,048,576 tokens) and
+  # throughput, not for demonstrated answer quality: nothing openrouter offers
+  # free has been benchmarked here, and the one free model glc_v5 has rated
+  # (nemotron-3-super, quality 0.38) scores well BELOW gemini's 0.66. Treat the
+  # rung ordering as provisional until the 3-sentence ladder probe is re-run.
+  thinkingmachines/inkling:free: {input: 0.0, output: 0.0}
   # LADDER rung 3 (frontier), and the most expensive model this gateway reaches.
   # MEASURED: 37 in / 76 out, $0.000682, 2883 ms. Context caps at 8k here.
   openai/gpt-4.1:
