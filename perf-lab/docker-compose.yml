@@ -8,6 +8,13 @@
 # not needed by any week 1 fixture, and starting them now would just be memory
 # the load generator wants.
 #
+# Every port binds to 127.0.0.1 ONLY. On a cloud box with a public IP, a
+# bare "5432:5432" binds all interfaces, and the only thing between an
+# unauthenticated Redis and the internet is a correctly-configured firewall.
+# Oracle needs BOTH its VCN security list and the instance's own iptables set
+# correctly, so relying on that alone is one misconfiguration from exposure.
+# The Spring target reaches these over localhost; nothing else should.
+#
 # Memory limits are set deliberately. The whole architecture is sized to fit an
 # Oracle Always Free 2 OCPU / 12 GB split across two VMs; a container without a
 # limit is a container that makes the box's numbers about itself.
@@ -23,7 +30,7 @@ services:
       # collector's redaction allowlist means it cannot reach a snapshot anyway.
       POSTGRES_PASSWORD: perflab
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U perflab -d perflab"]
       interval: 5s
@@ -39,7 +46,7 @@ services:
     container_name: perflab-redis
     command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "48mb"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -57,7 +64,7 @@ services:
     image: mccutchen/go-httpbin:v2.15.0
     container_name: perflab-httpbin
     ports:
-      - "8081:8080"
+      - "127.0.0.1:8081:8080"
     deploy:
       resources:
         limits:
