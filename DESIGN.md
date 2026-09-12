@@ -425,7 +425,9 @@ httpbin (~64 MB). Crucible and Locust on a second box, ~1 GB. Fits Oracle's
 
 **Week 1 (7–13 Sept) — foundations**: Gemini quota arithmetic; cloud
 provisioning (Oracle first, Hetzner immediately on capacity failure);
-re-run K1 on the cloud box (the 14.3% spread is a MacBook number); PerfLab
+re-run K1 on the cloud box (the 14.3% spread came from the local Windows
+dev machine, with Locust co-located on it and H2 rather than Postgres behind
+the target); PerfLab
 expanded to Postgres/Redis/httpbin, 8 endpoints covering 8 cause families;
 `crucible/perf/collector.py` and `runner.py` with unit conversion and
 mid-run gauge sampling from the first line; `TargetProfile` read from a file

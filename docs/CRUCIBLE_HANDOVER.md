@@ -755,7 +755,10 @@ property nobody would otherwise verify.
   Ten minutes, no infrastructure, removes a demo-day risk.
 - Cloud provisioning, time-boxed. Oracle first, Hetzner immediately on capacity
   failure.
-- **Re-run K1 on the cloud box.** The 14.3% spread is a MacBook number.
+- **Re-run K1 on the cloud box.** The 14.3% spread came from the local
+  Windows dev machine, which was also running the load generator and using
+  H2 in memory rather than Postgres -- so it is not a clean baseline for the
+  cloud number to be compared against.
 - PerfLab expanded: Postgres, Redis, httpbin stub, 8 endpoints covering 8 cause
   families.
 - `crucible/perf/collector.py` and `runner.py`, with unit conversion and mid-run
