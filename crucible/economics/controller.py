@@ -29,6 +29,7 @@ from .budget import BudgetRefused, RunBudget
 from .policy import BudgetPolicy, Decision
 from .pricing import Pricing
 from .tiers import TierLadder
+from .topup import TopUpCoordinator, TopUpRequest
 
 #: Key the controller writes its per-node call records under, in a node result.
 METER_KEY = "metered_calls"
@@ -98,10 +99,14 @@ class BudgetedGateway:
         policy: BudgetPolicy,
         pricing: Pricing,
         ladder: TierLadder,
+        topup: TopUpCoordinator | None = None,
     ) -> None:
         self.transport = transport
         self.budget, self.policy, self.pricing, self.ladder = budget, policy, pricing, ladder
         self.decisions: list[Decision] = []
+        # Defaults to a coordinator whose channel never asks and never blocks, so
+        # an unattended run behaves exactly as it did before top-ups existed.
+        self.topup = topup or TopUpCoordinator()
 
     # --- the seam --------------------------------------------------------- #
 
@@ -121,6 +126,30 @@ class BudgetedGateway:
             input_tokens=input_tokens,
         )
         decision = decide()
+
+        # A downgrade changes the MODEL mid-run, which makes earlier experiments
+        # non-comparable with later ones (DESIGN.md section 3.2). Before accepting
+        # that, offer the operator the chance to avoid it by raising the ceiling.
+        # Asked at most once per run -- pressure stays high once it crosses the
+        # threshold, so asking per call would stall a campaign repeatedly.
+        if decision.action == "downgrade" and not self.topup.already_asked:
+            fallback = decision.tier.name if decision.tier else self.ladder.cheapest.name
+            outcome = self.topup.request(TopUpRequest(
+                run_id=self.budget.run_id or "unattributed",
+                principal=self.budget.principal,
+                current_total=self.budget.total,
+                spent=self.budget.spent,
+                pressure=self.budget.pressure,
+                requested_tier=decision.requested_tier,
+                fallback_tier=fallback,
+                currency=self.budget.currency,
+            ))
+            if outcome.granted and outcome.new_total is not None:
+                self.budget.top_up(
+                    outcome.new_total, responder=outcome.responder, reason=outcome.reason
+                )
+                decision = decide()
+
         if decision.action != "branch":
             return decision
         self.budget.release(site.node_id)

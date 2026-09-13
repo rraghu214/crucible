@@ -87,6 +87,34 @@ class RunBudget:
 
     # --- state ------------------------------------------------------------ #
 
+    def top_up(self, new_total: float, *, responder: str = "operator", reason: str = "") -> float:
+        """Raise the ceiling mid-run, and record that a human did it.
+
+        Only ever raises. Lowering a ceiling mid-run would retroactively refuse
+        calls that were legitimately admitted under the old one, and the spend
+        has already happened -- there is nothing to take back.
+
+        The raise is appended to ``refusals`` (the run's audit list) rather than
+        applied silently, because a campaign that finished inside its budget and
+        one that finished because somebody raised the budget are different
+        results, and a reader of the manifest must be able to tell them apart.
+        """
+        new_total = float(new_total)
+        if new_total <= self.total:
+            raise ValueError(
+                f"top_up only raises: {new_total} is not above the current {self.total}"
+            )
+        previous, self.total = self.total, new_total
+        self.refusals.append({
+            "event": "budget_top_up",
+            "previous_total": previous,
+            "new_total": new_total,
+            "spent_at_top_up": self.spent,
+            "responder": responder,
+            "reason": reason,
+        })
+        return new_total
+
     @property
     def remaining(self) -> float:
         """Unspent allowance."""
@@ -231,6 +259,47 @@ class RunBudget:
             row["output_tokens"] += charge.output_tokens
         return rollup
 
+    def models_used(self) -> list[str]:
+        """Every distinct model that ACTUALLY served a call, in first-seen order.
+
+        Read from the gateway's responses, not from what was requested: a
+        downgrade, a provider-side substitution or a misconfigured tier all show
+        up here and nowhere else.
+        """
+        seen: list[str] = []
+        for charge in self.charges:
+            name = charge.model or charge.tier
+            if name not in seen:
+                seen.append(name)
+        return seen
+
+    def comparability(self) -> dict[str, Any]:
+        """Whether this run's calls are comparable with each other.
+
+        DESIGN.md section 3.2 permits a budget-driven downgrade but requires that
+        it never happen invisibly: experiments diagnosed by different models are
+        not comparable, so a result that spans models has to say so rather than
+        average across them.
+
+        This does not judge the run. It reports a fact and leaves the verdict to
+        the reader -- principle 1 is that nothing is claimed that was not
+        measured, and "these numbers are comparable" is itself a claim.
+        """
+        models = self.models_used()
+        downgrades = [c for c in self.charges if c.decision == "downgrade"]
+        spans = len(models) > 1
+        return {
+            "models_used": models,
+            "spans_multiple_models": spans,
+            "downgraded_calls": len(downgrades),
+            "total_calls": len(self.charges),
+            "warning": (
+                f"this run's calls were served by {len(models)} different models "
+                f"({', '.join(models)}); experiments from different models are not "
+                "directly comparable with one another"
+            ) if spans else "",
+        }
+
     def snapshot(self) -> dict[str, Any]:
         """A JSON-safe view: the number a proof or a burndown widget reads."""
         return {
@@ -244,6 +313,7 @@ class RunBudget:
             "reserve": self.reserve,
             "calls": self.calls,
             "downgrades": sum(1 for c in self.charges if c.decision == "downgrade"),
+            "comparability": self.comparability(),
             "branches": sum(1 for c in self.charges if c.decision == "branch"),
             "refusals": len(self.refusals),
             "reservations": dict(self.reservations),
