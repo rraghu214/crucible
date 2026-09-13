@@ -207,10 +207,27 @@ steal).
 - **Throughput collapse is its own tripwire.** Errors alone are ambiguous;
   errors *and* a 34% throughput fall together mean the service is falling
   over — no longer a latency measurement.
-- **Host contention aborts even when the app looks fine.** CPU steal above
-  5% means a neighbouring tenant is affecting the numbers. Better to declare
-  the measurement invalid than report a p99 that was about someone else's
+- **Host contention aborts even when the app looks fine.** CPU steal means a
+  neighbouring tenant is affecting the numbers. Better to declare the
+  measurement invalid than report a p99 that was about someone else's
   workload — a direct consequence of running on free-tier shared vCPU.
+
+  **The threshold is a per-environment config value, not a constant.** Default
+  **5%**; **10% on Oracle free tier**. Measured on the Oracle Ashburn box on
+  12 September 2026 (`docs/K1_CLOUD_RESULT.md` §4.4): steal is 0–1% at idle and
+  a steady **4–6% under load**. A fixed 5% would therefore have aborted most of
+  a K1 run that passed every stability criterion it was judged against — the
+  tripwire would have rejected a measurement that was demonstrably sound.
+
+  This is the same lesson as the noise threshold it sits beside: a number
+  measured on one machine is a property of that machine. Both are calibrated
+  per environment, and both are recorded with the campaign so a later reader
+  knows which numbers a verdict was judged against.
+
+  **Observed steal is recorded on every manifest whether or not it trips.**
+  A run that stayed under the threshold is not the same claim as a run where
+  nobody looked, and the margin matters: 4% under a 5% limit and 4% under a 10%
+  limit are different levels of confidence in the same number.
 - **On a ceiling probe, the error tripwires are suspended.** A scenario
   declaring `push_beyond: true` / `expect_possible_failure: true` was sent
   to find where things break; aborting on a high error rate discards the

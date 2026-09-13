@@ -157,3 +157,85 @@ wrong, all of which we hit:
    port 22 is accepted above it.
 3. **Sample gauges during the run.** A post-run reading of `pending` is 0 and
    means nothing.
+
+---
+
+## 6 · Addendum — `pool=20`, 13 September 2026
+
+Added because §4.2 found that the `pool=10` "baseline" was already saturating
+its own pool (`active` 10/10, `pending` peak 9). That raised a question the
+original K1 could not answer: **is there a pool size at which this fixture is
+genuinely healthy, or is the single core the real limit?**
+
+The pool-10 numbers above are left exactly as measured. "The original baseline
+was marginal" is itself a finding, and overwriting it would destroy the
+evidence for it.
+
+### Results — `maximum-pool-size=20`
+
+| run_id | p50 ms | p95 ms | p99 ms | rps | pending peak | active peak | acquire mean ms |
+|---|---|---|---|---|---|---|---|
+| pool20-01 | 53 | 55 | 58 | 198.8 | **0** | 18 | 0.01 |
+| pool20-02 | 53 | 55 | 57 | 196.7 | **0** | 16 | 0.00 |
+| pool20-03 | 53 | 55 | 57 | 197.1 | **0** | 17 | 0.00 |
+
+Zero failures. p99 spread `(58-57)/57 = ` **1.75%**, marginally tighter than
+pool-10's 2.08%.
+
+### The three pool sizes side by side
+
+| | pool=2 | pool=10 | pool=20 |
+|---|---|---|---|
+| p99 | 1200 ms | 98 ms | **58 ms** |
+| p50 | 1100 ms | 62 ms | **53 ms** |
+| rps | 38.4 | 188.2 | **198.8** |
+| pending peak | 43 | 9 | **0** |
+| active peak | 2 / 2 | 10 / 10 | **18 / 20** |
+| acquire mean | 1003 ms | 11.28 ms | **0.01 ms** |
+
+### What it means
+
+**The pool was the only constraint, and pool=20 removes it.** `pending` is flat
+zero across all three runs and acquire time collapses from 11.28 ms to 0.01 ms
+— a factor of about 1000. Nothing waits for a connection any more.
+
+**The single core is NOT the limit.** `vmstat` during the runs shows
+`us ~10, sy ~13, id ~72-75` — roughly 25% utilised. The earlier worry that one
+OCPU would cap the target was wrong.
+
+**The system is now bounded by client think time, not by the target.** rps rose
+only 188 -> 198 (5%), far short of the 250+ that removing a real bottleneck
+would produce. With 50 users, `wait_time = between(0.1, 0.3)` and a ~53 ms
+response, each user completes roughly one request per 0.25 s, giving
+`50 / 0.25 = 200 rps`. The measured 198.8 is that ceiling. So at pool=20 the
+load profile, not the service, decides throughput — and the pool-10 figure of
+188 rps was slightly *below* the ceiling precisely because requests were
+queueing for connections.
+
+This matters for how fixtures are read: **at pool=20 this endpoint has no
+bottleneck left to find at 50 users.** Any future experiment wanting headroom
+should use pool=20 as the healthy reference and raise the user count to create
+pressure, rather than expecting pool changes alone to move throughput.
+
+### CPU steal, measured properly this time
+
+The §4.4 figure of 4-6% was read from the correct column; an intermediate awk
+during these runs printed `wa` rather than `st` by mistake. Corrected, the
+loaded samples show steal at **2-4%**, i.e. below last night's 4-6%.
+
+Steal is therefore **not constant** — it varies with whatever else shares the
+host, which is the whole reason `DESIGN.md` §6 now treats the tripwire as a
+per-environment config value (default 5%, 10% on Oracle free tier) and records
+observed steal on every manifest whether or not it trips. A threshold tuned to
+one evening's neighbours would be wrong the next morning.
+
+### Method note
+
+`pool20-01` was run twice. The first attempt is discarded: the target had not
+actually been restarted, so it measured the still-running `pool=2` instance.
+It was caught by `active` peaking at 2 — a pool of 20 cannot cap active
+connections at 2 — and by every figure matching `bottleneck-03` exactly. This
+is the same class of error as `DESIGN.md` §19.6 guards against, and the reason
+`/api/version` must be checked *before* load starts rather than assumed. The
+automation that ran `pool20-02` and `pool20-03` refuses to start unless
+`/api/version` reports `"poolSize":20`.
