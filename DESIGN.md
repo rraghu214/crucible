@@ -131,6 +131,33 @@ kind the agent has no write permission for. A file guard can be bypassed if
 config moves; a memory permission cannot. The same protection covers the load
 profile — fewer users is not a fix, and it destroys comparability too.
 
+**4.8 An unreadable metric is declared, never guessed and never dropped.**
+Every derived field carries its unit, and a test enforces that at authoring time.
+But two different things can go wrong at runtime and they do not get the same
+treatment:
+
+- A field *the collector produces* without a unit is a **code defect**. No human
+  can fix it at run time and asking would be theatre. It fails the suite.
+- A **metric the provider offers that we have no conversion for** is a data
+  condition, and a real one: every new provider and every runtime upgrade brings
+  them. Guessing the unit reintroduces the K3 failure exactly — reading seconds
+  as milliseconds is how a saturated pool looked healthy. Dropping it silently is
+  worse, because the agent then reasons from an incomplete picture it cannot see
+  the edges of.
+
+So an unknown metric is **declared**. It is carried in the snapshot with its raw
+value and an explicit `unit: unknown`, excluded from every derived calculation,
+and listed in `available_evidence` so the agent knows there was something it
+could not read. That is principle 2 — the agent knows what it cannot see —
+applied to the collector rather than to the tracing backend.
+
+**Where an operator is present, ask.** The unit is a one-line answer a human
+almost always knows, and the answer belongs in the `TargetProfile`, not in
+memory: it is part of the runtime's contract, so the next campaign against that
+runtime inherits it. Unattended runs never block on this — they declare and
+continue, because a campaign that halts at 3am over one unreadable gauge is worth
+less than one that finishes and says which gauge it could not read.
+
 **4.5 The verdict uses measured values, never predictions.** The agent
 predicted 140 ms and measured 93 ms after the K3 pool-size fix — conservative
 by ~1.5×. The K1 pool=10 baseline happened to read ~150 ms; had that been
@@ -571,3 +598,61 @@ attribute the result to something else.
 **19.10 One campaign per deploy branch at a time.** Two campaigns pushing to
 the same branch would interleave commits and invalidate both. The experiment
 lock (§7) extends to the deploy branch, not just the workspace.
+
+## 20 · Ceiling discovery
+
+**The question this answers:** "my service meets its SLA at 100 requests a
+minute — what is it actually capable of?" A campaign that only ever proves the
+SLA is met tells an engineer nothing about the margin they are operating on.
+
+This is not speculative. The 13 September pool=20 runs
+(`docs/K1_CLOUD_RESULT.md` §6) found that at 50 users the target has **no
+bottleneck left to find**: `pending` is flat zero, acquire time is 0.01 ms, CPU
+is 25% utilised, and throughput is capped at ~200 rps by the load profile's own
+think time rather than by anything in the service. Raising the pool cannot move
+it. The only way to learn what that service can do is to raise the load.
+
+**20.1 The intent is declared by a human, never inferred.** A ceiling probe
+deliberately drives a service until it breaks, so it is started by an explicit
+operator choice — a flag on the campaign, surfaced in the UI and the CLI — and
+never by the agent concluding on its own that pushing harder would be
+informative.
+
+This is not ceremony. `DESIGN.md` §4.4 says the load profile is **never writable
+by the agent**, because fewer users is not a fix and changing the profile
+destroys comparability. Ceiling discovery *is* a change to the load profile. The
+flag is what makes it legitimate: the operator authorises the escalation and its
+bounds, and the agent escalates only inside them. Without the flag the rule would
+have to be weakened, and §4.4 is enforced twice precisely so that it cannot be.
+
+**20.2 The operator sets the bounds, not just the intent.** Maximum users,
+maximum duration, and the step size. An unbounded "keep going until something
+breaks" on a shared box is how a neighbouring tenant's measurements get ruined
+along with ours.
+
+**20.3 Escalate in steps, and hold each step long enough to measure.** A step
+that is not held past warmup measures JIT, not capacity — the cold-versus-warm
+gap on the Oracle box was ~50%, against a 2.08% noise threshold. Each step is a
+measured run in its own right: same warmup discard, same mid-run gauge sampling.
+
+**20.4 The result is a knee, reported as a pair.** "The last level that met the
+SLA" and "the first level that did not", with both measurements attached. A
+single number would imply a precision the method does not have — the true
+ceiling lies between two tested points, and the step size bounds how tightly.
+
+**20.5 Stop conditions are the watchdog's, plus the SLA.** Error rate,
+throughput collapse, host contention and load-generator health already exist
+(§6). Ceiling discovery adds one: the SLA itself. The probe stops at the first
+step that misses it, having found what it came for.
+
+Note the asymmetry with §6's existing ceiling probe: a scenario declaring
+`push_beyond: true` **suspends** the error tripwires, because aborting on errors
+discards the answer it was sent to find. Ceiling *discovery* does the opposite —
+it stops at the first failure, because that failure is the answer. Both are
+legitimate; they are different questions, and a campaign must say which one it
+is asking.
+
+**20.6 A ceiling result is not a verdict on a change.** It characterises the
+service as it stands. It must never be presented alongside experiment
+comparisons as though it were one, because nothing was changed and nothing was
+verified — the same separation §4.7 draws between diagnosis and outcome.

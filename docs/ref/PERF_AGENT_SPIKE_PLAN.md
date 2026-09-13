@@ -12,12 +12,12 @@ Both must pass to proceed with Route C.
 If K1 fails → measurement environment is broken, fix it or stop.  
 If K3 fails → diagnosis prompt is broken, fix it before orchestrating.
 
-**Working directory:** `C:\Raghu\MyLearnings\EAG_V3\capstone\perf-agent-spike`  
+**Working directory:** `<repo>`  
 Create this directory before starting. All spike work lives here — do not
 put it inside S17Code or S18Code.
 
 **Do not touch:**
-- `C:\Raghu\MyLearnings\EAG_V3\S17-15082026\assignment\S17Code\` (read only for reference)
+- `<s17code>/` (read only for reference)
 - Any existing glc_v5 running on port 8111 (use it as-is, do not reconfigure)
 
 ---
@@ -73,7 +73,7 @@ will later tune. Build it to be simple, deterministic, and fully controllable.
 Create: `perf-lab/` inside the spike directory.
 
 ```bash
-cd C:\Raghu\MyLearnings\EAG_V3\capstone\perf-agent-spike
+cd <repo>
 # If using Spring Initializr CLI:
 curl https://start.spring.io/starter.zip \
   -d dependencies=web,actuator,data-jpa,postgresql,micrometer-prometheus \
@@ -216,7 +216,7 @@ def save_summary(environment, **kwargs):
 **Run parameters for K1 — use EXACTLY these for all three runs:**
 
 ```bash
-# Run from: C:\Raghu\MyLearnings\EAG_V3\capstone\perf-agent-spike\locust\
+# Run from: <repo>\locust\
 
 # BASELINE — pool=10, 3 identical runs
 RUN_ID=baseline-01 locust \

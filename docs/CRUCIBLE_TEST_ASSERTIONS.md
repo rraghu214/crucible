@@ -955,7 +955,7 @@ in a quarter of the time it actually needs.
 
 # Review decisions — week 1
 
-Raised by Claude Code while implementing, decided by Raghu on 10 September 2026.
+Raised by Claude Code while implementing, decided by the operator on 10 September 2026.
 Recorded because the reasoning matters more than the outcome.
 
 **Q1 — gauge fields carry their noun, not `_count`. DECIDED: `pending_peak_connections`.**

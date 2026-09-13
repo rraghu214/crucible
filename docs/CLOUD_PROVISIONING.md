@@ -663,11 +663,11 @@ section 7 onward remains; re-running K1 on the cloud box is the critical
 path for week 2.
 
 Box A (target — PerfLab, Postgres, Redis, httpbin):
-  ssh -i C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-1\ssh-key-2026-09-12.key ubuntu@129.213.121.108
+  ssh -i <path-to>/ssh-key.key ubuntu@129.213.121.108
   Private IP: 10.0.0.79 — repo already cloned, JDK 21 and Docker installed.
 
 Box B (Crucible + Locust):
-  ssh -i C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-1\ssh-key-2026-09-12.key ubuntu@150.136.143.227
+  ssh -i <path-to>/ssh-key.key ubuntu@150.136.143.227
   Private IP: 10.0.0.8 — repo already cloned, git/python3-pip/uv installed.
 
 Start at section 7 on Box A: bring up the docker-compose stack (Postgres,
@@ -690,7 +690,7 @@ Two standing rules for this work:
 
 ---
 
-## 12 · Open decisions for Raghu
+## 12 · Open decisions for the operator
 
 1. **[RESOLVED] Oracle or straight to Hetzner?** Went with Oracle — Ashburn
    provisioned on the first attempt, no capacity lottery encountered. Split

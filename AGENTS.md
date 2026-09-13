@@ -14,11 +14,11 @@ to protect one of them.
 
 ## The rule that overrides everything
 
-**Claude Code drafts test assertions and their reasoning. Raghu reviews
+**Claude Code drafts test assertions and their reasoning. The operator reviews
 before anything is committed.** For each assertion, flag what needs
 checking — not a diff to skim, a specific question: does the reasoning
 match the actual failure mode it's testing for, is it testing behaviour or
-implementation detail, is there an edge case it's missing. Raghu decides
+implementation detail, is there an edge case it's missing. The operator decides
 what's correct; Claude Code doesn't self-approve its own tests.
 `docs/CRUCIBLE_TEST_ASSERTIONS.md` is the existing draft — start from there
 rather than rewriting from scratch. That full path is the only copy; an
@@ -36,6 +36,13 @@ as new test areas come up.
   `@DESIGN.md` imports, so this should already be loaded — confirm it, don't
   assume it.)
 - Reference files by path. Never paste file contents into the prompt.
+- Verify against the file before stating what it contains. A partial `grep`
+  is not a reading — it truncates lists, misses continuation lines, and
+  hides the entry that changes the answer. When a claim rests on what a
+  file says, read the relevant span or parse it, then state it. Three
+  wrong answers were given in one session about `REASONING_MODEL_HINTS`
+  because a truncated grep was retyped from memory; the fourth attempt
+  parsed the source and got it right first time.
 - Start a **new chat window** between phases (e.g. between "implement the
   collector" and "implement diagnosis") rather than `/clear` — don't let one
   phase's context bleed into the next. (`/clear` itself doesn't delete
@@ -75,7 +82,7 @@ why weakening it silently reintroduces that failure.
 
 ## Environment
 
-- Windows primary. `JAVA_HOME=C:\Raghu\Installs\JAVA\jdk-21.0.3`. Use
+- Windows primary. `JAVA_HOME=<jdk-21-home>`. Use
   `./mvnw`, never a bare `mvn`.
 - MacBook 16 GB is the local dev lab for anything needing Unix tooling.
 - `glc_v5` runs on port 8111 — **do not restart it from inside Claude Code.**

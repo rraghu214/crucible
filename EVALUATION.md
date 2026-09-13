@@ -1,7 +1,7 @@
 # EVALUATION.md — Crucible
 
 Claude Code drafts the task definitions, fixtures, and the scoring harness
-below. Raghu reviews before anything is committed — see `AGENTS.md` for what
+below. The operator reviews before anything is committed — see `AGENTS.md` for what
 that review should specifically check.
 
 ## Vocabulary

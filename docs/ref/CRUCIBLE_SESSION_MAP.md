@@ -2,7 +2,7 @@
 
 Which EAG V3 session each part of Crucible comes from.
 
-**Corpus:** every session-notes PDF and transcript under `C:\Raghu\MyLearnings\EAG_V3\S*\`
+**Corpus:** every session-notes PDF and transcript under `<sessions>/`
 — S1 through S19, extracted to text and searched. Complete coverage, with one caveat:
 **S5 has only a single printed lesson page** (~750 chars) on disk, so S5's mapping leans
 on the S6 notes, which describe S5's `agent5.py` monolithic loop in detail.
