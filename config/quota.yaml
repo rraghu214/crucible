@@ -18,6 +18,20 @@
 # benchmark.
 # ---------------------------------------------------------------------------
 
+# WHERE THE LIMITS COME FROM: "gateway" or "declared".
+#
+# "gateway" reads them live from glc_v5's /v1/providers, which is authoritative
+# because it is the thing that enforces them. "declared" uses the `limits:` block
+# below, for a deployment with no gateway to ask.
+#
+# Declared, never auto-detected. A gateway that is merely slow to start would
+# otherwise silently demote the run to the hand-written numbers below -- and
+# those were wrong by 3x the first time they were checked against reality
+# (10 rpm / 500 rpd / 3 keys declared, versus 15 / 1000 / 5 keys actual).
+source: gateway
+gateway_url: http://127.0.0.1:8111
+
+# Only consulted when source is "declared".
 verified: false
 checked_on: null          # ISO date you read these off AI Studio
 keys_in_rotation: 3       # AGENTS.md: multiple keys, rotated

@@ -20,7 +20,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import yaml
 
@@ -82,6 +82,11 @@ class QuotaConfig:
     min_seconds_between_calls: float
     campaign: dict[str, int]
     benchmark: dict[str, int]
+    #: Which source is authoritative: "gateway" or "declared". Declared, never
+    #: sniffed -- a gateway that is merely slow to start must not silently demote
+    #: the run to stale local numbers.
+    source: str = "declared"
+    gateway_url: str = "http://127.0.0.1:8111"
     source_path: Path | None = None
 
     @classmethod
@@ -107,6 +112,8 @@ class QuotaConfig:
             min_seconds_between_calls=float(data.get("min_seconds_between_calls", 3.0)),
             campaign=dict(data.get("campaign") or {}),
             benchmark=dict(data.get("benchmark") or {}),
+            source=str(data.get("source", "declared")),
+            gateway_url=str(data.get("gateway_url", "http://127.0.0.1:8111")),
             source_path=resolved,
         )
 
@@ -226,3 +233,138 @@ __all__ = [
     "fits_in_a_day",
     "format_report",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Where the limits come from
+# ---------------------------------------------------------------------------
+#
+# Two places know the rate limits: the gateway, which enforces them, and
+# config/quota.yaml, which is hand-maintained. Keeping both is not redundancy,
+# it is drift -- and it already bit us. quota.yaml said 10 rpm / 500 rpd across
+# 3 keys; the running gateway reported 15 / 1000 across 5. Every number in the
+# file was wrong, and the campaign arithmetic built on it was wrong with it.
+#
+# So the gateway is authoritative WHERE IT EXISTS. It will not always exist: an
+# enterprise calling a provider directly has no glc_v5, and for them the declared
+# file is the only source there is. Hence a switch.
+#
+# The switch is DECLARED, never sniffed. Auto-detection sounds friendlier and is
+# worse: a gateway that is merely slow to start would silently demote the run to
+# stale local numbers, and nothing would say so. An unreachable declared source
+# is an error, not a cue to guess.
+
+
+class QuotaUnavailableError(RuntimeError):
+    """The declared source of truth could not be reached."""
+
+
+class QuotaSource(Protocol):
+    """Somewhere the per-model rate limits can be read from."""
+
+    name: str
+
+    def limits(self) -> dict[str, ModelLimits]: ...
+
+
+@dataclass
+class DeclaredQuota:
+    """Limits as written in ``config/quota.yaml``.
+
+    For deployments with no gateway to ask. The ``verified`` flag matters most
+    here: this is precisely the case where numbers are copied by hand and go
+    stale, and where nothing else will catch it.
+    """
+
+    config: QuotaConfig
+    name: str = "declared"
+
+    def limits(self) -> dict[str, ModelLimits]:
+        if not self.config.verified:
+            raise UnverifiedQuotaError(
+                f"{self.config.source_path} is marked verified: false. Declared limits "
+                "are only as good as the last time a human checked them; read the real "
+                "values and set verified: true."
+            )
+        return dict(self.config.limits)
+
+
+@dataclass
+class GatewayQuota:
+    """Limits read live from glc_v5's ``/v1/providers``.
+
+    Authoritative because it is the thing that enforces them. Also reports how
+    many keys are actually in rotation, derived by counting the provider
+    instances (``gemini_1``..``gemini_5``) rather than trusting a hand-written
+    count -- the error that made our own campaign arithmetic wrong by 3x.
+    """
+
+    base_url: str = "http://127.0.0.1:8111"
+    timeout_s: float = 8.0
+    name: str = "gateway"
+    _payload: dict[str, Any] | None = None
+
+    def _fetch(self) -> dict[str, Any]:
+        if self._payload is not None:
+            return self._payload
+        import json
+        import urllib.error
+        import urllib.request
+
+        url = f"{self.base_url.rstrip('/')}/v1/providers"
+        try:
+            with urllib.request.urlopen(url, timeout=self.timeout_s) as response:
+                self._payload = json.load(response)
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            raise QuotaUnavailableError(
+                f"the gateway is the declared quota source but {url} could not be read "
+                f"({exc!r}). Refusing rather than falling back to config/quota.yaml, "
+                "which would plan the campaign on numbers nobody checked."
+            ) from exc
+        return self._payload
+
+    def limits(self) -> dict[str, ModelLimits]:
+        payload = self._fetch()
+        raw = payload.get("limits") or {}
+        return {
+            str(name): ModelLimits(
+                name=str(name),
+                rpm=int(spec.get("rpm", 0)),
+                rpd=int(spec.get("rpd", 0)),
+                tpm=int(spec.get("tpm", 0)),
+            )
+            for name, spec in raw.items()
+        }
+
+    def keys_in_rotation(self, base: str) -> int:
+        """How many instances of ``base`` the gateway actually has loaded.
+
+        ``gemini`` becomes ``gemini_1``..``gemini_5``, and each carries its own
+        daily allowance, so this multiplies the campaigns-per-day figure. Counted
+        rather than declared, because the declared count was wrong.
+        """
+        providers = self._fetch().get("providers") or []
+        instances = [p for p in providers if str(p).startswith(f"{base}_")]
+        return len(instances) or (1 if base in providers else 0)
+
+    def cooldown_s(self, provider: str) -> float | None:
+        """The gateway's own inter-call cooldown, if it declares one."""
+        spec = (self._fetch().get("limits") or {}).get(provider) or {}
+        value = spec.get("cooldown")
+        return float(value) if value is not None else None
+
+
+def quota_source(
+    config: QuotaConfig,
+    *,
+    gateway_url: str | None = None,
+) -> QuotaSource:
+    """Build the source ``config`` declares. Never guesses which one to use."""
+    declared = (config.source or "declared").strip().lower()
+    if declared == "gateway":
+        return GatewayQuota(base_url=gateway_url or config.gateway_url)
+    if declared == "declared":
+        return DeclaredQuota(config)
+    raise ValueError(
+        f"quota source {declared!r} is not recognised; expected 'gateway' or 'declared'"
+    )
