@@ -254,6 +254,7 @@ def build_snapshot(
     endpoint_breakdown: dict[str, Any] | None = None,
     baseline_reference: dict[str, Any] | None = None,
     evidence: AvailableEvidence | None = None,
+    metric_keys: dict[str, str] | None = None,
     window: dict[str, Any] | None = None,
     captured_at_epoch_s: float | None = None,
 ) -> dict[str, Any]:
@@ -265,8 +266,16 @@ def build_snapshot(
     """
     raw = metrics or {}
     samples = gauge_samples or {}
-    pool_max_raw = raw.get("hikaricp.connections.max") or {}
-    pool_max = pool_max_raw.get("VALUE")
+    # Metric names come from the TargetProfile's `snapshot_metrics`, never from
+    # this module. A role the runtime has no analogue for is simply absent, and
+    # the field below becomes None -- "we never looked" rather than a zero.
+    keys = dict(metric_keys or {})
+
+    def by_role(role: str) -> dict[str, float] | None:
+        name = keys.get(role)
+        return raw.get(name) if name else None
+
+    pool_max = (by_role("pool_max") or {}).get("VALUE")
 
     evidence = evidence or AvailableEvidence(
         metrics=bool(raw),
@@ -287,17 +296,17 @@ def build_snapshot(
         "window": window or {},
         "load_summary": load_summary or {},
         "hikaricp": build_derived_hikari(
-            raw.get("hikaricp.connections.acquire"),
-            raw.get("hikaricp.connections.creation"),
+            by_role("pool_acquire"),
+            by_role("pool_creation"),
             samples,
             pool_max,
         ),
         "jvm": {
-            **derive_timer_ms(raw.get("jvm.gc.pause"), "gc_pause"),
+            **derive_timer_ms(by_role("gc_pause"), "gc_pause"),
             "heap_used_peak_bytes": peak_during_load(samples.get("heap_used")),
             "threads_live_peak_threads": peak_during_load(samples.get("threads_live")),
         },
-        "http": derive_timer_ms(raw.get("http.server.requests"), "request"),
+        "http": derive_timer_ms(by_role("http_requests"), "request"),
         "endpoint_breakdown": endpoint_breakdown,
         "runtime_config": redact_runtime_config(runtime_config, redaction_allowlist),
         "baseline_reference": baseline_reference or {},

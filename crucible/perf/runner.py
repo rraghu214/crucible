@@ -38,25 +38,16 @@ from typing import Any, Protocol
 
 from .collector import MetricsProvider
 
-#: Gauges worth sampling on a JVM target. Keys are the snapshot's short names;
-#: values are the provider metric names. Anything absent from the target simply
-#: yields no samples, and therefore ``None`` in the snapshot.
-JVM_GAUGES: dict[str, str] = {
-    "pending": "hikaricp.connections.pending",
-    "active": "hikaricp.connections.active",
-    "idle": "hikaricp.connections.idle",
-    "threads_live": "jvm.threads.live",
-    "heap_used": "jvm.memory.used",
-}
-
-#: Timers read once at end of warmup and once at end of measurement, so the
-#: collector can express them as a delta across the measured window.
-WINDOW_TIMERS: tuple[str, ...] = (
-    "hikaricp.connections.acquire",
-    "hikaricp.connections.creation",
-    "jvm.gc.pause",
-    "http.server.requests",
-)
+# NO METRIC NAMES LIVE IN THIS FILE. Which gauges to sample and which timers to
+# bracket are declared by the TargetProfile (`gauges:` and `window_timers:` in
+# profile.yaml), for the same reason cause families are: a metric name is a
+# property of the runtime, not of Crucible. `jvm.memory.used` does not exist on
+# CPython, and a sampler that asked a FastAPI target for JVM meters would get
+# nothing back and record every gauge as "not measured" -- leaving the agent to
+# report, correctly but for a buggy reason, that it never looked.
+#
+# GaugeSampler therefore takes its gauge map as a required argument rather than
+# defaulting to one. A default is how a runtime constant creeps back in.
 
 
 class LoadRunnerError(RuntimeError):
@@ -147,11 +138,17 @@ class GaugeSampler:
     def __init__(
         self,
         provider: MetricsProvider,
-        gauges: dict[str, str] | None = None,
+        gauges: dict[str, str],
         interval_s: float = 1.0,
     ) -> None:
+        if not gauges:
+            raise ValueError(
+                "GaugeSampler needs a gauge map from the TargetProfile "
+                "(profile.yaml `gauges:`). Sampling nothing would silently "
+                "report every gauge as never-measured."
+            )
         self._provider = provider
-        self._gauges = dict(gauges if gauges is not None else JVM_GAUGES)
+        self._gauges = dict(gauges)
         self._interval_s = max(0.05, float(interval_s))
         self._samples: dict[str, list[float]] = {name: [] for name in self._gauges}
         self._stop = threading.Event()
@@ -247,13 +244,22 @@ class LocustRunner:
         metrics_provider: MetricsProvider | None = None,
         locust_binary: str = "locust",
         gauges: dict[str, str] | None = None,
-        window_timers: tuple[str, ...] = WINDOW_TIMERS,
+        window_timers: tuple[str, ...] = (),
+        profile: Any = None,
     ) -> None:
         self.results_dir = Path(results_dir)
         self.metrics_provider = metrics_provider
         self.locust_binary = locust_binary
-        self.gauges = gauges
-        self.window_timers = window_timers
+        # Taken from the profile unless passed explicitly. Never a module constant.
+        self.gauges = dict(gauges) if gauges else (dict(profile.gauges) if profile else {})
+        self.window_timers = tuple(window_timers) if window_timers else (
+            tuple(profile.window_timers) if profile else ())
+        if metrics_provider is not None and not self.gauges:
+            raise ValueError(
+                "LocustRunner has a metrics provider but no gauges to sample. Pass "
+                "profile=<TargetProfile> or gauges=..., or the run would measure "
+                "latency while reporting every gauge as never-measured."
+            )
 
     # -- internals --------------------------------------------------------
 

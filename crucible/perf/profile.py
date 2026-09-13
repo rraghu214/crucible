@@ -22,6 +22,8 @@ from typing import Any
 
 import yaml
 
+from .deploy import DeployTarget
+
 #: ``config/profiles/`` as shipped next to the package.
 DEFAULT_PROFILE_DIR = Path(__file__).resolve().parents[2] / "config" / "profiles"
 
@@ -110,7 +112,11 @@ class TargetProfile:
     protected_paths: tuple[str, ...]
     config_file: str
     restart: RestartContract
+    deploy: Any
     metric_map: dict[str, str]
+    gauges: dict[str, str]
+    window_timers: tuple[str, ...]
+    snapshot_metrics: dict[str, str]
     redaction_allowlist: tuple[str, ...]
     skill_file: str = ""
     source_path: Path | None = None
@@ -169,7 +175,11 @@ class TargetProfile:
             protected_paths=tuple(str(p) for p in (data.get("protected_paths") or [])),
             config_file=str(data.get("config_file", "")),
             restart=restart,
+            deploy=DeployTarget.from_mapping(data.get("deploy")),
             metric_map=dict(data.get("metric_map") or {}),
+            gauges={str(k): str(v) for k, v in (data.get("gauges") or {}).items()},
+            window_timers=tuple(str(t) for t in (data.get("window_timers") or [])),
+            snapshot_metrics={str(k): str(v) for k, v in (data.get("snapshot_metrics") or {}).items()},
             redaction_allowlist=tuple(str(k) for k in (data.get("redaction_allowlist") or [])),
             skill_file=str(data.get("skill_file", "")),
             source_path=source_path,

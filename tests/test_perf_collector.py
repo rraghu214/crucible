@@ -1,6 +1,6 @@
 """Collector assertions — GROUP 1 of docs/CRUCIBLE_TEST_ASSERTIONS.md.
 
-DRAFTED FOR REVIEW. Per AGENTS.md, Raghu decides what is correct here; these are
+DRAFTED FOR REVIEW. Per AGENTS.md, the operator decides what is correct here; these are
 not self-approved. Three specific questions are raised in the assertions doc under
 "Open questions for review" — field naming (1.2 vs 1.4), the build_snapshot
 signature, and whether MAX should be carried at all.
@@ -22,6 +22,13 @@ from crucible.perf.collector import (
     redact_runtime_config,
     seconds_to_ms,
 )
+from crucible.perf.profile import TargetProfile
+
+#: Metric names come from the shipped profile, never from this test -- the same
+#: rule the package is held to. Passing them also keeps the snapshot tests
+#: honest: with no metric_keys, build_snapshot looks nothing up and assertions
+#: about "no raw tuple survives" would pass vacuously.
+METRIC_KEYS = TargetProfile.named("spring-boot").snapshot_metrics
 
 #: The real K3 attempt-1 numbers. TOTAL_TIME 3499.07 s over 3186 acquisitions is
 #: 1098 ms mean; MAX 2.4056 s is 2406 ms. The model read that MAX as 2.4 ms.
@@ -45,7 +52,14 @@ class TestUnitConversion:
 
     def test_no_raw_micrometer_tuple_survives_into_the_snapshot(self):
         """AGENTS.md non-negotiable 1: the model never sees COUNT/TOTAL_TIME/MAX."""
-        snapshot = build_snapshot({"hikaricp.connections.acquire": K3_ACQUIRE_RAW})
+        snapshot = build_snapshot(
+            {"hikaricp.connections.acquire": K3_ACQUIRE_RAW}, metric_keys=METRIC_KEYS
+        )
+
+        # Guard against a hollow pass: if the metric were not read at all, the
+        # snapshot would contain no raw tuple for the trivial reason that it
+        # contains nothing. Prove the conversion actually happened first.
+        assert snapshot["hikaricp"]["acquire_mean_ms"] == pytest.approx(1098, rel=0.01)
 
         rendered = repr(snapshot)
         assert "TOTAL_TIME" not in rendered
@@ -141,7 +155,9 @@ class TestCollectorVersion:
     """1.6 — replayed snapshots are only valid for the collector that produced them."""
 
     def test_snapshot_carries_the_collector_version_that_built_it(self):
-        snapshot = build_snapshot({"hikaricp.connections.acquire": K3_ACQUIRE_RAW})
+        snapshot = build_snapshot(
+            {"hikaricp.connections.acquire": K3_ACQUIRE_RAW}, metric_keys=METRIC_KEYS
+        )
 
         assert snapshot["collector_version"] == COLLECTOR_VERSION
 

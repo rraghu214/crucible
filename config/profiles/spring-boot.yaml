@@ -91,6 +91,34 @@ protected_paths:
   - tests/**
   - docs/CRUCIBLE_TEST_ASSERTIONS.md
 
+# How an approved change reaches the target box (DESIGN.md section 19).
+#
+# THE AGENT NEVER WRITES THIS COMMAND. It decides *whether* to deploy; remote and
+# branch come from here, and this file is a protected path. That separation is
+# the whole safety argument: pushing to a sandbox branch on pre-prod is
+# reversible, but a model composing `HEAD:main` or `--force` is not.
+#
+# mode: "pipeline" -- push triggers CI, deploy is autonomous
+#       "manual"   -- campaign blocks with the instructions below (section 11)
+# Declared, never guessed: an agent that assumed "pipeline" would silently skip a
+# deploy that never happened, and then measure the old build.
+deploy:
+  mode: manual
+  remote: perftest
+  branch: perftest_sandbox
+  instructions: |
+    No pipeline is wired yet. To deploy by hand: check out the commit on Box A,
+    rebuild with ./mvnw -B package, restart the JVM with the profile's lab
+    settings, and wait for /api/version to report the new commit. The campaign
+    resumes once it does, and the manifest records that a human intervened.
+  # Section 19.6: no measurement may begin until the target proves it is running
+  # the new commit. /api/version already reports app, version and poolSize; it
+  # needs a `commit` field before mode can move to "pipeline".
+  version_url: http://10.0.0.79:8080/api/version
+  version_field: commit
+  verify_timeout_s: 300
+  poll_interval_s: 5
+
 restart:
   command: ["./mvnw", "spring-boot:run"]
   manual: false
@@ -102,6 +130,42 @@ restart:
   health_url: http://localhost:8080/actuator/health
   health_timeout_s: 120
   settle_s: 5
+
+# Metric names the COLLECTOR looks up when assembling a snapshot, keyed by the
+# role each plays. The role names are generic; the metric names are this
+# runtime's. A profile whose runtime has no analogue simply omits the role, and
+# the snapshot then reports that field as null -- "we never looked" -- which is
+# the honest answer rather than a zero.
+snapshot_metrics:
+  pool_acquire: hikaricp.connections.acquire
+  pool_creation: hikaricp.connections.creation
+  pool_max: hikaricp.connections.max
+  gc_pause: jvm.gc.pause
+  http_requests: http.server.requests
+
+# Gauges the load runner samples once a second DURING a run. Keys are the short
+# names the snapshot uses; values are this runtime's provider metric names.
+#
+# These live here and not in runner.py for the same reason cause_families do: a
+# gauge name is a property of the runtime, not of Crucible. `jvm.memory.used`
+# does not exist on CPython, and a sampler asking a FastAPI target for JVM
+# meters would get nothing back and record every gauge as "not measured" -- the
+# agent would then correctly say it never looked, for a reason that was a bug.
+gauges:
+  pending: hikaricp.connections.pending
+  active: hikaricp.connections.active
+  idle: hikaricp.connections.idle
+  threads_live: jvm.threads.live
+  heap_used: jvm.memory.used
+
+# Cumulative timers read once at end of warmup and once at end of measurement,
+# so the collector can express each as a delta across the measured window rather
+# than a lifetime average.
+window_timers:
+  - hikaricp.connections.acquire
+  - hikaricp.connections.creation
+  - jvm.gc.pause
+  - http.server.requests
 
 # Provider metric name -> the cause family it speaks to. The collector uses the
 # names; this mapping is what lets the agent say which evidence it actually has.

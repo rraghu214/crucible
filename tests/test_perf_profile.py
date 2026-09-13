@@ -10,6 +10,8 @@ double-enforcement rule (AGENTS.md non-negotiable 4) is only half-tested until
 both exist, which is itself worth reviewing.
 """
 
+import pathlib
+
 import pytest
 
 from crucible.perf.profile import DEFAULT_PROFILE_DIR, Bounds, TargetProfile
@@ -39,13 +41,31 @@ class TestProfileIsReadFromAFile:
 
         If cause families were a module constant, adding FastAPI would mean the
         agent proposing `gc` on CPython, where the analogue is gil_contention.
-        """
-        import crucible.perf.profile as module
 
-        source = (module.__file__ or "")
-        text = open(source, encoding="utf-8").read()
-        assert "gc_pressure" not in text
-        assert "hikari" not in text.lower()
+        WIDENED 13 Sep 2026. This previously inspected profile.py alone, and
+        therefore passed for weeks while runner.py held JVM_GAUGES and
+        WINDOW_TIMERS one file over -- a real breach of the rule, invisible to
+        the test meant to enforce it. A rule policed in one file is not policed.
+        """
+        import crucible.perf as package
+
+        pkg_dir = pathlib.Path(package.__file__).parent
+        needles = ("hikaricp.", "jvm.", "gc_pressure")
+        offenders = []
+        for source in sorted(pkg_dir.rglob("*.py")):
+            for line_no, line in enumerate(source.read_text(encoding="utf-8").splitlines(), 1):
+                stripped = line.strip()
+                # A comment may name a metric to explain WHY it must not be
+                # hardcoded. Only a quoted string is an actual runtime constant.
+                if stripped.startswith("#"):
+                    continue
+                quoted = '"' in line or "'" in line
+                if quoted and any(n in line for n in needles):
+                    offenders.append(f"{source.relative_to(pkg_dir)}:{line_no}: {stripped[:70]}")
+        assert not offenders, (
+            "runtime-specific names must come from the TargetProfile, not be "
+            "hardcoded in the package. Offenders:\n  " + "\n  ".join(offenders)
+        )
 
     def test_a_missing_profile_fails_loudly(self):
         with pytest.raises(FileNotFoundError):
