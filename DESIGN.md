@@ -518,6 +518,32 @@ capstone period) or Oracle Always Free, both chosen to keep everything on
 free or near-free tiers per §16 — the only ongoing spend in the whole
 architecture is that one box.
 
+**The model gateway is hosted, and on neither box.** `glc_v5` runs at
+https://glc-v5-rraghu214.onrender.com rather than on a developer's machine or on
+Box A/Box B. Three reasons, in order of how much they cost to learn:
+
+- A gateway on a laptop makes every campaign depend on that laptop staying
+  awake, online, and tunnelled. This is not theoretical: on 21 September 2026 an
+  end-to-end run measured its baseline, then the reverse SSH tunnel dropped and
+  the campaign refused to continue — correctly, since a gateway that is down and
+  a model that declined are different facts, but a run was lost.
+- §16 puts fixture capture in week 3 as an **overnight run**. An overnight run
+  cannot have a laptop in its dependency chain.
+- Not Box A, which is the target and must share its CPU with nothing (§1). Not
+  Box B either, if it can be avoided: Box B runs the load generator, and a model
+  call during a scenario would contend with it on a single OCPU.
+
+Crucible's *code* default stays `127.0.0.1:8111`. A tool should not ship pointing
+at somebody else's gateway; `GLC_BASE_URL` is deployment configuration.
+
+Two consequences of the free tier are accepted rather than solved. The instance
+spins down when idle, so the first call of a campaign pays a cold start — charged
+to wall clock (§7), never to a measured window. And its filesystem is ephemeral,
+so the gateway's own cost history does not survive a redeploy. Nothing depends on
+that: Crucible prices each call from the usage returned **in the response** and
+records it on the manifest, and §4.6 already requires the scorer to read
+manifests from disk rather than query a service.
+
 ## 19 · Deploy and the push boundary
 
 Crucible's sandbox is not where performance is measured. The agent edits

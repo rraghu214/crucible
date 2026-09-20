@@ -49,3 +49,21 @@ work. Fix only when touching the file for another reason.
   deploy pipeline having done what it said. Accepted deliberately on
   21 September 2026, because refusing to run would exclude a large class of real
   applications; what Crucible refuses is to present the result as verified.
+
+- **The model gateway is public and unauthenticated.** glc_v5 is hosted at
+  https://glc-v5-rraghu214.onrender.com and `/v1/chat` accepts requests without a
+  token; Crucible sends none (`crucible/gateway.py` attaches a bearer token only
+  to channel calls). Anyone who learns the URL can spend the Gemini free-tier
+  quota the whole campaign budget is calculated against (`config/quota.yaml`),
+  and the OpenAPI spec is public, which lists `/v1/control/kill` among the
+  routes.
+
+  **Accepted deliberately by the operator on 21 September 2026**, on the grounds
+  that the blast radius is free-tier quota rather than money and that adding auth
+  is scope the capstone does not have room for. Recorded rather than argued: the
+  decision is reasonable, and a reader six months from now should be able to see
+  that it was a decision and not an oversight.
+
+  Cheapest fix when it is wanted: a shared bearer token in Render's env, checked
+  in glc_v5's request path, and one header added to `GatewayClient._payload`'s
+  caller. Perhaps an hour, most of it in glc_v5 rather than here.
