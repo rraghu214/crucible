@@ -1,6 +1,6 @@
 """Budget top-up assertions — new group, 13 September 2026.
 
-DRAFTED FOR REVIEW, not self-approved.
+REVIEWED AND APPROVED by the operator (week 1; re-confirmed 20 September 2026).
 
 The behaviour under test: when spend pressure would force a downgrade to a
 cheaper model, offer the operator a bounded window to raise the ceiling instead.
@@ -168,13 +168,13 @@ class TestTheBudgetItself:
         because somebody raised the budget are different results."""
         budget = RunBudget(total=1.0)
         budget.spent = 0.8
-        budget.top_up(5.0, responder="raghu", reason="approved in review")
+        budget.top_up(5.0, responder="operator", reason="approved in review")
 
         assert budget.total == 5.0
         entry = next(r for r in budget.refusals if r.get("event") == "budget_top_up")
         assert entry["previous_total"] == 1.0
         assert entry["spent_at_top_up"] == 0.8
-        assert entry["responder"] == "raghu"
+        assert entry["responder"] == "operator"
 
 
 class TestTheSeamInTheController:
@@ -235,10 +235,10 @@ def test_the_request_summary_is_actionable_without_reading_code():
 
 
 def test_outcome_serialises_for_the_manifest():
-    outcome = TopUpOutcome(state="granted", new_total=5.0, responder="raghu", waited_s=1.2)
+    outcome = TopUpOutcome(state="granted", new_total=5.0, responder="operator", waited_s=1.2)
     d = outcome.as_dict()
 
-    assert d["granted"] is True and d["new_total"] == 5.0 and d["responder"] == "raghu"
+    assert d["granted"] is True and d["new_total"] == 5.0 and d["responder"] == "operator"
 
 
 class TestComparabilityDisclosure:

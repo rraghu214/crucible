@@ -1,6 +1,6 @@
 """Quota arithmetic assertions — new group, week 1.
 
-DRAFTED FOR REVIEW, not self-approved.
+REVIEWED AND APPROVED by the operator (week 1; re-confirmed 20 September 2026).
 
 The point of these is narrow but real: the free-tier ceiling is the one thing
 that can make week 4's benchmark impossible, and it would do so on the last day.

@@ -22,6 +22,7 @@ from typing import Any
 
 import yaml
 
+from ..core.memory.models import MemoryKind
 from .deploy import DeployTarget
 
 #: ``config/profiles/`` as shipped next to the package.
@@ -117,8 +118,24 @@ class TargetProfile:
     gauges: dict[str, str]
     window_timers: tuple[str, ...]
     snapshot_metrics: dict[str, str]
+    #: Logical metric name -> how this runtime publishes it under Prometheus.
+    #: Declared rather than derived: Micrometer's Prometheus registry appends
+    #: each meter's base unit to its name, so a derived name is right until the
+    #: first meter whose unit differs -- and a wrong series name returns no data,
+    #: which the collector honestly records as "never measured". The agent would
+    #: then be told it has no evidence about a meter Prometheus is scraping fine.
+    promql: dict[str, Any]
     redaction_allowlist: tuple[str, ...]
     skill_file: str = ""
+    #: Which memory kind holds this profile's policy (the SLA, the load profile,
+    #: the budget ceiling). ``AGENTS.md`` non-negotiable 4 requires the SLA to be
+    #: locked TWICE -- once as a protected path above, and once as a memory kind
+    #: the agent has no write permission for. This field is the second lock's
+    #: declaration; :mod:`crucible.perf.policy` is what enforces it. A file guard
+    #: stops working the moment config moves to a different path and nothing
+    #: notices, because the guard still passes on a path nothing writes to any
+    #: more. A memory permission cannot be sidestepped that way.
+    policy_memory_kind: MemoryKind = MemoryKind.POLICY
     source_path: Path | None = None
 
     # -- loading ----------------------------------------------------------
@@ -180,8 +197,14 @@ class TargetProfile:
             gauges={str(k): str(v) for k, v in (data.get("gauges") or {}).items()},
             window_timers=tuple(str(t) for t in (data.get("window_timers") or [])),
             snapshot_metrics={str(k): str(v) for k, v in (data.get("snapshot_metrics") or {}).items()},
+            promql=dict(data.get("promql") or {}),
             redaction_allowlist=tuple(str(k) for k in (data.get("redaction_allowlist") or [])),
             skill_file=str(data.get("skill_file", "")),
+            # Not read from the file. A profile that could nominate its own policy
+            # kind could nominate one the agent is allowed to write, which would
+            # unlock the goalpost from inside the very file the first lock
+            # protects. The kind is fixed by the code; the profile does not vote.
+            policy_memory_kind=MemoryKind.POLICY,
             source_path=source_path,
         )
 

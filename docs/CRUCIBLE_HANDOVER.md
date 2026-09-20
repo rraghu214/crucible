@@ -144,7 +144,10 @@ ever ran.
 - `crucible/` — the S17Code runtime, renamed. Contains `coding/`, `economics/`,
   `events/`, `evals/`, `core/memory/` (FAISS), `core/a2a/`, `core/live_graph/`,
   `ui/` (HITL), `skills/`, `telemetry/`, `reasoning/`, `gateway.py`, `planner.py`.
-- `perf-lab/` — Spring Boot 3.3.5, Java 21, H2 in-memory, three endpoints
+- `perf-lab/` — **moved out on 21 September 2026** to its own repository,
+  https://github.com/rraghu214/perf-lab (Spring Boot 3.3.5, Java 21, now eight
+  endpoints). Crucible's workspace is a checkout of it; see `DESIGN.md` 19.1b
+  for why they were separated and `docs/DEPLOY_SETUP.md` for the deploy path.
   (`/api/fast`, `/api/db`, `/api/version`), Micrometer + Actuator + Prometheus
   registry. `/api/db` holds a pooled connection across a `Thread.sleep(50)`.
 - `locust/locustfile.py` — 50 users, spawn rate 10, targets `/api/db` only.

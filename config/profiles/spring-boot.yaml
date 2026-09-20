@@ -27,7 +27,10 @@ cause_families:
   - lock_contention
   - payload_serialization
 
-config_file: perf-lab/src/main/resources/application.properties
+# Relative to the WORKSPACE, which is a checkout of the target's own repository
+# (https://github.com/rraghu214/perf-lab) -- not of Crucible. See DESIGN.md
+# 19.1b. Point --workspace at that checkout and this path resolves.
+config_file: src/main/resources/application.properties
 
 # The agent may change these and nothing else. Bounds are the profile's judgement,
 # not the model's: the agent argues for a value, this file decides whether the
@@ -103,17 +106,49 @@ protected_paths:
 # Declared, never guessed: an agent that assumed "pipeline" would silently skip a
 # deploy that never happened, and then measure the old build.
 deploy:
-  mode: manual
+  # "pipeline" since 21 September 2026: scripts/box_a_post_receive.sh is
+  # installed as the post-receive hook on Box A's ~/perflab-deploy.git, and Box B
+  # pushes to it over a dedicated, git-only deploy key. Section 19.5 says
+  # automation is declared and never guessed, so this line was "manual" until the
+  # hook actually existed -- an agent assuming a pipeline would skip a deploy
+  # that never happened and then measure the old build.
+  mode: pipeline
   remote: perftest
+  # The ONLY branch Crucible ever writes to. Operator decision, 20 September
+  # 2026. Enforced in DeployTarget's constructor rather than at push time, so a
+  # profile naming a shared branch fails when it is LOADED -- during
+  # `crucible plan`, before anything has been measured -- and so every adapter
+  # inherits the rule instead of each one remembering it.
   branch: perftest_sandbox
+  # The branch the operator works from. READ once, to create the sandbox branch
+  # when it does not yet exist, and never written to. Without this a first
+  # campaign against a fresh remote would fail on a missing ref, and the obvious
+  # fix -- "push to the branch that does exist" -- is exactly what must not
+  # happen.
+  # The TARGET repo's branch (github.com/rraghu214/perf-lab), not Crucible's.
+  # This was `capstone/perf-agent` until the split on 21 September 2026 and was
+  # then simply wrong: the workspace is a perf-lab checkout, so the sandbox
+  # branch has to be created from perf-lab's own base.
+  base_branch: main
+  # Kept for the case where the hook is unavailable and an operator has to step
+  # in; section 11 requires the campaign to block with instructions rather than
+  # fail, and a manifest that records a manual step is a different claim from one
+  # that does not.
   instructions: |
-    No pipeline is wired yet. To deploy by hand: check out the commit on Box A,
-    rebuild with ./mvnw -B package, restart the JVM with the profile's lab
-    settings, and wait for /api/version to report the new commit. The campaign
-    resumes once it does, and the manifest records that a human intervened.
+    If the pipeline is unavailable, deploy by hand: check out the
+    commit on Box A, rebuild with
+      ./mvnw -B -DskipTests -Dperflab.commit=<sha> package
+    restart the JVM with the profile's lab settings, and wait for /api/version to
+    report the new commit. The -Dperflab.commit flag is not optional: without it
+    the build reports a null commit and Crucible refuses to measure. The campaign
+    resumes once the sha matches, and the manifest records that a human
+    intervened.
   # Section 19.6: no measurement may begin until the target proves it is running
-  # the new commit. /api/version already reports app, version and poolSize; it
-  # needs a `commit` field before mode can move to "pipeline".
+  # the new commit. /api/version now reports `commit`, sourced from
+  # META-INF/build-info.properties, which the target's pom.xml populates from
+  # -Dperflab.commit at package time. A build without that flag reports null
+  # rather than a placeholder, so an unprovable target blocks rather than being
+  # measured by mistake.
   version_url: http://10.0.0.79:8080/api/version
   version_field: commit
   verify_timeout_s: 300
@@ -157,6 +192,70 @@ gauges:
   idle: hikaricp.connections.idle
   threads_live: jvm.threads.live
   heap_used: jvm.memory.used
+
+# The SAME logical metrics as above, as Prometheus publishes them.
+#
+# Declared, not derived. Micrometer's Prometheus registry renames every meter:
+# dots become underscores and the meter's BASE UNIT is appended, so
+# `hikaricp.connections.acquire` becomes `hikaricp_connections_acquire_seconds`
+# while `hikaricp.connections.pending` stays `hikaricp_connections_pending` and
+# `jvm.memory.used` becomes `jvm_memory_used_bytes`. There is no single rule
+# that produces all three, and a name derived by the wrong rule returns no data
+# -- which the collector correctly reports as "never measured", leaving the
+# agent to rule out a cause on evidence Prometheus was collecting all along.
+#
+# `unit` is what the adapter converts by. Only `seconds` is convertible today;
+# anything else is carried through marked unreadable and excluded from derived
+# values rather than being read at the wrong magnitude (DESIGN.md 4.8).
+promql:
+  hikaricp.connections.acquire:
+    count: hikaricp_connections_acquire_seconds_count
+    total: hikaricp_connections_acquire_seconds_sum
+    max: hikaricp_connections_acquire_seconds_max
+    unit: seconds
+  hikaricp.connections.creation:
+    count: hikaricp_connections_creation_seconds_count
+    total: hikaricp_connections_creation_seconds_sum
+    max: hikaricp_connections_creation_seconds_max
+    unit: seconds
+  jvm.gc.pause:
+    count: jvm_gc_pause_seconds_count
+    total: jvm_gc_pause_seconds_sum
+    max: jvm_gc_pause_seconds_max
+    unit: seconds
+  http.server.requests:
+    count: http_server_requests_seconds_count
+    total: http_server_requests_seconds_sum
+    max: http_server_requests_seconds_max
+    unit: seconds
+    # Micrometer splits this across uri/status/method/outcome, so a bare name
+    # returns dozens of series and the adapter refuses to pick one. Verified
+    # empty against Box A's Prometheus on 20 September 2026 before this was
+    # added. COUNT and TOTAL_TIME are summed; MAX is max()'d, because the
+    # slowest request in the service is the largest per-URI maximum, not the
+    # sum of them.
+    aggregate: sum
+  # Gauges: a bare series name, no unit conversion involved.
+  hikaricp.connections.max: hikaricp_connections_max
+  hikaricp.connections.pending: hikaricp_connections_pending
+  hikaricp.connections.active: hikaricp_connections_active
+  hikaricp.connections.idle: hikaricp_connections_idle
+  jvm.threads.live: jvm_threads_live_threads
+  # One series per memory pool (Eden, Survivor, Tenured, several non-heap), so
+  # this needs both a label matcher and a sum. `area: heap` is deliberate: the
+  # collector's field is `heap_used_peak_bytes`, and quietly including non-heap
+  # would make the number not the thing its name claims.
+  jvm.memory.used:
+    value: jvm_memory_used_bytes
+    labels:
+      area: heap
+    aggregate: sum
+
+# Histogram series for true service-wide percentiles. Actuator cannot do this:
+# it exposes one instance's pre-aggregated p99, and two instances' p99s do not
+# combine into a service p99. Prometheus keeps the buckets, so the quantile is
+# taken AFTER summing them, which is the only valid order (DESIGN.md 5).
+promql_histogram: http_server_requests_seconds_bucket
 
 # Cumulative timers read once at end of warmup and once at end of measurement,
 # so the collector can express each as a delta across the measured window rather

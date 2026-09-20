@@ -57,6 +57,15 @@ as new test areas come up.
 - One bug, one PR. Adjacent findings get their own PR, not a bundle.
 - `capstone/perf-agent` is the working branch. `main` stays the clean
   S17Code baseline — never commit capstone work to it.
+- **The target is a separate repository**: https://github.com/rraghu214/perf-lab.
+  It lived at `perf-lab/` inside this repo until 21 September 2026. Crucible's
+  workspace is a checkout of the *target's* repo, never of this one, and
+  `profile.yaml`'s `config_file` is relative to that workspace. Changes to the
+  target go in that repo, not here. See `DESIGN.md` §19.1b.
+- Crucible writes to **one** branch on the target, `perftest_sandbox`, created
+  from the target's own base branch and never onto it. Enforced in
+  `DeployTarget`'s constructor, so every deployer inherits it (`DESIGN.md`
+  §19.1a).
 
 ## Non-negotiables for any code you write
 

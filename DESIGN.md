@@ -131,6 +131,24 @@ kind the agent has no write permission for. A file guard can be bypassed if
 config moves; a memory permission cannot. The same protection covers the load
 profile — fewer users is not a fix, and it destroys comparability too.
 
+**4.5 The verdict uses measured values, never predictions.** The agent
+predicted 140 ms and measured 93 ms after the K3 pool-size fix — conservative
+by ~1.5×. The K1 pool=10 baseline happened to read ~150 ms; had that been
+used as the "after" figure instead of a fresh measurement, the prediction
+would have looked near-perfect by coincidence. **Verification always re-runs
+the actual proposed value, never an adjacent one.** The agent's prediction is
+a tracked signal, not a decision input.
+
+**4.6 The scorer is a separate process that calls no model.** Reads manifests
+from disk. Changing scoring weights must never require re-running an
+experiment.
+
+**4.7 Diagnosis is scored separately from outcome.** The `LUCKY` quadrant —
+diagnosis wrong, fix worked anyway — is invisible to outcome-only scoring. An
+agent that raises the pool size because it misread a GC signal, on a fixture
+where the pool also happened to be tight, records a success and will fail the
+next fixture that looks similar but isn't.
+
 **4.8 An unreadable metric is declared, never guessed and never dropped.**
 Every derived field carries its unit, and a test enforces that at authoring time.
 But two different things can go wrong at runtime and they do not get the same
@@ -157,24 +175,6 @@ memory: it is part of the runtime's contract, so the next campaign against that
 runtime inherits it. Unattended runs never block on this — they declare and
 continue, because a campaign that halts at 3am over one unreadable gauge is worth
 less than one that finishes and says which gauge it could not read.
-
-**4.5 The verdict uses measured values, never predictions.** The agent
-predicted 140 ms and measured 93 ms after the K3 pool-size fix — conservative
-by ~1.5×. The K1 pool=10 baseline happened to read ~150 ms; had that been
-used as the "after" figure instead of a fresh measurement, the prediction
-would have looked near-perfect by coincidence. **Verification always re-runs
-the actual proposed value, never an adjacent one.** The agent's prediction is
-a tracked signal, not a decision input.
-
-**4.6 The scorer is a separate process that calls no model.** Reads manifests
-from disk. Changing scoring weights must never require re-running an
-experiment.
-
-**4.7 Diagnosis is scored separately from outcome.** The `LUCKY` quadrant —
-diagnosis wrong, fix worked anyway — is invisible to outcome-only scoring. An
-agent that raises the pool size because it misread a GC signal, on a fixture
-where the pool also happened to be tight, records a success and will fail the
-next fixture that looks similar but isn't.
 
 ## 5 · Adapters
 
@@ -534,6 +534,51 @@ Crucible is never pointed at production. The environment declares its kind
 this rule is ever relaxed, none of the remaining guardrails are sufficient on
 their own. *(Candidate for promotion to an AGENTS.md non-negotiable.)*
 
+**19.1a Crucible writes to one branch and to no other.** The agent applies and
+pushes only to a dedicated sandbox branch (`deploy.branch`, e.g.
+`perftest_sandbox`). The branch the operator works from (`deploy.base_branch`) is
+**read once**, to create the sandbox branch when it does not yet exist, and is
+never written to. A profile naming a protected branch — `main`, `master`,
+`develop`, `trunk`, `release/*`, `hotfix/*` — or naming the same branch for both
+is refused when the profile is **loaded**, so a bad configuration fails during
+`crucible plan` rather than eight minutes into a campaign.
+
+The check belongs to `DeployTarget`, not to any one deployer. A guardrail living
+inside `GitPushDeployer` is one that the next adapter — Jenkins, Argo, anything —
+gets written without, by someone reading the interface and not the history. Every
+adapter takes a `DeployTarget`, so every adapter inherits the rule.
+
+This does not replace §19.8's branch protection on the remote, which remains the
+real control; it catches the mistake earlier and more cheaply, on a machine we
+own, before it reaches a server somebody else configures.
+
+**19.1b The workspace is the TARGET's repository, not Crucible's.** The agent
+edits configuration in a checkout of the application under test. That repository
+belongs to whoever owns the service; Crucible is a tool they install. The seam is
+`Applicator.workspace`, exposed as `--workspace`, and `profile.yaml`'s
+`config_file` is relative to it.
+
+PerfLab lived at `perf-lab/` inside this repository until 21 September 2026 and
+now has its own: **https://github.com/rraghu214/perf-lab**. The split was not
+tidiness. While they were one repo:
+
+- the deploy branch descended from Crucible's working branch, so its tree carried
+  Crucible's own source and Box A received a copy of the tool that was testing
+  it — inert, since the hook built one subdirectory, but wrong-shaped;
+- a reader could reasonably mistake the nesting for the architecture;
+- and two copies of the target would have drifted apart the moment anyone edited
+  the wrong one, which is the failure `AGENTS.md` already records for
+  `CRUCIBLE_TEST_ASSERTIONS.md`.
+
+Now the deploy branch contains the target and nothing else, which is what every
+real deployment looks like.
+
+What the split did NOT change is the content of an experiment's commit. The
+applicator stages one path explicitly — `git add -- <config_file>` and
+`git commit -- <config_file>` — so unrelated work in the tree never rode along
+with an experiment even when the repos were joined. Verified on the local
+rehearsal: each experiment commit reads `1 file changed`.
+
 **19.2 The refspec is configuration, never model output.** Deploy is its own
 capability, with remote and branch pinned by `profile.yaml`
 (`deploy.remote`, `deploy.branch`, e.g. `perftest_sandbox`). The model decides
@@ -563,14 +608,69 @@ instructions and records the manual step on the manifest (§11). The agent
 never infers which mode it is in; an agent that guessed wrong would either
 stall a working pipeline or silently skip a deploy that never happened.
 
-**19.6 No measurement begins until the target proves it is running the new
-commit.** Measuring before a deploy lands attributes the *old* configuration's
-numbers to the *new* change — a silent error of exactly the K3 class (§4), and
-one that no later check would catch, because the resulting number is perfectly
-plausible. The target exposes its running commit (PerfLab: `/api/version`),
-the runner polls until it matches the deployed sha, and refuses to measure if
-it never does. Deploy latency is charged to wall clock (§7), never to the
-measured window.
+**19.6 No measurement begins until the change is proved to be in force.**
+Measuring before a change lands attributes the *old* configuration's numbers to
+the *new* change — a silent error of exactly the K3 class (§4), and one that no
+later check would catch, because the resulting number is perfectly plausible.
+Deploy latency is charged to wall clock (§7), never to the measured window.
+
+This is not hypothetical. During the K1 cloud run a full set of pool=20
+measurements was taken against a JVM still running pool=2; it was caught only
+because a pool of 20 cannot cap `active` connections at 2, and every other figure
+looked ordinary.
+
+**The proof must come from the target, never from Crucible's own record.**
+Crucible's memory can only say what it *did* — "I pushed sha X". The failure
+lives entirely in the gap between that and what the target is *running*, and the
+gap is real: a build can fail and leave the previous artifact, a restart can
+silently not take, an old process can still hold the port. In the K1 case the
+operator believed pool=20 was deployed and any notes would have agreed; the box
+disagreed.
+
+**What counts as proof is a ladder, because most applications do not publish a
+commit.** Requiring one would make this rule unimplementable outside a testbed
+we control. Each runtime declares how its changes can be observed, in
+`profile.yaml`:
+
+| Rung | Proves | Availability |
+|---|---|---|
+| Read the changed property back as a metric | the change is in force | anywhere with Prometheus / Datadog / Actuator |
+| Read it from a config endpoint | the change is in force | Actuator `/env`, or an app's own endpoint |
+| Commit sha | the right build is running | only where the app bakes one in |
+| Process uptime / start time | *a* restart happened, not what changed | almost everywhere |
+| Nothing available | — | record the experiment **unverified** and say so |
+
+Reading the property back is stronger than a sha for the question actually being
+asked: a sha proves the right build landed, the read-back proves *this change*
+took effect. It is also the rung most targets can reach, so it is the default —
+including for PerfLab, which could use its sha but should exercise the path
+every other user will take.
+
+**The deployer's own report corroborates; it does not verify.** A post-receive
+hook or a CI job knows which sha it checked out and built, and that is worth
+recording: it distinguishes "the build failed" from "the build succeeded but the
+restart did not take" from "it is running but will not say what it is" — three
+conditions an operator would respond to differently, and which Crucible otherwise
+cannot tell apart. So the deployer's report is carried on the manifest next to
+what the target says.
+
+It is not the gate, for the same reason Crucible's own commit sha is not. A build
+system reporting its own success is evidence about the build, produced by the
+thing doing the building. It can prove an artifact exists on disk; it cannot
+prove the process currently answering requests is that artifact — a stale process
+still holding the port looks identical from the build's point of view. Only the
+target can settle that.
+
+**The bottom rung is the honest one, and it is a stated limitation.** Where
+nothing can observe the change — no metric carrying the property, no config
+endpoint, no commit, no usable uptime — the experiment is recorded as
+**unverified** and the report says so (principle 2: the agent knows what it
+cannot see). Such a result is real but weaker: it rests on the deploy pipeline
+having done what it said. Crucible does not refuse to run in that case, because
+refusing would exclude a large class of real applications; it refuses to *present
+the result as verified*. A campaign made entirely of unverified experiments is a
+campaign whose conclusions rest on a deploy tool's word, and the report must let
+a reader see that rather than discovering it later.
 
 **19.7 Every experiment records the commit it ran against.** The deployed sha
 is carried per experiment in Episode memory (§13), so "which change produced

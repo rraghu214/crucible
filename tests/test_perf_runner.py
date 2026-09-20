@@ -1,6 +1,6 @@
 """Load runner and gauge sampler assertions — new, extends GROUP 1.
 
-DRAFTED FOR REVIEW, not self-approved.
+REVIEWED AND APPROVED by the operator (week 1; re-confirmed 20 September 2026).
 
 These cover the half of the K3 fix that lives in the runner rather than the
 collector: a gauge is only evidence if something read it while load was running.

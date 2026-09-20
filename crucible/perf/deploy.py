@@ -33,6 +33,7 @@ caught only because a pool of 20 cannot cap active connections at 2.
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import subprocess
 import time
@@ -49,6 +50,51 @@ FORBIDDEN_PUSH_ARGS = (
     "--prune", "--all", "--tags", "--receive-pack", "--exec",
 )
 
+#: Branches Crucible will never deploy to, whatever a profile says. Operator
+#: decision, 20 September 2026: the agent writes to a dedicated sandbox branch
+#: and to nothing else, and the branch the operator works from is never written
+#: at all.
+#:
+#: DESIGN.md 19.8 puts the real control on the remote ("branch protection on the
+#: remote keeps it off main"), and that still holds -- but that is a control on a
+#: server somebody else configures. This costs nothing and catches a profile typo
+#: before it reaches the remote, which is the cheaper place to catch it.
+PROTECTED_BRANCH_PATTERNS = ("main", "master", "develop", "trunk", "release/*", "hotfix/*")
+
+
+class BranchPolicyViolation(RuntimeError):
+    """A deploy target names a branch Crucible must never write to."""
+
+
+def branch_policy_violation(branch: str, base_branch: str) -> str | None:
+    """Why this branch pairing is refused, or ``None`` when it is allowed.
+
+    Kept as a free function and called from :class:`DeployTarget`'s constructor
+    so the rule attaches to the CONFIGURATION rather than to any one adapter. A
+    future Jenkins or Argo deployer gets it without being asked, which is the
+    point: a guardrail that lives in `GitPushDeployer` alone is one somebody
+    reimplements without it, reading the interface and not the history.
+    """
+    if not branch:
+        return None  # an unconfigured target is manual, not a policy breach
+    clean = branch.strip()
+    base = (base_branch or "").strip()
+    if base and clean == base:
+        return (
+            f"deploy.branch and deploy.base_branch are both {clean!r}. Crucible "
+            "applies changes on a dedicated sandbox branch and never writes to "
+            "the branch the operator works from."
+        )
+    for pattern in PROTECTED_BRANCH_PATTERNS:
+        if fnmatch.fnmatch(clean, pattern):
+            return (
+                f"deploy.branch {clean!r} matches the protected pattern {pattern!r}. "
+                "Experiments are applied to a dedicated sandbox branch; a shared "
+                "branch would take uncommitted experimental configuration and "
+                "would make every experiment's history unreproducible."
+            )
+    return None
+
 
 class DeployError(RuntimeError):
     """The deploy could not be performed, or was refused before it started."""
@@ -63,7 +109,11 @@ class DeployTarget:
     """Where a deploy goes, as declared by the profile. Never model-authored."""
 
     remote: str = ""
+    #: The dedicated sandbox branch. The ONLY branch Crucible ever writes to.
     branch: str = ""
+    #: The branch the operator works from. Crucible never writes to it; it is
+    #: read once, to create the sandbox branch when that does not yet exist.
+    base_branch: str = "main"
     #: "pipeline" (push triggers CI) or "manual" (block with instructions).
     mode: str = "manual"
     instructions: str = ""
@@ -80,6 +130,7 @@ class DeployTarget:
         return cls(
             remote=str(data.get("remote", "")),
             branch=str(data.get("branch", "")),
+            base_branch=str(data.get("base_branch", "main")),
             mode=str(data.get("mode", "manual")),
             instructions=str(data.get("instructions", "")),
             version_url=str(data.get("version_url", "")),
@@ -87,6 +138,19 @@ class DeployTarget:
             verify_timeout_s=float(data.get("verify_timeout_s", 300.0)),
             poll_interval_s=float(data.get("poll_interval_s", 5.0)),
         )
+
+    def __post_init__(self) -> None:
+        """Refuse an unsafe branch pairing at construction.
+
+        Validating here rather than at push time means a bad profile fails when
+        it is LOADED -- during `crucible plan`, before anything has been measured
+        or deployed -- instead of eight minutes into a campaign. It also means
+        every adapter inherits the rule, because every adapter takes one of
+        these.
+        """
+        violation = branch_policy_violation(self.branch, self.base_branch)
+        if violation:
+            raise BranchPolicyViolation(violation)
 
     @property
     def automated(self) -> bool:
@@ -264,6 +328,52 @@ class GitPushDeployer:
         _check_push_command(argv)
         return argv
 
+    def remote_branch_exists(self) -> bool:
+        """Whether the sandbox branch is already on the remote."""
+        code, output = self._run([
+            self.git_binary, "ls-remote", "--heads",
+            self.target.remote, f"refs/heads/{self.target.branch}",
+        ])
+        if code != 0:
+            raise DeployError(f"could not query {self.target.remote}: {output[:300]}")
+        return bool(output.strip())
+
+    def ensure_branch(self) -> str:
+        """Create the sandbox branch from the base branch if it does not exist.
+
+        Returns a one-line note for the manifest. The base branch is READ and
+        never written: the sandbox branch is created pointing at whatever the
+        base currently is, and every experiment after that lands on the sandbox.
+
+        This is why `base_branch` exists at all. Without it a first campaign
+        against a fresh remote would fail on a missing ref, and the obvious fix
+        -- "just push to the branch that does exist" -- is precisely the thing
+        that must never happen.
+        """
+        if self.remote_branch_exists():
+            return f"{self.target.branch} already exists on {self.target.remote}"
+
+        code, base_sha = self._run([self.git_binary, "rev-parse", self.target.base_branch])
+        if code != 0:
+            raise DeployError(
+                f"cannot create {self.target.branch!r}: base branch "
+                f"{self.target.base_branch!r} does not resolve ({base_sha[:200]})"
+            )
+        argv = [
+            self.git_binary, "push", self.target.remote,
+            f"{base_sha.strip()}:refs/heads/{self.target.branch}",
+        ]
+        # Same refusal set as any other push. Creating a branch is still a push,
+        # and a --force smuggled into this path would be just as destructive.
+        _check_push_command(argv)
+        code, output = self._run(argv)
+        if code != 0:
+            raise DeployError(f"could not create {self.target.branch}: {output[:300]}")
+        return (
+            f"created {self.target.branch} on {self.target.remote} from "
+            f"{self.target.base_branch} at {base_sha.strip()[:12]}"
+        )
+
     def deploy(self, commit: str) -> DeployResult:
         result = DeployResult(
             commit=commit, remote=self.target.remote, branch=self.target.branch
@@ -273,6 +383,9 @@ class GitPushDeployer:
                 f"profile declares deploy mode {self.target.mode!r}, not 'pipeline'. "
                 "Automation is declared, never guessed (DESIGN.md 19.5)."
             )
+
+        # Create the sandbox branch on first use. Never the base branch.
+        result.reason = self.ensure_branch()
 
         code, output = self._run(self.push_command(commit))
         if code != 0:

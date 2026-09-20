@@ -1,13 +1,18 @@
 """TargetProfile assertions — extends GROUP 2 of docs/CRUCIBLE_TEST_ASSERTIONS.md.
 
-DRAFTED FOR REVIEW, not self-approved. These cover the profile half of the
+REVIEWED 20 September 2026; the operator raised a finding here and the fix
+below is AWAITING RE-CHECK, not yet approved. These cover the profile half of the
 authority boundary: what the agent may change, and the separation between
 SKILL.md (prose, no authority) and profile.yaml (authority).
 
-The guard half of Group 2 — protected paths enforced at write time, and the
-Policy memory permission — is week 2 work and is not covered here. The
-double-enforcement rule (AGENTS.md non-negotiable 4) is only half-tested until
-both exist, which is itself worth reviewing.
+Both halves of the double-enforcement rule (AGENTS.md non-negotiable 4) now
+exist. The file-path lock is asserted here; the Policy memory lock is built in
+`crucible/perf/policy.py` and asserted in `tests/test_perf_policy.py`, including
+the case that proves they are INDEPENDENT — an SLA moved outside
+`protected_paths` still cannot be written by an agent.
+
+Protected paths enforced at write time are asserted in
+`tests/test_perf_applicator.py`.
 """
 
 import pathlib
@@ -121,41 +126,46 @@ class TestAuthorityBoundary:
         """DESIGN.md 4.4, lock 1 of 2 — the most important boundary in the product.
 
         An agent that can move its own goalpost passes every time. This is the
-        file-path lock only; the Policy memory lock is asserted separately below
-        and is not built yet.
+        file-path lock only; the Policy memory lock is asserted separately below,
+        and the two are independent by design -- see `tests/test_perf_policy.py`
+        for the case where this lock goes quiet and the other one still holds.
         """
         assert "config/slo.yaml" in spring_boot.protected_paths
         assert any(path.startswith("locust/") for path in spring_boot.protected_paths)
         assert any(path.startswith("tests/") for path in spring_boot.protected_paths)
 
-    @pytest.mark.xfail(
-        reason="TODO(week 2): SLA is not yet a Policy memory kind. AGENTS.md "
-               "non-negotiable 4 requires TWO independent locks and only the "
-               "protected-path lock exists. Remove this marker when the memory "
-               "permission lands -- an unexpected PASS here means it is done.",
-        strict=True,
-    )
     def test_the_sla_is_also_policy_memory_the_agent_cannot_write(self, spring_boot):
-        """DESIGN.md 4.4, lock 2 of 2 — NOT BUILT YET. Deliberately failing.
+        """DESIGN.md 4.4, lock 2 of 2 — BUILT in week 2.
 
         Why two locks and not one: a file guard is bypassed the moment config
         moves to a different path, and nobody notices, because the guard still
         passes on a path nothing writes to any more. A memory permission cannot be
-        sidestepped that way.
+        sidestepped that way, because it attaches to the record's KIND rather than
+        to where the bytes happen to live.
 
-        This is `strict=True` on purpose. While the lock is missing the suite
-        reports an expected failure, so the gap is visible in every single run
-        rather than buried in a comment. On the day week 2 builds it, this test
-        starts passing and pytest turns that into an ERROR -- which is the prompt
-        to delete the marker. It cannot be silently forgotten in either direction.
+        This test carried `xfail(strict=True)` from week 1 until the lock landed,
+        so the gap was reported in every run rather than buried in a comment, and
+        the day it started passing pytest raised an ERROR — which is what prompted
+        the marker's removal. It could not be forgotten in either direction.
         """
         from crucible.core.memory.models import MemoryKind
 
-        policy_backed = getattr(spring_boot, "policy_memory_kind", None)
-        assert policy_backed == MemoryKind.POLICY, (
-            "the SLA is protected by a file path only; the Policy memory lock "
-            "required by AGENTS.md non-negotiable 4 does not exist yet"
-        )
+        assert spring_boot.policy_memory_kind == MemoryKind.POLICY
+
+    def test_the_profile_does_not_get_to_choose_its_own_policy_kind(self, tmp_path):
+        """The subtle version of the same hole. If a profile could nominate the
+        memory kind holding its policy, it could nominate one the agent IS allowed
+        to write — unlocking the goalpost from inside the very file the first lock
+        protects. The kind is fixed in code; the profile does not vote."""
+        from crucible.core.memory.models import MemoryKind
+        from crucible.perf.profile import TargetProfile
+
+        sneaky = TargetProfile.from_mapping({
+            "name": "sneaky", "runtime": "jvm", "cause_families": ["gc_pressure"],
+            "policy_memory_kind": "fact",
+        })
+
+        assert sneaky.policy_memory_kind == MemoryKind.POLICY
 
     def test_the_profile_cannot_authorise_editing_itself(self, spring_boot):
         """An agent that may rewrite its own bounds has no bounds."""

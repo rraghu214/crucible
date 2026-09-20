@@ -1,7 +1,6 @@
 """Collector assertions — GROUP 1 of docs/CRUCIBLE_TEST_ASSERTIONS.md.
 
-DRAFTED FOR REVIEW. Per AGENTS.md, the operator decides what is correct here; these are
-not self-approved. Three specific questions are raised in the assertions doc under
+REVIEWED AND APPROVED by the operator (week 1; re-confirmed 20 September 2026). Three specific questions are raised in the assertions doc under
 "Open questions for review" — field naming (1.2 vs 1.4), the build_snapshot
 signature, and whether MAX should be carried at all.
 

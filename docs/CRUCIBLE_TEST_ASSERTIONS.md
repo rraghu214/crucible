@@ -953,6 +953,699 @@ in a quarter of the time it actually needs.
 
 ---
 
+# GROUP 11 — Deploy and the push boundary
+
+*Added 13 September 2026 alongside `crucible/perf/deploy.py`; DESIGN.md §19.
+Implemented in `tests/test_perf_deploy.py`. Backfilled into this document in week 2
+— the group existed in code before it was written down here, which is exactly the
+drift this file is supposed to prevent.*
+
+---
+
+### 11.1 The refspec comes from the profile, never from the model
+
+**What it checks.** `GitPushDeployer.push_command()` builds
+`git push <remote> <sha>:refs/heads/<branch>` entirely from `profile.yaml`, and an
+unpinned remote or branch raises rather than falling back to a default.
+
+**Why it exists.** §19.2. The risk was never that push exists — pushing a commit to
+a sandbox branch on pre-prod is reversible. The risk is a model composing
+`HEAD:main` or `--force`, which no argv-parsing allowlist reliably catches. So the
+model decides *whether* to deploy and never *where*.
+
+---
+
+### 11.2 Force-push is refused, always
+
+**What it checks.** Every entry in `FORBIDDEN_PUSH_ARGS`, plus a `+refspec`, raises
+`DeployError`.
+
+**Why it exists.** §19.3. Reverting means deploying an earlier commit, never
+rewriting history. A force-push destroys the experiment history the journal and
+every manifest depend on — the same class of loss as editing a manifest after the
+fact (6.1).
+
+---
+
+### 11.4 Crucible writes to one branch and to no other
+
+**What it checks.** `DeployTarget` refuses at CONSTRUCTION when `deploy.branch`
+is `main`, `master`, `develop`, `trunk`, `release/*` or `hotfix/*`, or when it
+equals `deploy.base_branch`. A profile naming one fails when it is *loaded*.
+
+**Why it exists.** Operator decision, 20 September 2026, strengthening §19.2.
+Before this the branch was pinned by config and nothing refused `main`. The agent
+could not change it -- `profile.yaml` is a protected path -- but a human editing
+that line, or a typo, would have sent every experiment to a shared branch.
+
+The check lives on `DeployTarget` rather than in `GitPushDeployer` for a specific
+reason: a guardrail inside one adapter is one the next adapter gets written
+without, by someone reading the interface and not the history. Every adapter
+takes a `DeployTarget`, so every adapter inherits it -- including the Jenkins one
+nobody has written yet.
+
+**For review:** failing at load time rather than push time is deliberate. A bad
+profile should stop `crucible plan`, not surface eight minutes into a campaign.
+
+---
+
+### 11.5 The sandbox branch is created FROM the operator's branch, never onto it
+
+**What it checks.** When the sandbox branch is absent from the remote,
+`ensure_branch()` resolves `base_branch` to a sha and pushes it to
+`refs/heads/<sandbox>`. The test asserts exactly one push, and that no argv
+anywhere names the base branch as a destination.
+
+**Why it exists.** Without it a first campaign against a fresh remote fails on a
+missing ref -- and the obvious fix, "push to the branch that does exist", is
+precisely what must never happen. Branch creation is still a push, so it goes
+through the same `_check_push_command` refusals: a `+` prefix silently forces an
+update, and forcing here would rewrite a branch other experiments depend on
+(§19.3).
+
+---
+
+### 11.3 No measurement begins until the target proves its commit
+
+**What it checks.** `await_commit` returns `verified=False` when `/api/version`
+never reports the deployed sha, and the campaign refuses to measure.
+
+**Why it exists.** §19.6, and not hypothetically. During the K1 cloud run a full set
+of pool=20 measurements was taken against a target that had never been restarted. It
+was caught only because a pool of 20 cannot cap `active` at 2; every other figure was
+entirely plausible. Nothing downstream catches this class of error.
+
+---
+
+# GROUP 12 — The applicator
+
+*Week 2, `crucible/perf/applicator.py`. Implemented in
+`tests/test_perf_applicator.py` (38 assertions). DESIGN.md §4.4, §5, §7, §11.*
+
+---
+
+### 12.1 An unlisted property is refused even when the value is harmless
+
+**What it checks.** `guard_proposal` refuses `server.port=8081` — a perfectly
+sensible value — because the property is not in `allowed_properties`.
+
+**Why it exists.** The allowlist is the authority, not the plausibility of the
+number. If refusal depended on the value looking wrong, the guard would only stop a
+model that was being obviously stupid, which is not the threat being defended
+against.
+
+---
+
+### 12.2 The refusal reported is the categorical one
+
+**What it checks.** A proposal that is both an unlisted property *and* an
+out-of-bounds value reports "not an allowed property", not "above the maximum".
+
+**Why it exists.** These are different refusals and an operator reading the journal
+should see the first. This asserts the ORDER of the guard's checks, which is the
+thing that silently regresses under a refactor.
+
+**For review:** is the order right? An argument exists for reporting every reason at
+once.
+
+---
+
+### 12.3 The revert restores what was on disk, not what the proposal claimed
+
+**What it checks.** A proposal carrying `previous=999` is applied, and the recorded
+`previous` is `"10"` — the value actually read from the file.
+
+**Why it exists.** A model that reported the old value from memory would make the
+revert write back a value that was never in force, and the manifest would then
+describe an experiment that did not happen.
+
+---
+
+### 12.4 A change that does not come back healthy is reverted automatically
+
+**What it checks.** An unhealthy restart restores the file **byte for byte** and
+restarts again; a revert that also fails sets `needs_human` and stops.
+
+**Why it exists.** Leaving a failed change in place lets the *next* experiment
+measure a service that never started, and attribute the result to whatever it tried
+next. Two failed restarts is no longer a configuration problem — a third automatic
+action against a target nobody understands the state of would be guessing.
+
+**For review:** byte-for-byte restore, not "the property is back to 10". A revert
+that rewrote comments would make every later diff unreadable.
+
+---
+
+### 12.5 Protected paths match across separators and into subdirectories
+
+**What it checks.** `locust/**` matches `locust/nested/deeper.py`, and
+`locust\locustfile.py` (Windows separator) is matched too.
+
+**Why it exists.** The repo is developed on Windows and runs on Linux. A guard that
+stopped matching when the separator changed would be the worst possible bug in this
+file, and it would only appear on one platform. `fnmatch` is used rather than
+`PurePath.match` precisely because `*` crosses separators there.
+
+---
+
+# GROUP 13 — The approval gate
+
+*Week 2, `crucible/perf/approval.py`. Implemented in `tests/test_perf_approval.py`
+(25 assertions). DESIGN.md principle 4, §19.4.*
+
+---
+
+### 13.1 An approval cannot be redeemed for a different value
+
+**What it checks.** A decision file whose params say `pool-size: 100` does not
+approve a request parked at `pool-size: 20`, even though 100 is inside the profile's
+bounds.
+
+**Why it exists.** Without the binding the gate authorises a *category* of action
+rather than the action itself, which is not what the person clicking it believes
+they are doing. The check is reused from the S12 coding loop
+(`crucible.ui.hitl.decide_resume`) rather than reimplemented, so the two cannot
+drift apart.
+
+---
+
+### 13.2 There is no way to type a different value at approval time
+
+**What it checks.** The `approve` subparser has no `--value` or `--params` flag, and
+`write_decision` copies the parameters out of the parked request.
+
+**Why it exists.** This is the hole somebody adds while being helpful. An operator
+approves *what they were shown*; changing the value means a new proposal, which they
+then see.
+
+---
+
+### 13.3 A missing gate refuses rather than applying
+
+**What it checks.** `DenyingGate` is the default, and it rejects with a reason.
+
+**Why it exists.** Fails closed. A missing gate meaning "apply freely" is the
+configuration mistake that turns an unattended campaign into an unsupervised one,
+and it reads as harmless in a diff.
+
+---
+
+### 13.4 A timeout pauses; it does not apply
+
+**What it checks.** `ApprovalTimeout` is raised, nothing is written, and the message
+says "paused, not failed".
+
+**Why it exists.** §7's pause holds without discarding. An operator who was asleep
+has not destroyed the run, and nothing was applied on their behalf.
+
+---
+
+### 13.6 A manual step pauses the campaign and is not an approval
+
+**What it checks.** A manual restart parks `NNN.manual.request.json` and waits.
+Confirming writes `NNN.manual.json` with `action: manual_step_done` and **no
+params**. The campaign then resumes and measures. A timeout leaves it paused with
+`after == {}` -- nothing measured, nothing applied on the operator's behalf.
+
+**Why it exists.** W2-Q8, and the bug the cloud run found: before this the loop
+recorded the manual step and measured anyway, attributing the target's OLD
+numbers to a change never put in force. §11 says the campaign blocks rather than
+failing and §7's pause holds without discarding, so a long campaign is not
+restarted from its baseline because somebody had to bounce a JVM.
+
+The directory and the experiment numbering are shared with approvals -- that is
+what correlates a pause with its resume, with nothing to remember. The decision
+TYPE is not shared. An approval carries a binding check; "I finished the restart"
+carries no values, so binding it would misrepresent it as a second approval and
+exempting it would create a file that bypasses the guarantee.
+
+---
+
+### 13.7 The two file types cannot be mistaken for each other
+
+**What it checks.** A parked manual step does not appear in `pending_approvals`,
+an approval does not appear in `pending_manual_steps`, both can be pending for
+the same experiment at once, and confirming a manual step does **not** satisfy
+the approval gate.
+
+**Why it exists.** Found by running `crucible status`. `*.request.json` also
+matches `NNN.manual.request.json`, so a parked manual step was listed as a
+pending approval and then failed reading a field it does not have. The last
+assertion is the one that matters: if a confirmation satisfied the approval gate,
+an operator reporting a restart would silently have consented to the change
+itself.
+
+---
+
+### 13.5 A stale decision cannot authorise a later experiment
+
+**What it checks.** A decision answering experiment 1 does not satisfy experiment 2.
+
+**Why it exists.** Otherwise a leftover file silently approves a change the operator
+never saw.
+
+---
+
+# GROUP 14 — The campaign loop
+
+*Week 2, `crucible/perf/campaign.py`. Implemented in `tests/test_perf_campaign.py`
+(64 assertions). DESIGN.md §4.4–4.7, §7, §8, §19.*
+
+---
+
+### 14.1 A production environment is refused before anything runs
+
+**What it checks.** `check_environment` raises on `kind: production`, on a missing
+kind, and on an unrecognised kind.
+
+**Why it exists.** §19.1. Every later guardrail assumes the target can be broken and
+restored. The whitelist is deliberate: a kind nobody has thought about should stop a
+campaign, because treating unknown as safe is how `prod-canary` gets measured one
+day.
+
+---
+
+### 14.2 A move smaller than the measured noise floor is INCONCLUSIVE
+
+**What it checks.** With `noise.p99_spread_pct: 2.08`, 98 → 97 ms is INCONCLUSIVE,
+not IMPROVED. Symmetrically, 98 → 99 ms is INCONCLUSIVE, not WORSE.
+
+**Why it exists.** Three identical pool=10 runs on the Oracle box spread 2.08%
+(`docs/K1_CLOUD_RESULT.md` §3). Reporting a 1% move as a win is how an agent
+accumulates a record of successes it did not earn. The symmetry matters: a rule that
+only absorbed *improvements* into noise would make the agent look conservative and
+its regressions look real.
+
+**For review:** the number is environment-measured, not chosen — but is
+"strictly inside the floor" the right boundary, or should it be a multiple of it?
+
+---
+
+### 14.3 The verdict follows the measurement, never the prediction
+
+**What it checks.** An agent predicting 70 ms whose re-measurement reads 299 ms gets
+an INCONCLUSIVE verdict; the prediction is recorded and scored separately.
+
+**Why it exists.** §4.5, and the K3 numbers exactly: predicted 140 ms, measured
+93 ms. Had the prediction been used as the "after" figure, a wrong prediction would
+grade itself correct.
+
+---
+
+### 14.4 An unverified deploy stops the campaign before measuring
+
+**What it checks.** When the deployer reports `verified=False`, the experiment's
+verdict is `NOT_MEASURED` and `after` is empty — the second measurement never ran.
+
+**Why it exists.** §19.6. See 11.3.
+
+---
+
+### 14.5 Abort discards only the in-flight experiment, and rolls the box back
+
+**What it checks.** An abort marker stops the loop at the next experiment
+*boundary*; verified experiments are kept; and where a change was deployed, the
+target is redeployed to the last commit it confirmed running.
+
+**Why it exists.** §7 and §19.9. Tearing down mid-apply would leave the target in a
+state no manifest describes, which is worse than not aborting. And an abort that
+stopped at the local revert leaves the box running experiment 11 while HEAD says 10
+— the next campaign would measure that and attribute it to something else.
+
+---
+
+### 14.9 A pending manual step blocks the measurement
+
+**What it checks.** When the restart is declared manual, the campaign records the
+manual step, sets the verdict to `NOT_MEASURED`, and STOPS. It does not measure,
+and the change is left applied so the operator restarts into it.
+
+**Why it exists.** Found by attempting the cloud run, not by reasoning. Before the
+fix the loop recorded the manual step and carried straight on to re-measure -- so
+it measured the target's OLD configuration and attributed the numbers to a change
+that had never been put in force. It was caught because Box B holds no credential
+for Box A, which makes the restart genuinely manual; the local rehearsal used an
+automated restarter and never reached the branch.
+
+The before/after was observed on Box A against the same pool=2 fixture:
+
+| | verdict | second measurement |
+|---|---|---|
+| before | `INCONCLUSIVE` (1200 -> 1200 ms) | ran, against the unchanged target |
+| after | `NOT_MEASURED` | never ran |
+
+The pre-fix verdict is the dangerous shape: not obviously wrong, just a result for
+an experiment that did not happen. This is DESIGN.md 19.6 one step earlier in the
+pipeline -- 19.6 stops a measurement before a DEPLOY lands; this stops one before a
+RESTART lands, and both attribute the previous configuration's numbers to the new
+change.
+
+**For review:** DESIGN.md 11 says the campaign "blocks with instructions rather
+than failing", and 7's pause "holds without discarding". This implementation
+*aborts* -- safe, and it discards only the in-flight experiment, but the operator
+must re-run rather than resume. See W2-Q8.
+
+---
+
+### 14.6 A campaign spanning two models is flagged as non-comparable
+
+**What it checks.** `spans_multiple_models` is true and the manifest carries a
+comparability warning when experiments were served by different models.
+
+**Why it exists.** §3.2 permits a budget-driven downgrade but never an invisible
+one. The model is read off the gateway's *response*, not the request.
+
+---
+
+### 14.7 Abstention is a correct outcome, not a crash
+
+**What it checks.** An abstaining diagnosis stops the campaign with a reason that
+says so.
+
+**Why it exists.** Principle 2. An agent pushed to produce a proposal from
+insufficient evidence will produce one, and it will look as confident as a good one.
+
+---
+
+### 14.8 One campaign per deploy branch
+
+**What it checks.** A second `BranchLock` on the same branch is refused, and the
+refusal names the run holding it.
+
+**Why it exists.** §19.10. Two campaigns pushing to one branch interleave commits
+and invalidate both. Naming the holder is so an operator can tell a live run from a
+crashed one.
+
+---
+
+# GROUP 15 — The PromQL adapter
+
+*Week 2, `crucible/perf/providers/promql.py`. Implemented in
+`tests/test_perf_promql.py` (27 assertions). DESIGN.md §4.1, §4.8, §5.*
+
+---
+
+### 15.1 Series names are declared in the profile, never derived
+
+**What it checks.** A metric absent from the profile's `promql:` section returns
+`None` even when the "obvious" derived name has data. The shipped profile is
+asserted to contain all three naming shapes: `_seconds_count`, a bare name, and
+`_bytes`.
+
+**Why it exists.** Micrometer's Prometheus registry appends each meter's base unit,
+and no single rule produces all three. A derived name that is wrong returns no data,
+which the collector faithfully records as "never measured" — so the agent is told it
+has no evidence about a meter Prometheus is scraping perfectly well. That failure
+looks like honesty, which makes it worse than an error.
+
+---
+
+### 15.2 The K3 numbers survive the new adapter
+
+**What it checks.** Feeding the adapter's output through `derive_timer_ms` turns
+3499.07 s over 3186 acquisitions into 1098 ms — not 2.4.
+
+**Why it exists.** A second provider is a second chance to reintroduce the original
+unit failure. This asserts the conversion happens in exactly one place regardless of
+which adapter fed it.
+
+---
+
+### 15.3 An unconvertible unit is declared, not guessed and not dropped
+
+**What it checks.** A series declared with `unit: jiffies` returns `None` from
+`fetch` and appears in `provider.unreadable` with `unit: unknown`.
+
+**Why it exists.** §4.8. Guessing reintroduces the K3 failure; dropping silently
+leaves the agent reasoning from a picture whose edges it cannot see.
+
+**For review:** §4.8 also says an operator present should be *asked* for the unit,
+and the answer belongs in the `TargetProfile`. The asking is not built — only the
+declaring. Flagged as an intentional partial.
+
+---
+
+### 15.5 A metric split across labels is aggregated, per statistic
+
+**What it checks.** `http.server.requests` and `jvm.memory.used` declare
+`aggregate: sum`; the generated PromQL wraps COUNT and TOTAL_TIME in `sum(...)`
+and MAX in `max(...)`. Single-series metrics like
+`hikaricp_connections_pending` are left unwrapped.
+
+**Why it exists.** Found by running against a real Prometheus on 20 September
+2026 -- both metrics returned NOTHING. Micrometer splits
+`http_server_requests_seconds_count` across uri/status/method/outcome and
+`jvm_memory_used_bytes` across memory pools, so a bare series name returns dozens
+of series and `scalar()` correctly refuses to pick one. Both would have silently
+reported "never measured", which is the exact failure this adapter exists to
+avoid, sitting inside the adapter. Every fake-client test passed throughout,
+because a fake answers whatever it was asked for.
+
+The per-statistic split is not fussiness. 200 requests across four URIs really is
+200 requests, so COUNT sums -- but the slowest request in the service is the
+LARGEST per-URI maximum, not the total of them, and summing would report a
+latency nothing ever experienced.
+
+**For review:** `jvm.memory.used` also declares `labels: {area: heap}`. The
+collector's field is `heap_used_peak_bytes`, and quietly summing non-heap pools
+in would make the number not the thing its name claims.
+
+---
+
+### 15.6 Cold meters do not exist until the pool is used
+
+**What it checks.** Documented in `perf-lab/prometheus.yml` rather than asserted
+in code, because it is a property of Micrometer rather than of Crucible.
+
+**Why it exists.** On an idle target, `hikaricp_connections_acquire_seconds_*`
+and `hikaricp_connections_active` are ABSENT -- verified on Box A, where both
+appeared only after 25 requests to `/api/db`. A preflight against a cold target
+will honestly report them as never-measured, which is correct and confusing. It
+is also a second reason the warmup phase matters: it registers the meters as well
+as warming the JIT.
+
+---
+
+### 15.4 More than one matching series is an error, not a choice
+
+**What it checks.** When a query returns two series, `scalar()` returns `None`.
+
+**Why it exists.** More than one series means the selector did not pin a single
+instance. Picking the first would report one machine's numbers as the service's,
+quietly. §5 forbids averaging percentiles across instances; this is the same mistake
+one level down.
+
+---
+
+# GROUP 16 — The CLI
+
+*Week 2, `crucible/perf/commands.py` and `crucible/cli.py`. Implemented in
+`tests/test_perf_cli.py` (36 assertions). DESIGN.md §9, §15.*
+
+---
+
+### 16.1 `plan` changes nothing
+
+**What it checks.** `config/` is checksummed before and after `cmd_plan()` and is
+byte-identical.
+
+**Why it exists.** §9. "Show me first" is worthless if it turns out to touch
+something, and asserting it on the filesystem rather than by reading the code is the
+only version of this claim worth having.
+
+---
+
+### 16.2 `plan` shows the authority boundary
+
+**What it checks.** The output names every tunable property with its bounds, every
+protected path, the noise floor, and whether the deploy is manual.
+
+**Why it exists.** These are the answers an operator needs before agreeing to let
+something edit a running service. Burying them behind a run is how you get an
+approval nobody understood.
+
+---
+
+### 16.3 An SLA outside `protected_paths` fails preflight
+
+**What it checks.** Pointing `--sla` at a file the profile does not protect returns
+`FAILED` with "NOT protected by this profile".
+
+**Why it exists.** Found while writing these tests. Preflight checks the SLA it was
+*pointed at*, not the default one — and an operator who moves their SLA somewhere
+unprotected has handed the agent its own goalpost.
+
+---
+
+### 16.4 `run` defaults to the file gate and to a discarded warmup
+
+**What it checks.** `--approve` defaults to `file`, not `preapproved`; `--warmup`
+defaults to 120 s.
+
+**Why it exists.** Both fail closed. A `preapproved` default would make an
+unattended campaign an unsupervised one. A zero warmup would swamp every signal: a
+cold JVM measured p99 150 ms where a warm one measured 98, a ~50% gap against a
+2.08% noise floor.
+
+---
+
+# GROUP 17 — The SLA as Policy memory (lock 2 of 2)
+
+*Week 2, `crucible/perf/policy.py`. Implemented in `tests/test_perf_policy.py`
+(14 assertions). AGENTS.md non-negotiable 4, DESIGN.md §4.4.*
+
+---
+
+### 17.1 An agent principal cannot write the SLA
+
+**What it checks.** `publish_sla` raises `SlaIsNotAgentWritable` for an `agent`
+principal, writes nothing, and the underlying `MemoryStore` refuses the same record
+independently if the wrapper is bypassed.
+
+**Why it exists.** The most important boundary in the product: an agent that can
+move its own goalpost passes every time. The store check is asserted separately so
+enforcement does not live only in the convenience wrapper.
+
+---
+
+### 17.2 The two locks are independent
+
+**What it checks.** An SLA moved to a path the profile does not protect still cannot
+be written by an agent — the path guard goes quiet, the memory permission does not.
+
+**Why it exists.** This is the precise hole lock 1 has: a file guard stops working
+the moment config moves, and *nothing notices*, because the guard still passes on a
+path nothing writes to any more. A suite that only ever exercised both locks
+together would go green on the day one was removed.
+
+---
+
+### 17.3 The profile does not choose its own policy kind
+
+**What it checks.** A profile declaring `policy_memory_kind: fact` still resolves to
+`MemoryKind.POLICY`.
+
+**Why it exists.** If a profile could nominate the memory kind holding its policy,
+it could nominate one the agent *is* allowed to write — unlocking the goalpost from
+inside the very file the first lock protects.
+
+---
+
+### 17.4 The agent may still read the SLA
+
+**What it checks.** `recall_sla` is unrestricted.
+
+**Why it exists.** Principle 3 forbids the agent *editing* the SLA, not seeing it.
+An agent that could not read its own objective could not report whether it met one.
+
+---
+
+# GROUP 18 — Diagnosis: the model seam
+
+*Week 2, `crucible/perf/diagnosis.py`. Implemented in `tests/test_perf_diagnosis.py`
+(32 assertions). DESIGN.md §3.2, §4.1–4.3, §5.*
+
+*Numbered 18 although it belongs beside Group 14 — renumbering the groups above
+would break every reference already written against them. Added on 20 September
+2026 after an audit found it missing entirely: the module with the only model call
+in the product had thirty-two tests and no entry in this document.*
+
+---
+
+### 18.1 The model is told what was NOT measured, in words
+
+**What it checks.** `summarise_evidence_gaps()` turns `available_evidence` into
+sentences — absent traces with their reason, head-sampling below 100%, and
+unsampled gauges. The negative case is asserted too: a fully-evidenced snapshot
+produces no gaps at all.
+
+**Why it exists.** §4.3. The snapshot already carries the booleans, and a model
+reading JSON technically has the information. It behaves measurably better when
+the gap is also stated in prose next to the instruction about it, and a few dozen
+tokens is a cheap price. The negative case matters just as much — crying wolf
+about evidence that *is* present would push the model toward abstaining on good
+data.
+
+---
+
+### 18.2 The prompt carries the K3 rules as prohibitions
+
+**What it checks.** The system prompt states that null means NOT MEASURED and
+does not mean zero; that abstaining is a correct answer; and that the prediction
+is never used as the result.
+
+**Why it exists.** Each of the seven numbered rules in `SYSTEM_PREAMBLE` is a
+previous failure written as a prohibition. Rule 2 is §4.2, rule 7 is §4.5. These
+tests are what stop somebody "tidying" the prompt and removing a rule whose cost
+is invisible until a campaign gets it wrong.
+
+**For review:** the prompt is 7,093 characters. If you disagree with any of the
+seven rules, that is a prompt edit rather than a code change.
+
+---
+
+### 18.3 Cause families and bounds come from the profile, never a constant
+
+**What it checks.** A profile declaring `gil_contention` produces a prompt
+containing `gil_contention` and NOT `connection_pool_exhaustion`. Allowed
+properties are rendered with their bounds.
+
+**Why it exists.** §5. A hardcoded list would make the agent propose impossible
+hypotheses on one runtime and miss real ones on another. Showing the bounds turns
+most out-of-bounds proposals into in-bounds ones, which is worth doing because a
+refused proposal costs an experiment slot — but the guard still refuses
+independently, because a prompt is not a control.
+
+---
+
+### 18.4 SKILL.md is rendered and marked as granting nothing
+
+**What it checks.** Runtime prose appears in the system prompt, alongside an
+explicit statement that it grants no authority and does not widen the allowed
+list.
+
+**Why it exists.** §5's table. A model reading runtime notes that mention a
+property could otherwise infer permission to change it. The rendering happens in
+one function so that "skills reach the prompt and nowhere else" is checkable
+rather than merely intended.
+
+---
+
+### 18.5 Abstention survives; a malformed reply becomes one
+
+**What it checks.** An explicit `abstain` is preserved with its reason. A reply
+naming no applicable change becomes an abstention rather than an error. An
+unparseable reply becomes an abstention carrying the parse error. A transport
+failure, by contrast, RAISES.
+
+**Why it exists.** Two different distinctions. First, a model pushed to produce a
+proposal from insufficient evidence will produce one and it will look as
+confident as a good one — so abstention must stay a first-class, scorable
+outcome rather than being coerced into a low-confidence guess. Second, a gateway
+that is down and a model that declined are different facts; collapsing them would
+let an outage be scored as good judgement.
+
+Raising on a formatting slip would abort a campaign and discard every measurement
+already taken, which is why parsing is tolerant about structure and strict about
+meaning.
+
+---
+
+### 18.6 What actually served the call is read off the response
+
+**What it checks.** With a request pinning `gemini` / `gemini-2.5-flash`, a
+response claiming `groq` / `llama-3.3-70b` is recorded as `groq` /
+`llama-3.3-70b`. Temperature is 0. Consecutive calls are paced; the first is not.
+
+**Why it exists.** §3.2. A budget-driven downgrade is permitted but never
+invisible, and the only way to know which model answered is to read the reply
+rather than the request — a campaign that silently fell back would otherwise look
+uniform in the report. Temperature 0 is what makes §7's replay benchmark measure
+diagnosis rather than sampling noise. Pacing lives in the diagnoser so no future
+call site can forget the free tier's per-minute limit.
+
+---
+
 # Review decisions — week 1
 
 Raised by Claude Code while implementing, decided by the operator on 10 September 2026.
@@ -1011,21 +1704,259 @@ byte-identical copy at `docs/ref/` is deleted, and AGENTS.md now names the survi
 by full path — naming it without a directory is how two copies appeared in the first
 place.
 
-**Q6 — the second SLA lock is a strict xfail. DECIDED.** AGENTS.md non-negotiable 4
-requires the SLA protected twice: as a protected path *and* as a `Policy` memory kind
-the agent cannot write. Only the path lock exists; the memory lock is week 2.
+**Q6 — the second SLA lock is a strict xfail. DECIDED — and CLOSED in week 2.**
+AGENTS.md non-negotiable 4 requires the SLA protected twice: as a protected path
+*and* as a `Policy` memory kind the agent cannot write. In week 1 only the path lock
+existed.
 
-`test_the_sla_is_also_policy_memory_the_agent_cannot_write` is marked
-`xfail(strict=True)`. While the lock is missing, every run reports an expected
-failure, so the gap is visible instead of buried in a comment. When week 2 builds it,
-the test passes unexpectedly and pytest raises an ERROR — which is the prompt to
-delete the marker. It cannot be forgotten in either direction.
+`test_the_sla_is_also_policy_memory_the_agent_cannot_write` was marked
+`xfail(strict=True)`. While the lock was missing, every run reported an expected
+failure, so the gap was visible instead of buried in a comment. When week 2 built it,
+the test passed unexpectedly and pytest raised an ERROR — which is what prompted the
+marker's removal. It could not be forgotten in either direction, and it was not.
+
+The mechanism is worth keeping for the next deliberate gap: it is the only kind of
+TODO that gets louder rather than quieter as it ages.
 
 Two locks and not one because a file guard stops working the moment config moves to
 a different path, and nothing notices: the guard still passes, on a path nothing
 writes to any more.
 
 ---
+
+---
+
+# Open questions — week 2
+
+*Status, 20 September 2026: W2-Q1 needed no change (already the default). W2-Q2,
+W2-Q4, W2-Q5 (the branch half) and W2-Q8 are BUILT and under test. W2-Q5's
+verification ladder and W2-Q6 remain to build; W2-Q3 is parked.*
+
+
+Raised by Claude Code while implementing groups 11–17. **Not decided.** Each one is
+a judgement call that shaped code already written, so a different answer means a
+change rather than a discussion.
+
+**W2-Q1 -- an INCONCLUSIVE change is reverted by default. DECIDED: revert stays.**
+Operator's decision, 18 September 2026, after considering and rejecting the
+alternative of keeping it.
+
+The argument for keeping was that a change measuring inside the noise floor is
+"doing no harm". The argument that decided it against: the verdict only says the
+change made no measurable difference **to p99**. It says nothing about anything
+else. Raising `maximum-pool-size` holds more database connections; `minimum-idle`
+holds idle ones open; thread-pool sizes and `perflab.cache.enabled` cost memory.
+None of that is visible in the endpoint's p99, so "within noise" means "no
+demonstrated benefit", not "free". A campaign that kept every inconclusive change
+would end with knobs turned for no demonstrated reason and costs nobody measured.
+
+One claim made in favour of reverting was **wrong and is withdrawn**: that keeping
+would contaminate the next experiment's baseline. It would not -- the "after"
+measurement of the kept experiment is a real measurement of the resulting state,
+so the next comparison is still against something measured. The decision rests on
+unmeasured resource cost, not on comparability.
+
+`revert_on_inconclusive` defaults to `True` ([campaign.py]). Repeats (below) remain
+the better path wherever wall clock allows.
+
+**W2-Q2 -- the noise floor is an absolute boundary. DECIDED: keep the measured
+floor as the bar; record the margin.** Operator's decision, 18 September 2026.
+
+A fixed global threshold was considered and rejected. The floor is a property of
+the BOX, not of Crucible or of the app: the same application and load profile
+measured **14.3%** on the local Windows machine (`docs/K1_RESULT.md`) and **2.08%**
+on the Oracle box (`docs/K1_CLOUD_RESULT.md`) -- nearly 7x apart. A fixed 2% bar
+would have called routine jitter an improvement on every experiment the laptop
+ever ran.
+
+The sharp edge that prompted the question is real, though, and the numbers make it
+vivid. With a 2.08% floor on a 98 ms baseline, the band between "indistinguishable
+from noise" and "confidently real" is **96 ms to 94 ms -- two milliseconds**. The
+three baseline runs that produced the floor were **98, 98, 96 ms**: one of them,
+with nothing changed, already read 96. A single "after" reading inside that band
+sits among values the unchanged system produced on its own.
+
+So the resolution is repeats, not a different bar:
+
+| measured move | verdict on one measurement |
+|---|---|
+| below 1x the floor | INCONCLUSIVE -- revert (W2-Q1) |
+| 1x to 2x the floor | IMPROVED, marginal -- this is where repeats earn their wall clock |
+| 2x the floor or more | IMPROVED; one measurement is enough |
+
+Repeats can push a marginal result EITHER way. Three after-runs whose median beats
+the before-median by less than the floor correctly turn a single-run "win" into
+INCONCLUSIVE -- the mechanism does real work rather than confirming what we hoped.
+The comparison stays arithmetic and in the same shape as K1's own criteria (after
+median beats before median by more than the floor, AND the after-runs' own spread
+is within the floor), rather than pulling in a statistics library.
+
+**Labelling: option (a).** `IMPROVED` stays one verdict and the manifest carries a
+`margin_over_noise` field. A distinct `IMPROVED_MARGINAL` verdict was the
+alternative; it was rejected because the number carries more information than a
+label, and a new verdict value is one every reader and the scorer would have to
+learn.
+
+**W2-Q3 -- abstention ends the campaign. PARKED for a future scope.**
+Operator's decision, 20 September 2026, revising the 18 September agreement to
+build it.
+
+The reasoning for parking: it needs a scenario-SELECTION policy and a stopping
+rule for it, to salvage a case where the honest answer -- "I could not tell from
+this evidence" -- is already correct and already recorded. That is a lot of
+machinery guarding a non-failure. An abstention still ends the run, which is
+safe; the evidence simply goes ungathered until somebody asks for it
+deliberately.
+
+**W2-Q4 -- a guard refusal costs an experiment slot. DECIDED: stop charging it.**
+Operator's decision, 18 September 2026. A proposal the guard refuses is never
+applied and never measured, so it should not consume one of the `--experiments N`
+slots the operator asked for -- they asked for N measurements.
+
+The risk that made charging attractive was a model looping forever on forbidden
+proposals. That is handled separately and more directly: cap **consecutive**
+refusals at 3 and stop the campaign with "the agent could not produce a permitted
+proposal", which names the actual failure instead of disguising it as an
+exhausted budget.
+
+**W2-Q5 -- deploy.mode and the commit gate. DECIDED: generalise the gate; the
+commit sha stops being a requirement.** Operator's decision, 18 September 2026.
+
+The gate itself stands: no measurement may begin until something INDEPENDENT of
+Crucible's own intentions confirms the change is in force. What changes is what
+satisfies it. DESIGN.md 19.6 currently names a commit sha, and real applications
+will not bake one in -- a design that needs one does not get adopted.
+
+Recording the sha in Crucible's own memory instead was considered and rejected,
+because memory records what Crucible DID ("I pushed sha X"), never what the target
+is RUNNING. The whole failure lives in the gap between those two, and that gap is
+real: a build can fail and leave the previous jar, a restart can silently not take,
+an old process can still hold the port. The K1 cloud run is the proof -- the
+operator believed pool=20 was deployed, any notes would have said pool=20, and the
+box was running pool=2.
+
+The replacement is a ladder, declared per runtime in `profile.yaml` under a
+`verification:` block (a property of the runtime, not of Crucible):
+
+| rung | proves | availability |
+|---|---|---|
+| read the changed property back as a metric | the change is in force | anywhere with Prometheus / Datadog / Actuator |
+| read it from a config endpoint | the change is in force | Actuator `/env`, or an app's own endpoint |
+| commit sha | the right build is running | only where the app bakes one in |
+| process uptime / start time | a restart happened, NOT what changed | almost everywhere |
+| nothing available | -- | record the experiment UNVERIFIED and say so |
+
+Reading the property back is arguably stronger than a sha: a sha proves the right
+build landed, the read-back proves the specific change took effect. It is already
+wired -- `pool_max: hikaricp.connections.max` is read on every snapshot, and the
+PromQL adapter covers non-Spring runtimes, so this does not depend on Actuator.
+
+The uptime rung is the realistic middle for many apps and is worth more than it
+looks: it rules out the K1 failure specifically, which was that NOTHING happened.
+It does not prove the content of the change and the manifest must not imply it does.
+
+PerfLab keeps its sha; it is the strongest signal available on the testbed and
+costs nothing. It simply stops being what the gate requires.
+
+Still to do: the DESIGN.md 19.6 edit and the `verification:` profile block, both
+for review before any code.
+
+**W2-Q6 -- section 4.8's "ask the operator" half is not built. DECIDED: implement,
+but not in week 2.** The PromQL adapter already does the never-guess, never-drop
+half: an unconvertible unit is excluded from every derived value and recorded in
+`provider.unreadable` (assertion 15.3). What is missing is the other half --
+where an operator is present, ask for the unit and write the answer into the
+`TargetProfile`, so the next campaign against that runtime inherits it.
+
+Operator agreed on 18 September 2026 that this should be built. It is scoped in
+DESIGN.md as a capability rather than as week-2 core, so it lands in week 3 or
+later; the declaring half stands in the meantime, which means nothing is ever
+read at the wrong magnitude while the asking half is missing.
+
+
+**Operator decision, 21 September 2026 — counters are REPORTED, never asked
+about.** "How many GC pauses" is a tally; there is nothing to convert, so asking
+a human for its unit would be theatre of exactly the kind section 4.8 warns
+against. The collector already agrees: `_count` is an accepted suffix in
+`UNIT_SUFFIXES`, reserved for genuine tallies.
+
+So the asking half, when built, splits the unknown-unit case in two:
+
+- a metric that is a **quantity** in an unknown unit is worth a question, because
+  a human almost always knows the answer and it belongs in the `TargetProfile`;
+- a metric that is a **count** is dimensionless. It is carried, used, and simply
+  NOTED in the report as a tally with no unit -- no question, no `unit: unknown`
+  flag, and no exclusion from derived values, because there is nothing to get
+  wrong by a factor of a thousand.
+
+The second case is the common one and the one that would have made the feature
+annoying enough to switch off.
+
+**W2-Q7 -- is `config/slo.yaml` the right home for the steal threshold?
+DECIDED: yes.** Operator's confirmation, 18 September 2026.
+
+CPU steal is time this VM wanted a physical CPU and the host gave it to a
+neighbouring tenant instead. When it is high the app looks slow but the slowness
+belongs to somebody else's workload, so the measurement is thrown away rather than
+published.
+
+It belongs with the ENVIRONMENT, not the runtime: the same Spring Boot app has ~0%
+steal on dedicated hardware and 2-6% on Oracle free tier. `slo.yaml` is where the
+environment is declared, so that is where the threshold lives -- while
+`spring-boot.yaml` stays a statement about the runtime (which knobs exist, their
+safe ranges, how to restart), unchanged whichever box it runs on.
+
+Nothing reads it yet; week 3's watchdog will, every 5 minutes during a run. The
+value is recorded now so a campaign carries the threshold it ran under rather than
+having it reconstructed afterwards.
+
+**W2-Q8 -- a manual step aborts where DESIGN.md 11 says "blocks". DECIDED: resume
+through the approval gate's file mechanism; no eighth verb.** Operator's decision,
+19 September 2026.
+
+*(This entry was accidentally deleted by an edit recording W2-Q6 and has been
+restored. The edit's replaced region ran from W2-Q6 to W2-Q7, and Q8 had been
+inserted between them.)*
+
+Section 11 says the campaign "blocks with instructions rather than failing", and
+section 7's pause "holds without discarding" so only the in-flight measurement
+window is re-run. The implementation raises `CampaignAborted`: nothing verified is
+lost and nothing is measured stale, but the operator must start a NEW run rather
+than resuming, which on a long campaign means redoing the baseline.
+
+**Why no eighth verb.** A separate `crucible resume` would put pause and resume on
+different verbs, and correlating which resume answered which pause becomes the
+operator's problem. Reusing the approval gate's file mechanism keeps both halves in
+one place, numbered by experiment, so the correlation is structural rather than
+remembered.
+
+**What is reused, and what is not.** The DIRECTORY, the `NNN` numbering and the
+parked-file/answer-file pattern are plumbing, and reusing them is what gives the
+correlation. The approval DECISION TYPE is not reused. Its binding check compares
+the values in the answer against the values the campaign parked and refuses a
+mismatch -- that is what stops an approval of "pool 20" being redeemed for "pool
+100", and why `crucible approve` has no `--value` flag. "I finished the restart"
+carries no values: binding it would misrepresent it as a second approval, and
+skipping the check would create a file that bypasses the guarantee. Either way the
+manifest would record "operator approved" where what happened was "operator
+restarted a JVM", and section 11 cares about that difference.
+
+**The shape, then:**
+
+- same directory and same experiment numbering as approvals, so a pause and its
+  resume are correlated by `NNN` with nothing to remember;
+- a DISTINCT filename suffix -- `NNN.manual.request.json` / `NNN.manual.json`
+  alongside `NNN.request.json` / `NNN.decision.json`. One experiment can wait
+  twice (once for authorisation, once for a manual step), so a shared filename
+  would collide and let one wait be satisfied by the answer to the other;
+- a distinct `action` value carrying no params, exempt from the binding check by
+  construction rather than by exception, and recorded on the manifest as a manual
+  step and never as an approval;
+- surfaced on the existing `approve` verb with a flag rather than a new verb.
+
+After resume the campaign re-verifies before measuring (W2-Q5's ladder): a human
+saying "done" is a claim about intent, and the gate exists precisely because
+intent and reality diverge.
 
 # What to look for when reviewing
 

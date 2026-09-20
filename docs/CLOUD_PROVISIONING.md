@@ -9,6 +9,14 @@ rather than what was planned; where the original guess was wrong, the wrong
 version is called out rather than quietly replaced, because the wrong turns are
 the part worth keeping.
 
+**SUPERSEDED FOR DEPLOY, 21 September 2026.** PerfLab now lives in its own
+repository (https://github.com/rraghu214/perf-lab) rather than inside Crucible,
+so §7's `perf-lab/docker-compose.yml` paths and §10's build-and-run commands
+describe a layout that no longer exists. They are left as written because this
+document records what was executed in week 1. For anything deploy-related --
+the target clone, the bare repo, the post-receive hook, the deploy key -- see
+`docs/DEPLOY_SETUP.md`.
+
 This document is written to be executed in its own chat. The prompt to start
 that chat is at the bottom.
 

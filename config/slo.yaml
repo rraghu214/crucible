@@ -1,0 +1,82 @@
+# ---------------------------------------------------------------------------
+# The SLA, the environment, and the noise floor a verdict is judged against.
+#
+# THE AGENT CANNOT WRITE THIS FILE. That is enforced twice, deliberately:
+#   1. as a protected path in every TargetProfile's `protected_paths`, and
+#   2. as the `Policy` memory kind, which the agent has no write permission for.
+#
+# A file guard can be bypassed if config moves; a memory permission cannot.
+# Neither half is to be weakened independently of the other (DESIGN.md 4.4).
+# The reason is the single most important boundary in the product: an agent that
+# can move its own goalpost passes every time.
+#
+# The same protection covers the load profile. Fewer users is not a fix, and
+# changing the profile mid-campaign destroys comparability between experiments.
+# ---------------------------------------------------------------------------
+
+name: perflab-db-latency
+description: >
+  /api/db must stay under its p99 ceiling at the declared load. This is the
+  investigation the week-2 loop runs end to end.
+
+# --- The environment being measured ---------------------------------------
+#
+# `kind` is not documentation. A campaign refuses to start against an
+# environment declared `production` (DESIGN.md 8 and 19.1): Crucible edits
+# configuration on a running service and restarts it, and the entire safety
+# argument in section 19 assumes the target can be broken and restored. That
+# assumption must be stated by the environment and enforced by the campaign,
+# never held as a convention in somebody's head.
+environment:
+  name: oracle-ashburn-boxa
+  kind: pre-prod          # pre-prod | staging | dev | production (refused)
+  target_base_url: http://10.0.0.79:8080
+  load_generator_host: 10.0.0.8
+  notes: >
+    Box A runs PerfLab on Postgres/Redis/httpbin; Box B runs Crucible and
+    Locust. Percentiles come from a single instance, which Actuator requires
+    (DESIGN.md 5) -- load is pinned to Box A and bypasses no load balancer
+    because there is none.
+
+# --- The objective ---------------------------------------------------------
+objective:
+  endpoint: /api/db
+  p99_ms: 120
+  error_rate_pct: 1.0
+  # Stated so a verdict cannot quietly be judged at a different load. Changing
+  # any of these makes results non-comparable with every campaign before it.
+  at_load:
+    users: 50
+    spawn_rate: 10
+    think_time_s: [0.1, 0.3]
+
+# --- What counts as a real change -----------------------------------------
+#
+# Measured on this environment, not assumed. The baseline p99 spread across
+# three identical pool=10 runs on the Oracle box was (98-96)/96 = 2.08%
+# (docs/K1_CLOUD_RESULT.md 3). A measured improvement smaller than this cannot
+# be distinguished from run-to-run variation, and is recorded as INCONCLUSIVE
+# rather than as a win -- being right by luck is not being right (DESIGN.md 4.7).
+#
+# This number is a property of THIS box. The original K1 run on a local Windows
+# machine measured 14.3%. Moving environments means re-measuring it, and the
+# campaign records which value a verdict was judged against.
+noise:
+  p99_spread_pct: 2.08
+  measured_on: 2026-09-12
+  source: docs/K1_CLOUD_RESULT.md
+
+# --- Host contention -------------------------------------------------------
+#
+# Per-environment, not a constant (DESIGN.md 6). Oracle free tier runs on shared
+# vCPU and steal has been observed between 2% and 6% under load depending on the
+# neighbours, so a fixed 5% would abort runs that are demonstrably sound. The
+# watchdog that consumes this is week 3; the value lives here now so the
+# threshold a campaign ran under is recorded with the campaign rather than
+# reconstructed afterwards.
+host_contention:
+  cpu_steal_abort_pct: 10.0
+  rationale: >
+    Oracle Always Free shared vCPU. Measured 2-4% under load on 13 Sept and
+    4-6% on 12 Sept; steal varies with co-tenants, so the threshold is set
+    above the observed band rather than at the default 5%.

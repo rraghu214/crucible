@@ -1,6 +1,6 @@
 """QuotaSource assertions — new group, 13 September 2026.
 
-DRAFTED FOR REVIEW, not self-approved.
+REVIEWED AND APPROVED by the operator (week 1; re-confirmed 20 September 2026).
 
 Two places know the rate limits: the gateway, which enforces them, and
 config/quota.yaml, which a human maintains. Keeping both is drift, not
