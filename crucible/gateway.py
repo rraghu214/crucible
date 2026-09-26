@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 from typing import Any
 
 import httpx
@@ -112,10 +113,43 @@ class GatewayClient:
             "input_tokens": result["input_tokens"], "output_tokens": result["output_tokens"],
         }
 
-    async def health(self) -> dict[str, Any]:
-        response = await self._client.get(f"{self.base_url}/healthz", timeout=3)
+    async def health(self, *, timeout_s: float = 3.0) -> dict[str, Any]:
+        response = await self._client.get(f"{self.base_url}/healthz", timeout=timeout_s)
         response.raise_for_status()
         return response.json()
+
+    async def warm_up(self, *, timeout_s: float = 60.0) -> dict[str, Any]:
+        """Wake a cold gateway before the campaign's first model call.
+
+        `glc_v5` is hosted on Render's free tier (`DESIGN.md` 18), which spins the
+        instance down when idle; the first request after a spin-down can take tens
+        of seconds to answer. Paying that cost here, against `/healthz`, means the
+        campaign's first real model call -- the baseline diagnosis -- lands on an
+        already-warm gateway, and the wait is visibly a cold start rather than a
+        silent hang. One retry: a `glc_v5` restart can occasionally need a second
+        request to fully come up even after the first one returns.
+        """
+        last_error: httpx.TimeoutException | None = None
+        for attempt in (1, 2):
+            print(
+                f"[gateway] warming up {self.base_url} (attempt {attempt}/2, "
+                f"timeout {timeout_s:.0f}s) -- waiting for a possible cold start, not hung"
+            )
+            started = time.monotonic()
+            try:
+                body = await self.health(timeout_s=timeout_s)
+            except httpx.TimeoutException as timeout:
+                last_error = timeout
+                elapsed = time.monotonic() - started
+                print(f"[gateway] warm-up attempt {attempt} timed out after {elapsed:.0f}s")
+                continue
+            elapsed = time.monotonic() - started
+            print(f"[gateway] gateway is warm ({elapsed:.1f}s)")
+            return {"warm": True, "attempts": attempt, "elapsed_s": elapsed, "body": body}
+        raise RuntimeError(
+            f"gateway at {self.base_url} did not respond within {timeout_s:.0f}s across 2 "
+            "attempts; it may still be cold-starting or may be down"
+        ) from last_error
 
     def _channel_headers(self) -> dict[str, str]:
         token = os.getenv("CRUCIBLE_CHANNEL_BRIDGE_TOKEN", "").strip()

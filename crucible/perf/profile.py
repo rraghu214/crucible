@@ -125,7 +125,13 @@ class TargetProfile:
     #: which the collector honestly records as "never measured". The agent would
     #: then be told it has no evidence about a meter Prometheus is scraping fine.
     promql: dict[str, Any]
-    redaction_allowlist: tuple[str, ...]
+    #: Logical metric name -> how this runtime publishes it under Datadog.
+    #: Declared for the same reason as `promql`: Datadog's own naming and
+    #: aggregation conventions for a submitted timer are a property of the
+    #: backend and the client library that fed it, not something safe to
+    #: derive from the Micrometer name alone.
+    datadog: dict[str, Any] = field(default_factory=dict)
+    redaction_allowlist: tuple[str, ...] = ()
     skill_file: str = ""
     #: Which memory kind holds this profile's policy (the SLA, the load profile,
     #: the budget ceiling). ``AGENTS.md`` non-negotiable 4 requires the SLA to be
@@ -198,6 +204,7 @@ class TargetProfile:
             window_timers=tuple(str(t) for t in (data.get("window_timers") or [])),
             snapshot_metrics={str(k): str(v) for k, v in (data.get("snapshot_metrics") or {}).items()},
             promql=dict(data.get("promql") or {}),
+            datadog=dict(data.get("datadog") or {}),
             redaction_allowlist=tuple(str(k) for k in (data.get("redaction_allowlist") or [])),
             skill_file=str(data.get("skill_file", "")),
             # Not read from the file. A profile that could nominate its own policy

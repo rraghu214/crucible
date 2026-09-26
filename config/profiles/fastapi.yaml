@@ -1,0 +1,248 @@
+# ---------------------------------------------------------------------------
+# TargetProfile: FastAPI on CPython
+#
+# Read by the guard, the applicator and the scorer. This file GRANTS AUTHORITY:
+# a property absent from allowed_properties cannot be changed by the agent, and
+# a value outside its bounds is refused before anything is applied.
+#
+# Prose about how this runtime fails lives in SKILL.md next to this file. That
+# file is rendered into the model's system prompt and nowhere else, and grants
+# nothing (DESIGN.md section 5). Do not move authority into it.
+#
+# PROVISIONAL: unlike spring-boot.yaml, there is no live FastAPI PerfLab target
+# yet (DESIGN.md section 16's roadmap lists it as a week 3 capability, not a
+# built-and-deployed one). The tunable properties, metric names and deploy
+# section below are the profile a FastAPI target of PerfLab's shape would need
+# -- declared honestly as a template rather than invented as if verified
+# against a running box the way spring-boot.yaml's snapshot_metrics were
+# (DESIGN.md section 4.8: declare, never guess). `deploy.mode: manual` and an
+# empty branch/remote reflect that there is nothing to push to yet; wiring a
+# real target is a follow-up, not a silent assumption.
+# ---------------------------------------------------------------------------
+
+name: fastapi
+runtime: cpython
+
+# Declared by the profile, never by a global constant (DESIGN.md section 5).
+# `gc_pressure` is a JVM/CLR concept and has no CPython analogue: CPython's
+# collector is reference counting plus a generational cycle collector that
+# does not stop the world the way HotSpot's does, so a JVM-shaped "GC pause"
+# hypothesis is not just wrong here, it is not a coherent hypothesis at all.
+# `gil_contention` is what actually serializes CPU-bound work on a single
+# CPython process, and it is the family that must replace `gc_pressure` for
+# this runtime -- the agent must never propose a GC hypothesis against a
+# FastAPI target, because there is no GC pause to find.
+#
+# `thread_pool_saturation` is likewise not carried over: FastAPI's own
+# concurrency primitive is the ASGI worker (a whole process, not a pooled
+# thread within one), so the equivalent saturation signal is at the worker
+# level, not a thread pool's. `worker_saturation` is that replacement.
+cause_families:
+  - pool
+  - query
+  - downstream
+  - application_code
+  - gil_contention
+  - worker_saturation
+
+# Relative to the WORKSPACE, which would be a checkout of the FastAPI target's
+# own repository -- never Crucible's (DESIGN.md section 19.1b). `.env` is the
+# conventional settings file for a FastAPI app built on pydantic-settings; the
+# applicator's KEY=VALUE reader/writer (crucible/perf/applicator.py) already
+# handles this format, since it was written against Java properties syntax,
+# which `.env` is a subset of.
+config_file: .env
+
+# The agent may change these and nothing else. Bounds are the profile's
+# judgement, not the model's: the agent argues for a value, this file decides
+# whether the value is sane for this runtime.
+#
+# Uppercase, matching the environment-variable convention pydantic-settings
+# reads `.env` under -- not a stylistic choice, it is what the file format is.
+allowed_properties:
+  DB_POOL_SIZE:
+    type: int
+    min: 1
+    max: 100
+  DB_POOL_MAX_OVERFLOW:
+    type: int
+    min: 0
+    max: 100
+  DB_POOL_TIMEOUT_MS:
+    type: int
+    min: 1000
+    max: 60000
+  UVICORN_WORKERS:
+    type: int
+    min: 1
+    max: 32
+  THREADPOOL_MAX_WORKERS:
+    type: int
+    min: 1
+    max: 200
+  QUERY_BATCH_SIZE:
+    type: int
+    min: 1
+    max: 500
+  DOWNSTREAM_TIMEOUT_MS:
+    type: int
+    min: 100
+    max: 30000
+
+# The first half of the SLA protection. The second half is the Policy memory
+# kind, which the agent has no write permission for. Both exist because a file
+# guard can be bypassed if config moves, and a memory permission cannot -- and
+# neither is to be weakened independently of the other (DESIGN.md section
+# 4.4). Shared verbatim with spring-boot.yaml: these are Crucible-side
+# defensive patterns (checked against property names and against this
+# profile's own config_file, see `guard_proposal`), not paths inside whatever
+# target repository this profile happens to be pointed at.
+protected_paths:
+  - config/slo.yaml
+  - config/profiles/**
+  - locust/**
+  - tests/**
+  - docs/CRUCIBLE_TEST_ASSERTIONS.md
+
+# How an approved change reaches the target box (DESIGN.md section 19).
+#
+# THE AGENT NEVER WRITES THIS COMMAND. It decides *whether* to deploy; remote
+# and branch come from here, and this file is a protected path.
+#
+# mode: manual, because there is no pipeline to declare yet (DESIGN.md section
+# 19.5: automation is declared, never guessed -- an agent that assumed
+# "pipeline" would silently skip a deploy that never happened). remote and
+# branch are left empty for the same reason: naming a sandbox branch on a
+# repository that does not exist would not be a declaration, it would be a
+# guess wearing configuration's clothes. Wiring a real FastAPI target fills
+# these in without touching anything else in this file.
+deploy:
+  mode: manual
+  remote: ""
+  branch: ""
+  base_branch: main
+  instructions: |
+    No deploy pipeline is configured for this profile yet. Deploy by hand:
+    pull the approved commit onto the target box, restart the ASGI process
+    (see `restart` below), and confirm it is serving before resuming the
+    campaign. The manifest records this as a manual step (DESIGN.md
+    section 11) -- a run with human intervention is not comparable to a
+    fully autonomous one.
+
+restart:
+  # Representative of a FastAPI app served by Uvicorn directly (rather than
+  # behind Gunicorn) -- adjust to match however the real target is actually
+  # run once one exists.
+  command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+  manual: false
+  instructions: |
+    If automation is unavailable: stop the running Uvicorn process, then start
+    it again with `uvicorn app.main:app --host 0.0.0.0 --port 8000` from the
+    target's directory. A manual restart is recorded on the manifest -- a run
+    with human intervention is not comparable to a fully autonomous one.
+  health_url: http://localhost:8000/health
+  health_timeout_s: 60
+  settle_s: 3
+
+# Metric names the COLLECTOR looks up when assembling a snapshot, keyed by the
+# role each plays. FastAPI carries no Micrometer-equivalent auto-instrumentation:
+# unlike Spring Boot Actuator, nothing is exposed until the target app adds it
+# itself (typically `prometheus-fastapi-instrumentator` for HTTP timing, plus
+# custom gauges for anything pool- or worker-shaped). The names below are the
+# ones such instrumentation would plausibly use -- declared as the profile's
+# best statement of intent, not verified against a running target the way
+# spring-boot.yaml's names were against Box A (see the PROVISIONAL note at the
+# top of this file). A role this instrumentation does not provide resolves to
+# null in the snapshot -- "we never looked" -- which is the honest answer
+# rather than a guessed zero (DESIGN.md section 4.2).
+snapshot_metrics:
+  pool_acquire: db_pool_acquire_duration_seconds
+  pool_creation: db_pool_connection_created_total
+  pool_max: db_pool_size
+  http_requests: http_server_requests_seconds
+
+# Gauges the load runner samples once a second DURING a run (DESIGN.md section
+# 4.2 -- a gauge read after load drains is always healthy and always
+# meaningless). Declared per runtime for the same reason as cause_families: a
+# gauge name is a property of the runtime's instrumentation, not of Crucible.
+gauges:
+  pending: db_pool_pending_requests
+  active: db_pool_checked_out_connections
+  idle: db_pool_idle_connections
+  event_loop_lag: asyncio_event_loop_lag_seconds
+  worker_busy: asgi_workers_busy
+
+# The SAME logical metrics as above, as Prometheus publishes them, for a
+# `prometheus-fastapi-instrumentator` / `prometheus_client` deployment. Unlike
+# Micrometer, Python client libraries do not rename a meter by appending its
+# base unit, so these mostly match `snapshot_metrics` verbatim -- the one
+# exception noted below.
+#
+# `unit` is what the adapter converts by. Only `seconds` is convertible today;
+# anything else is carried through marked unreadable and excluded from derived
+# values rather than being read at the wrong magnitude (DESIGN.md 4.8).
+promql:
+  db_pool_acquire_duration_seconds:
+    count: db_pool_acquire_duration_seconds_count
+    total: db_pool_acquire_duration_seconds_sum
+    max: db_pool_acquire_duration_seconds_max
+    unit: seconds
+  http_server_requests_seconds:
+    count: http_server_requests_seconds_count
+    total: http_server_requests_seconds_sum
+    max: http_server_requests_seconds_max
+    unit: seconds
+    # prometheus-fastapi-instrumentator splits this across handler/method/status
+    # by default, exactly as Micrometer splits http.server.requests -- the same
+    # reason spring-boot.yaml declares `aggregate: sum` rather than a bare name.
+    aggregate: sum
+  # Gauges: a bare series name, no unit conversion involved.
+  db_pool_size: db_pool_size
+  db_pool_pending_requests: db_pool_pending_requests
+  db_pool_checked_out_connections: db_pool_checked_out_connections
+  db_pool_idle_connections: db_pool_idle_connections
+  asyncio_event_loop_lag_seconds: asyncio_event_loop_lag_seconds
+  asgi_workers_busy: asgi_workers_busy
+
+# Histogram series for true service-wide percentiles (DESIGN.md section 5):
+# Actuator-equivalent single-instance readouts cannot combine into a service
+# p99, so the quantile must be taken after summing buckets across instances.
+promql_histogram: http_server_requests_seconds_bucket
+
+# Cumulative timers read once at end of warmup and once at end of measurement,
+# so the collector can express each as a delta across the measured window
+# rather than a lifetime average.
+window_timers:
+  - db_pool_acquire_duration_seconds
+  - http_server_requests_seconds
+
+# Provider metric name -> the cause family it speaks to. `application_code`
+# has no entry here deliberately, matching lock_contention-style causes in
+# spring-boot.yaml that are diagnosable but not metric-visible: a
+# `time.sleep()` or a slow synchronous call buried in a handler shows up in
+# latency shape and traces, never in a named meter, and inventing one would
+# be exactly the guessing DESIGN.md section 4.8 forbids.
+metric_map:
+  db_pool_acquire_duration_seconds: pool
+  db_pool_pending_requests: pool
+  db_pool_checked_out_connections: pool
+  db_pool_idle_connections: pool
+  db_query_duration_seconds: query
+  db_query_count_total: query
+  httpx_client_duration_seconds: downstream
+  asyncio_event_loop_lag_seconds: gil_contention
+  asgi_workers_busy: worker_saturation
+
+# Allowlist, never blocklist (DESIGN.md section 12). Only the keys named here
+# survive into a snapshot, a prompt or a journal.
+redaction_allowlist:
+  - APP_NAME
+  - DB_POOL_SIZE
+  - DB_POOL_MAX_OVERFLOW
+  - DB_POOL_TIMEOUT_MS
+  - UVICORN_WORKERS
+  - THREADPOOL_MAX_WORKERS
+  - QUERY_BATCH_SIZE
+  - DOWNSTREAM_TIMEOUT_MS
+
+skill_file: ../../skills/fastapi/SKILL.md
