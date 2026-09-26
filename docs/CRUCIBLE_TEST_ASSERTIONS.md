@@ -2088,6 +2088,29 @@ of the sort.
 
 ---
 
+### 22.6 The first case after the warm-up reaches the model
+
+**REVIEW NEEDED** — added 26 September 2026, after this group was approved.
+
+**What it checks.** `cmd_bench` against a transport that, like httpx, is bound to
+the event loop it first ran on: the first case completes with no error and records
+the model that served it. The test fails on the pre-fix code.
+
+**Why it exists.** `cmd_bench` ran `asyncio.run(gateway.warm_up())` and then a
+second `asyncio.run(runner.run(...))`. The warm-up's pooled connection outlived its
+loop, and the first case of **every** replay died with `Event loop is closed` —
+observed three times out of three on 26 September 2026. Always the first case, so
+always T1 on `perflab_pool_starved`: the headline fixture was the one replay never
+measured, and because it was one error in five it read as a flaky call rather than
+a deterministic loss. 22.3 recorded it honestly as an error, which is how it was
+found.
+
+**For review:** the test's fake reproduces the *symptom* (a different running loop
+raises) rather than httpx's real pooling. That keeps it offline and fast, but it
+would not catch a different loop-affinity bug inside httpx itself.
+
+---
+
 # GROUP 23 — The watchdog
 
 *Week 4, `crucible/perf/watchdog.py`. Implemented in `tests/test_perf_watchdog.py`

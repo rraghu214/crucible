@@ -930,14 +930,22 @@ def cmd_bench(
         sla=sla.as_dict(),
     )
 
-    print(f"replaying {len(tasks)} task(s) against fixtures in {fixture_dir}")
-    try:
+    async def warm_then_replay() -> Any:
         # The gateway is hosted on a free tier and spins down when idle; pay the
         # cold start before the first case rather than inside it.
-        asyncio.run(gateway.warm_up())
-        result = asyncio.run(
-            runner.run(tasks, fixture_dir, task_set_name=str(Path(tasks_path).name))
-        )
+        #
+        # ONE event loop for both. The gateway's httpx client pools connections
+        # per loop, and this was two `asyncio.run` calls until 26 September 2026:
+        # the warm-up's connection outlived its loop, and the first case of every
+        # replay failed with "Event loop is closed". Always the first case, so
+        # always T1 on perflab_pool_starved -- the headline fixture was the one
+        # replay could never measure, on every run, without looking flaky.
+        await gateway.warm_up()
+        return await runner.run(tasks, fixture_dir, task_set_name=str(Path(tasks_path).name))
+
+    print(f"replaying {len(tasks)} task(s) against fixtures in {fixture_dir}")
+    try:
+        result = asyncio.run(warm_then_replay())
     except ReplayError as exc:
         print(f"bench refused: {exc}")
         return REFUSED

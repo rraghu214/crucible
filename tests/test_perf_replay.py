@@ -449,3 +449,62 @@ class TestTheShippedTaskSet:
         tasks = load_tasks("proofs/tasks/perf_replay_v1.yaml")
 
         assert all(t.expectation for t in tasks)
+
+
+# ---------------------------------------------------------------------------
+# 22.6 — warm-up and replay share one event loop
+#
+# DRAFTED by Claude Code, 26 September 2026. NOT YET REVIEWED by the operator.
+# ---------------------------------------------------------------------------
+
+
+class _LoopBoundGateway:
+    """Fails the way the real httpx-backed client failed on 26 September 2026.
+
+    A pooled connection belongs to the event loop that opened it. Used from a
+    different loop -- because the warm-up ran under one ``asyncio.run`` and the
+    replay under another -- the first call dies with "Event loop is closed".
+    """
+
+    def __init__(self):
+        self.loop = None
+
+    async def warm_up(self):
+        self.loop = asyncio.get_running_loop()
+        return {"warm": True}
+
+    async def chat(self, *, prompt, system, request=None):
+        if self.loop is not None and asyncio.get_running_loop() is not self.loop:
+            raise RuntimeError("Event loop is closed")
+        return {
+            "text": json.dumps({"cause_family": "", "abstain": True, "abstain_reason": "healthy", "changes": []}),
+            "provider": "fake_1",
+            "model": "fake-model",
+        }
+
+
+class TestTheFirstReplayCaseIsNotLostToTheWarmUp:
+    """Before the fix, the first case of every `crucible bench` run was an
+    error -- always the same case, T1 on `perflab_pool_starved`, so the headline
+    fixture was the one replay never measured, and it did not look flaky."""
+
+    def test_the_first_case_after_warm_up_reaches_the_model(self, tmp_path, monkeypatch):
+        import crucible.gateway
+        from crucible.perf import commands
+
+        monkeypatch.setattr(crucible.gateway, "GatewayClient", _LoopBoundGateway)
+        _write_fixture(tmp_path / "fixtures", "perflab_healthy", "")
+        tasks = tmp_path / "tasks.yaml"
+        tasks.write_text(
+            "id: T4\ntask_class: D\nfixtures: [perflab_healthy]\n", encoding="utf-8"
+        )
+        out = tmp_path / "replay.json"
+
+        code = commands.cmd_bench(
+            tasks_path=str(tasks), fixture_dir=str(tmp_path / "fixtures"), out=str(out), model="fake-model"
+        )
+
+        assert code == commands.OK
+        first = json.loads(out.read_text(encoding="utf-8"))["cases"][0]
+        assert first["error"] == "", first["error"]
+        assert first["served_by_model"] == "fake-model"
