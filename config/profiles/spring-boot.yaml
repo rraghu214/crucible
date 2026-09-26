@@ -26,6 +26,18 @@ cause_families:
   - downstream_latency
   - lock_contention
   - payload_serialization
+  # Added 26 September 2026. The code itself is slow -- a blocking call on the
+  # handler path, a synchronous library call, an in-memory computation -- and
+  # NO property on allowed_properties below can fix it. That is the point:
+  # naming a cause grants no authority (allowed_properties does), so a family
+  # the agent can name but cannot act on is how the config-only boundary
+  # becomes a declared scope rather than a blind spot.
+  #
+  # fastapi.yaml already declared this. The same condition being nameable on
+  # one runtime and not the other was an inconsistency, not a safety property,
+  # and it left `perflab_code_latency` as a fixture nothing could correctly
+  # name. See DESIGN.md section 5 and assertion 4.5.
+  - application_code
 
 # Relative to the WORKSPACE, which is a checkout of the target's own repository
 # (https://github.com/rraghu214/perf-lab) -- not of Crucible. See DESIGN.md
@@ -250,6 +262,61 @@ promql:
     labels:
       area: heap
     aggregate: sum
+
+# The SAME logical metrics again, as Datadog publishes them.
+#
+# PROVISIONAL: no Datadog agent is attached to Box A yet, so unlike the `promql:`
+# block above -- which was corrected on 20 September 2026 after a real Prometheus
+# returned nothing for two of its entries -- nothing here has been checked against
+# a live backend. Expect the same class of correction when one is.
+#
+# Declared, not derived, for a sharper reason than under Prometheus. Datadog's
+# suffix depends on HOW a metric was submitted: a distribution exposes `.count`,
+# `.sum` and `.max`, a plain timer may expose `.avg` and no `.sum` at all, and a
+# gauge exposes only itself. There is no rule that turns a Micrometer name into
+# the right triple, and a wrong name returns no data -- which the collector
+# faithfully records as "never measured" while Datadog holds the answer.
+#
+# `unit: nanoseconds` on every timer is the load-bearing line. Micrometer's
+# DatadogMeterRegistry publishes timer base units in NANOSECONDS, where the same
+# meter under Prometheus is seconds. The adapter converts to the collector's
+# seconds contract using the unit declared here; without the declaration it
+# refuses the metric rather than reading 2406 ms as 2.4 billion.
+datadog:
+  hikaricp.connections.acquire:
+    count: hikaricp.connections.acquire.count
+    total: hikaricp.connections.acquire.sum
+    max: hikaricp.connections.acquire.max
+    unit: nanoseconds
+  hikaricp.connections.creation:
+    count: hikaricp.connections.creation.count
+    total: hikaricp.connections.creation.sum
+    max: hikaricp.connections.creation.max
+    unit: nanoseconds
+  jvm.gc.pause:
+    count: jvm.gc.pause.count
+    total: jvm.gc.pause.sum
+    max: jvm.gc.pause.max
+    unit: nanoseconds
+  http.server.requests:
+    count: http.server.requests.count
+    total: http.server.requests.sum
+    max: http.server.requests.max
+    unit: nanoseconds
+  # Gauges: a bare metric name, no unit conversion involved.
+  hikaricp.connections.max: hikaricp.connections.max
+  hikaricp.connections.pending: hikaricp.connections.pending
+  hikaricp.connections.active: hikaricp.connections.active
+  hikaricp.connections.idle: hikaricp.connections.idle
+  jvm.threads.live: jvm.threads.live
+  # One series per memory pool, exactly as under Prometheus. `area: heap` is
+  # deliberate: the collector's field is `heap_used_peak_bytes`, and quietly
+  # including non-heap would make the number not the thing its name claims.
+  jvm.memory.used:
+    value: jvm.memory.used
+    aggregator: sum
+    tags:
+      area: heap
 
 # Histogram series for true service-wide percentiles. Actuator cannot do this:
 # it exposes one instance's pre-aggregated p99, and two instances' p99s do not

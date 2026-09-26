@@ -202,6 +202,60 @@ Dynatrace, Grafana Labs, Elastic, Chronosphere and IBM.)
 `event_loop_block`. A hardcoded list would make the agent propose impossible
 hypotheses on one runtime and miss real ones on another.
 
+**The declared list is a vocabulary, not a closed set.** Operator decision,
+26 September 2026. Until then a proposal naming an undeclared cause was refused
+by the guard before its properties were even checked, and that was wrong for a
+reason worth writing down: no list enumerated in advance survives contact with
+real services. Causes will be discovered that nobody wrote down, and an agent
+that must either abstain or mislabel them is one that reports a service as
+healthy because its problem had no name.
+
+So a **novel cause is permitted, and it is recorded as novel.** Three things make
+that safe, and none of them is the agent's own judgement:
+
+- **Authority is unchanged.** `allowed_properties` and its bounds are what the
+  guard enforces, and they are untouched. Naming a cause has never granted
+  permission to change anything; the property list does that, and a novel cause
+  buys no new property.
+- **A human still approves the change** (§19.4), and still sees the exact diff.
+- **The verdict is still measured** (§4.5). A change proposed under an invented
+  cause is applied, re-measured and reverted on evidence exactly like any other.
+
+What changes is only that the agent may *say what it thinks this is* when the
+profile has no word for it. The novelty travels on the manifest
+(`cause_family_declared: false`), the report states it, and the scorer counts it,
+so a campaign cannot accumulate invented vocabulary quietly. Promotion into
+`profile.yaml` is a human's decision — the same rule §13 already applies to
+Playbooks, where a signature discovered on one service stays project-scoped until
+somebody promotes it, so that one app's quirk never becomes everyone's false
+positive.
+
+**Confidence is not a gate, and must not become one.** The rejected alternative
+was to let the agent act on an undeclared cause when it reported high confidence
+— 95% was the number proposed. That fails three ways. It is a gate the agent
+controls, so an agent that learns the threshold has every reason to report it,
+which is §4.4's moving-goalpost failure one step removed. It rests on a
+calibration nobody has measured: the only figure on record is K3's single point
+(predicted 140 ms, measured 93 ms), which `EVALUATION.md` explicitly says is not
+a curve to grade against. And confidence in a *diagnosis* is not confidence in a
+*fix* — that gap is precisely the `LUCKY` quadrant of §4.7.
+
+The deeper reason it is unnecessary: the loop already lets the agent act under
+uncertainty safely. Bounded property, human approval, measured verdict, automatic
+revert. A confidence gate buys nothing that the measurement does not already buy,
+and costs a property the rest of the design depends on — that no number the agent
+produces about itself is ever load-bearing.
+
+**Declaring a family you know about is still right.** The novel path is an escape
+hatch for what nobody anticipated, not a reason to stop maintaining the list. A
+declared family gets a canonical name, so two campaigns agree on what to call it,
+and a `SKILL.md` section describing the signal it leaves — neither of which an
+invented name has. `application_code` was added to the Spring Boot profile on
+26 September 2026 for exactly that reason: FastAPI already declared it, the same
+condition was nameable on one runtime and not the other, and a benchmark fixture
+existed that nothing could correctly name.
+
+
 **`SKILL.md` and `profile.yaml` are separate, deliberately.**
 
 | | `SKILL.md` | `profile.yaml` |

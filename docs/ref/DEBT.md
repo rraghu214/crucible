@@ -67,3 +67,62 @@ work. Fix only when touching the file for another reason.
   Cheapest fix when it is wanted: a shared bearer token in Render's env, checked
   in glc_v5's request path, and one header added to `GatewayClient._payload`'s
   caller. Perhaps an hour, most of it in glc_v5 rather than here.
+
+- **The Tomcat thread meters are mapped but never sampled, so
+  `thread_pool_saturation` cannot be confirmed from a snapshot.**
+  `config/profiles/spring-boot.yaml` lists `tomcat.threads.busy` and
+  `tomcat.threads.config.max` in `metric_map` -- which is what lets the agent say
+  the family exists -- but in neither `gauges` nor `snapshot_metrics`, which are
+  the blocks the collector actually reads. A snapshot therefore carries no thread
+  fields at all: not null ones, absent ones. The agent cannot declare an evidence
+  gap about a field that was never named to it.
+
+  **Accepted deliberately by the operator on 26 September 2026.** The cost of
+  closing it is small (two lines in `gauges:`, plus the PromQL and Datadog series
+  names) but it lands mid-week-3 and would invalidate nothing already captured, so
+  it is better done before a capture run than during one.
+
+  Two consequences are live now rather than later:
+
+  - `config/fixtures/perflab_thread_starved.yaml` is declared but **excluded from
+    capture** until the meters exist. Capturing it first would bake the absence
+    into every replay case built on it, and the agent would then be scored on a
+    diagnosis the evidence could never support.
+  - `spring-boot.SKILL.md` states the gap explicitly, so the model is told not to
+    hunt for `tomcat.threads.busy` and not to infer the family from the *absence*
+    of pool and GC signals -- an elimination performed on evidence nobody
+    gathered is exactly the K3 attempt-1 failure (DESIGN.md 4.3).
+
+  Closing it means: add `threads_busy` / `threads_config_max` to `gauges:`, add
+  their `promql:` and `datadog:` series names, bump `COLLECTOR_VERSION` (the
+  snapshot shape changes, and every existing fixture must then be recaptured --
+  DESIGN.md 7), then capture the fixture.
+
+- **The Datadog adapter cannot tell "not authorised" from "no such metric".**
+  `DatadogMetricsProvider.query` catches `httpx.HTTPError` and returns an empty
+  series, which the collector renders as `null` -- so a 403 from a wrong API key
+  or the wrong Datadog site, a 429 rate limit, a transient 502, and a metric that
+  genuinely has no data in the window all reach the agent as the same "never
+  measured". Two of those four are fixable by a human in under a minute; the
+  other two are not, and the agent has no way to say which it hit.
+
+  This sits directly against principle 2 (the agent knows what it cannot see) and
+  against DESIGN.md 4.8's rule that an unreadable metric is *declared*. The
+  adapter already has the right machinery -- `unreadable` carries a reason per
+  metric for the unit case -- so the fix is to record the status code there
+  instead of discarding it, not to raise.
+
+  Sharpened by the free tier: 1 host and **1-day retention**, so a query whose
+  window falls outside retention returns empty and is indistinguishable from a
+  metric that does not exist. `provider.unreadable` is where that distinction
+  belongs.
+
+  Also noted while reading it: credentials go in query PARAMETERS
+  (`api_key`, `application_key`) rather than `DD-API-KEY` headers. Nothing
+  currently logs the URL, so nothing leaks today -- but DESIGN.md 8 and 19.8 ask
+  that credentials never be able to become a printable string, and a URL is one
+  formatted exception away from being printed. The v1 query API accepts both
+  forms; the header form costs nothing and removes the class of failure.
+
+  Both open as of 26 September 2026, both in `tests/test_perf_datadog.py`'s
+  group (GROUP 19), which is the one group still marked REVIEW NEEDED.

@@ -109,15 +109,48 @@ class TestTheProfileIsTheAuthority:
         assert refusal is not None
         assert "above the maximum 100" in refusal
 
-    def test_an_undeclared_cause_family_is_refused(self):
-        """Naming a family the runtime does not have means the diagnosis is not
-        about this runtime. `gc` is a JVM concept; a profile that does not declare
-        it must not accept a proposal claiming it."""
-        refusal = guard_proposal(a_profile(), a_proposal(cause_family="gil_contention"))
+    def test_an_undeclared_cause_family_is_permitted_and_flagged_not_refused(self):
+        """CHANGED 26 September 2026, operator decision (DESIGN.md 5).
+
+        This test previously asserted the opposite: an undeclared family was
+        refused categorically, before the properties were even checked. That was
+        wrong for a reason worth keeping written down -- no list enumerated in
+        advance survives contact with real services, and an agent that must
+        abstain or mislabel a cause nobody wrote down is one that reports a
+        service healthy because its problem had no name.
+
+        What replaces the refusal is a RECORD. Nothing that was doing real work
+        has changed: the property must still be on the allowlist and inside its
+        bounds, a human still approves, and the verdict still comes from a
+        re-measurement. Naming a cause never granted permission to change
+        anything, so permitting a novel name grants nothing new.
+        """
+        from crucible.perf.applicator import novel_cause
+
+        profile = a_profile()
+        proposal = a_proposal(cause_family="gil_contention")
+
+        assert guard_proposal(profile, proposal) is None
+        assert novel_cause(profile, proposal) == "gil_contention"
+
+    def test_a_declared_cause_family_is_not_flagged_as_novel(self):
+        from crucible.perf.applicator import novel_cause
+
+        profile = a_profile()
+        assert novel_cause(profile, a_proposal(cause_family="connection_pool_exhaustion")) == ""
+
+    def test_a_proposal_naming_no_cause_at_all_is_still_refused(self):
+        """The one cause-family check that remains, and it is not about vocabulary.
+
+        A change with no stated cause cannot be reviewed by the operator who has
+        to approve it, cannot be scored against a ground truth, and cannot be
+        found again in the journal. The novel-cause path is for a cause the agent
+        can name and the profile cannot; it is not permission to name none.
+        """
+        refusal = guard_proposal(a_profile(), a_proposal(cause_family=""))
 
         assert refusal is not None
-        assert "gil_contention" in refusal
-        assert "not a cause family" in refusal
+        assert "names no cause family" in refusal
 
     def test_the_first_refusal_reason_is_the_one_reported(self):
         """'You may not touch that property at all' and 'that value is out of
