@@ -264,11 +264,27 @@ def test_an_empty_providers_list_is_not_silently_restored_to_the_default():
     assert defaulted.providers == ("actuator",)
 
 
-def test_the_plan_names_unvalidated_fixtures_rather_than_counting_them(specs):
-    """'Some fixtures were skipped' is not an actionable message at 3am."""
-    plan = capture_plan(specs)
-    assert "perflab_pool_starved" in plan["unvalidated"]
-    assert "perflab_pool_starved" in plan["warning"]
+def test_the_plan_names_unvalidated_fixtures_rather_than_counting_them():
+    """'Some fixtures were skipped' is not an actionable message at 3am.
+
+    Asserted on a constructed pair rather than on the live set. The original
+    version named perflab_pool_starved, and broke the moment that fixture was
+    validated on Box A -- a test that fails when the project makes progress is
+    testing the calendar, not the behaviour.
+    """
+    dated = FixtureSpec(id="f_done", cause_family="x", validated_at="2026-09-26")
+    undated = FixtureSpec(id="f_todo", cause_family="y")
+    plan = capture_plan([dated, undated])
+    assert plan["unvalidated"] == ["f_todo"]
+    assert "f_todo" in plan["warning"]
+    assert "f_done" not in plan["warning"]
+
+
+def test_a_fixture_validated_on_the_box_records_the_date(specs):
+    """The three captured on Box A on 26 September 2026 carry their evidence."""
+    by_id = {s.id: s for s in specs}
+    for fixture_id in ("perflab_pool_starved", "perflab_pool_starved_mild", "perflab_healthy"):
+        assert by_id[fixture_id].validated_at == "2026-09-26", fixture_id
 
 
 def test_a_validated_fixture_drops_out_of_the_warning():
