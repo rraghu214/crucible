@@ -1220,6 +1220,18 @@ def cmd_capture(
         result = k1_revalidation(p99s)
         print(f"\n  spread: {result['reason']}")
         print(f"  p99s:   {result['p99s_ms']}")
+        if result["spread_pct"] is None:
+            # NOT the same refusal as failing the threshold, and saying so
+            # matters. "This box is unstable" is a measured claim; this is the
+            # ABSENCE of a measurement, and reporting one as the other is the
+            # verified/unverified conflation principle 1 exists to prevent.
+            print(
+                "\n  REFUSED: not enough runs to compute a spread at all. A spread "
+                "across one measurement is not a small spread -- it is no spread. "
+                "Nothing has been learned about this box either way; re-run with "
+                "--revalidate 3."
+            )
+            return REFUSED
         if not result["passed"]:
             print(
                 "\n  REFUSED. Capturing on a box this unstable produces fixtures that "
