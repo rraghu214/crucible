@@ -1,0 +1,126 @@
+{
+  "spec": {
+    "id": "perflab_pool_starved_mild",
+    "cause_family": "connection_pool_exhaustion",
+    "profile": "spring-boot",
+    "setup": "As perflab_pool_starved, with the pool at 5 rather than 2. Same endpoint, same 50 users, same think time. Expect pending in the single figures and acquire time in the tens of milliseconds rather than the thousands -- present, but not the kind of number that announces itself.\n",
+    "task_classes": [
+      "A",
+      "C"
+    ],
+    "trap_properties": [
+      "spring.datasource.hikari.connection-timeout"
+    ],
+    "bottleneck_config": {
+      "spring.datasource.hikari.maximum-pool-size": 5
+    },
+    "severity": "mild",
+    "validated_at": "",
+    "scenario_tag": "db",
+    "providers": [
+      "actuator"
+    ],
+    "notes": "The severity boundary is a judgement, not a measurement: pool=5 was chosen as \"constrained but arguable\" without anything having been measured at that setting yet. If the K1 re-validation shows pool=5 produces a signal as loud as pool=2 -- or none at all -- this number is the one to change, and the fixture is worth nothing until it sits in between.\n"
+  },
+  "provider": "actuator",
+  "captured_at_epoch_s": 1790416855.6742458,
+  "warmup_s": 120.0,
+  "measure_s": 300.0,
+  "snapshot": {
+    "collector_version": "1.1.0",
+    "captured_at_epoch_s": 1790416855.6742458,
+    "run_id": "fixture-perflab_pool_starved_mild",
+    "profile": "spring-boot",
+    "target": "http://10.0.0.79:8080",
+    "window": {
+      "count": 30642.0,
+      "total_ms": 9017583.457406003,
+      "mean_ms": 294.2883446709093,
+      "max_recent_ms": 657.414923,
+      "max_recent_ms_note": "rolling ~2-minute maximum read at end of window, NOT the maximum over the measured window. Micrometer's MAX decays, so a spike early in the window has already aged out. Under-reports transient causes such as GC pauses; approximates the true window max only for sustained ones.",
+      "warmup_s": 120.0,
+      "measure_s": 300.0
+    },
+    "load_summary": {
+      "p50_ms": 310.0,
+      "p95_ms": 350.0,
+      "p99_ms": 560.0,
+      "mean_ms": 311.8822853787208,
+      "max_ms": 1060.8172311913222,
+      "rps": 96.98775440866797,
+      "request_count": 29031,
+      "failure_count": 0,
+      "error_rate_pct": 0.0,
+      "warmup_s": 120.0,
+      "measure_s": 300.0,
+      "ramp_s": 5.0
+    },
+    "hikaricp": {
+      "acquire_count": 40647.0,
+      "acquire_mean_ms": 258.2856052559845,
+      "acquire_max_recent_ms": 605.908094,
+      "acquire_total_ms": 10498534.99684,
+      "creation_count": 3.0,
+      "creation_mean_ms": 45.333333333333336,
+      "creation_max_recent_ms": 0.0,
+      "creation_total_ms": 136.0,
+      "pending_peak_connections": 32.0,
+      "active_peak_connections": 5.0,
+      "idle_trough_connections": 0.0,
+      "pool_max_connections": 5.0,
+      "utilisation_peak_pct": 100.0
+    },
+    "jvm": {
+      "gc_pause_count": 66.0,
+      "gc_pause_mean_ms": 8.893939393939394,
+      "gc_pause_max_recent_ms": 199.0,
+      "gc_pause_total_ms": 587.0,
+      "heap_used_peak_bytes": 237047672.0,
+      "threads_live_peak_threads": 63.0
+    },
+    "http": {
+      "request_count": 42122.0,
+      "request_mean_ms": 299.2062154144391,
+      "request_max_recent_ms": 657.414923,
+      "request_total_ms": 12603164.205687003
+    },
+    "endpoint_breakdown": {
+      "/api/version": {
+        "request_count": 4.0,
+        "mean_ms": 17.14684,
+        "max_ms": 0.0
+      },
+      "/actuator/metrics/{requiredMetricName}": {
+        "request_count": 1500.0,
+        "mean_ms": 0.9036498826666668,
+        "max_ms": 3.442186
+      },
+      "/actuator/health": {
+        "request_count": 1.0,
+        "mean_ms": 2272.907881,
+        "max_ms": 0.0
+      },
+      "/actuator/prometheus": {
+        "request_count": 85.0,
+        "mean_ms": 24.47212247058824,
+        "max_ms": 31.940960999999998
+      },
+      "/api/db": {
+        "request_count": 40535.0,
+        "mean_ms": 310.7781322562477,
+        "max_ms": 657.414923
+      }
+    },
+    "runtime_config": {},
+    "baseline_reference": {},
+    "available_evidence": {
+      "metrics": true,
+      "traces": false,
+      "trace_reason": "no trace provider configured for this campaign",
+      "trace_sampling_rate_pct": null,
+      "endpoint_breakdown": true,
+      "gauge_sampling": true,
+      "notes": []
+    }
+  }
+}

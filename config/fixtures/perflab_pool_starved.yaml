@@ -66,7 +66,14 @@ task_classes: [A, C]
 
 # Filled after the K1 re-validation run confirms the signal reproduces on the box
 # (3 identical campaigns, p99 spread under 20%). EMPTY MEANS NOT CONFIRMED.
-validated_at: ""
+# Confirmed on Box A, 26 September 2026. The signal is not merely present, it
+# reproduces the K3 spike almost exactly: acquire_mean_ms 1022.6,
+# acquire_max_recent_ms 2156.8 (K3 recorded 2406), and pending_peak_connections
+# 43.0 -- the same 43 the K3 write-up names as the value the model never saw
+# because it read the gauge after load drained. p99 1200 ms against a 57 ms
+# healthy baseline on the same endpoint, 0 failures in 11,574 requests,
+# utilisation pinned at 100% of a pool of 2.
+validated_at: "2026-09-26"
 
 notes: >
   The signal was observed on this configuration during K1/K3 (docs/K1_RESULT.md,

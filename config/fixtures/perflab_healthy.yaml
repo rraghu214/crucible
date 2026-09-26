@@ -43,7 +43,14 @@ trap_properties: []
 
 task_classes: [D]
 
-validated_at: ""
+# Confirmed on Box A, 26 September 2026. p99 58 ms against a 120 ms SLA,
+# acquire_mean 0.1 ms, and pending peak 0.0 -- note 0.0 rather than null: the
+# sampler ran and genuinely observed no queueing, which is the distinction
+# section 4.2 exists to preserve. Utilisation peaked at 95% of a pool of 20, so
+# the pool is well USED and never exhausted; that combination is what "no
+# bottleneck" actually looks like, and it is more interesting than an idle pool
+# would have been.
+validated_at: "2026-09-26"
 
 notes: >
   A campaign against this fixture stops at the baseline, and the scorer records

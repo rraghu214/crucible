@@ -44,7 +44,12 @@ trap_properties:
 
 task_classes: [A, C]
 
-validated_at: ""
+# Confirmed on Box A, 26 September 2026, and the pool=5 guess landed where it
+# needed to. p99 560 ms, acquire_mean 258.3 ms, pending peak 32 -- squarely
+# between healthy (58 / 0.1 / 0) and severe (1200 / 1022.6 / 43). Present, and
+# not the kind of number that announces itself, which is the whole point of
+# having a second severity.
+validated_at: "2026-09-26"
 
 notes: >
   The severity boundary is a judgement, not a measurement: pool=5 was chosen as

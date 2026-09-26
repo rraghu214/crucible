@@ -1,0 +1,128 @@
+{
+  "spec": {
+    "id": "perflab_pool_starved",
+    "cause_family": "connection_pool_exhaustion",
+    "profile": "spring-boot",
+    "setup": "Set the pool to 2 in src/main/resources/application.properties in the perf-lab checkout (github.com/rraghu214/perf-lab), rebuild, restart, and drive /api/db at 50 users. Fifty concurrent users against two connections queues almost everything: pending peaks in the forties and acquire time runs into seconds while p50 stays respectable, which is the signature that makes this indistinguishable from GC pressure to anyone reading only the percentiles.\n",
+    "task_classes": [
+      "A",
+      "C"
+    ],
+    "trap_properties": [
+      "spring.datasource.hikari.connection-timeout"
+    ],
+    "bottleneck_config": {
+      "spring.datasource.hikari.maximum-pool-size": 2
+    },
+    "severity": "severe",
+    "validated_at": "",
+    "scenario_tag": "db",
+    "providers": [
+      "actuator",
+      "promql",
+      "datadog"
+    ],
+    "notes": "The signal was observed on this configuration during K1/K3 (docs/K1_RESULT.md, docs/K3_RESULT.md), but on the pre-split repository layout and before the collector's unit conversion existed. It is recorded as unvalidated until it has been re-confirmed on the current box with the current collector -- a previous observation of the same state is evidence, not validation.\n"
+  },
+  "provider": "actuator",
+  "captured_at_epoch_s": 1790416138.8076463,
+  "warmup_s": 120.0,
+  "measure_s": 300.0,
+  "snapshot": {
+    "collector_version": "1.1.0",
+    "captured_at_epoch_s": 1790416138.8076463,
+    "run_id": "fixture-perflab_pool_starved",
+    "profile": "spring-boot",
+    "target": "http://10.0.0.79:8080",
+    "window": {
+      "count": 13182.0,
+      "total_ms": 12561947.678065,
+      "mean_ms": 952.9621967884236,
+      "max_recent_ms": 2206.216703,
+      "max_recent_ms_note": "rolling ~2-minute maximum read at end of window, NOT the maximum over the measured window. Micrometer's MAX decays, so a spike early in the window has already aged out. Under-reports transient causes such as GC pauses; approximates the true window max only for sustained ones.",
+      "warmup_s": 120.0,
+      "measure_s": 300.0
+    },
+    "load_summary": {
+      "p50_ms": 1100.0,
+      "p95_ms": 1100.0,
+      "p99_ms": 1200.0,
+      "mean_ms": 1082.030016571357,
+      "max_ms": 2222.487675026059,
+      "rps": 38.66443356717633,
+      "request_count": 11574,
+      "failure_count": 0,
+      "error_rate_pct": 0.0,
+      "warmup_s": 120.0,
+      "measure_s": 300.0,
+      "ramp_s": 5.0
+    },
+    "hikaricp": {
+      "acquire_count": 16299.0,
+      "acquire_mean_ms": 1022.577103663599,
+      "acquire_max_recent_ms": 2156.825312,
+      "acquire_total_ms": 16666984.212613,
+      "creation_count": 0.0,
+      "creation_mean_ms": null,
+      "creation_max_recent_ms": 0.0,
+      "creation_total_ms": 0.0,
+      "pending_peak_connections": 43.0,
+      "active_peak_connections": 2.0,
+      "idle_trough_connections": 0.0,
+      "pool_max_connections": 2.0,
+      "utilisation_peak_pct": 100.0
+    },
+    "jvm": {
+      "gc_pause_count": 41.0,
+      "gc_pause_mean_ms": 7.414634146341464,
+      "gc_pause_max_recent_ms": 9.0,
+      "gc_pause_total_ms": 304.0,
+      "heap_used_peak_bytes": 237145200.0,
+      "threads_live_peak_threads": 66.0
+    },
+    "http": {
+      "request_count": 17784.0,
+      "request_mean_ms": 984.8995468530702,
+      "request_max_recent_ms": 2206.216703,
+      "request_total_ms": 17515453.541235
+    },
+    "endpoint_breakdown": {
+      "/api/version": {
+        "request_count": 3.0,
+        "mean_ms": 32.491244333333334,
+        "max_ms": 0.0
+      },
+      "/actuator/metrics/{requiredMetricName}": {
+        "request_count": 1505.0,
+        "mean_ms": 0.7590125455149502,
+        "max_ms": 5.473922
+      },
+      "/actuator/health": {
+        "request_count": 1.0,
+        "mean_ms": 2359.742535,
+        "max_ms": 0.0
+      },
+      "/actuator/prometheus": {
+        "request_count": 88.0,
+        "mean_ms": 21.04576311363636,
+        "max_ms": 29.170742
+      },
+      "/api/db": {
+        "request_count": 16192.0,
+        "mean_ms": 1081.5344674876483,
+        "max_ms": 2206.216703
+      }
+    },
+    "runtime_config": {},
+    "baseline_reference": {},
+    "available_evidence": {
+      "metrics": true,
+      "traces": false,
+      "trace_reason": "no trace provider configured for this campaign",
+      "trace_sampling_rate_pct": null,
+      "endpoint_breakdown": true,
+      "gauge_sampling": true,
+      "notes": []
+    }
+  }
+}
