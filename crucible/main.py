@@ -30,6 +30,7 @@ from crucible.events import AutonomousEventEngine, EventStore  # noqa: E402
 from crucible.events.routes import router as events_router  # noqa: E402
 from crucible.gateway import GatewayClient  # noqa: E402
 from crucible.runtime import AgentRuntime  # noqa: E402
+from crucible.ui.perf_ui import router as perf_ui_router  # noqa: E402
 from crucible.ui.routes import router as ui_router  # noqa: E402
 
 PORT = int(os.getenv("CRUCIBLE_PORT", "8113"))
@@ -131,6 +132,7 @@ app = FastAPI(title="Crucible — Live Graph, Memory, Semantic Chunking and A2A"
 app.include_router(routes.router)
 app.include_router(a2a_routes.router)
 app.include_router(ui_router)
+app.include_router(perf_ui_router)
 app.include_router(events_router)
 
 

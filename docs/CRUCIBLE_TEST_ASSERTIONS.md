@@ -2930,6 +2930,137 @@ manifests on disk.
 
 ---
 
+# GROUP 28 — The campaign UI: nineteen screens
+
+*Week 4, `crucible/ui/perf_ui.py` and `crucible/ui/client/perf.html`. Implemented
+in `tests/test_ui_perf.py` (77 assertions, most of them parametrized over the 19
+screens). Design source: `docs/crucible-screens-v2.html`.*
+
+**REVIEW NEEDED**: drafted by Claude Code, 26 September 2026. Not yet reviewed by
+the operator.
+
+*A screen can be wrong in two ways that no rendering test catches: it can show a
+number nobody measured, and it can make an irreversible action easier than the
+CLI makes it. These assertions are about those two and nothing cosmetic.*
+
+**Scope note for review.** DESIGN.md §15/§16 put UI in scope for the campaign path
+only (setup → live → report) and the CLI for everything else. The week-4 brief
+asked for all nineteen. They are built as read-mostly views over the functions the
+CLI already calls: no screen has its own implementation of a capability. If §15's
+line still stands, screens 1–4, 8 and 17–19 are the ones to drop.
+
+---
+
+### 28.1 Every screen passes the injection wall, including with nothing to show
+
+**What it checks.** Every screen, built against the real `config/` with an empty
+state directory and journal, has zero validator rejections and uses only catalog
+types. No screen fails on an empty state. A builder that raises becomes a `bad`
+Notice on a valid surface, not a 500.
+
+**Why it exists.** `routes.py` validates the run surface it built itself before
+serving it, treating its own output as untrusted. The perf screens get the same
+treatment. A rejected component is dropped silently by the client, so a screen
+that fails validation looks fine and is missing something.
+
+**For review:** is "a builder error becomes a Notice" right? It keeps the rest of
+the UI usable at 3am, but a broken screen then returns 200.
+
+---
+
+### 28.2 The navigation is the design's
+
+**What it checks.** `(number, title, group)` for all nineteen screens equals what
+is parsed out of `docs/crucible-screens-v2.html`'s sidebar.
+
+**Why it exists.** The design file is the authority. Parsing it, rather than
+copying its list, means a renamed or regrouped screen in either place fails here.
+That is the drift AGENTS.md records for the two assertions docs.
+
+**For review:** the design's sidebar still says "17 screens" in its subtitle while
+listing nineteen. The test reads the buttons, not the subtitle.
+
+---
+
+### 28.3 Nothing from the mock-up is shown as data; absence is declared
+
+**What it checks.** No screen shows the mock-up's example values (`payments-api`,
+`1,300`, `38 / 40`, `cmp-2026-1005-a41f`, …). With no campaign: Live campaign says
+none is running, Report and History say there are no manifests, the quadrant says
+"not yet measured" in all four cells, a class with no task says "not measured"
+and never `0 / 0`, and Playbooks says "not built" rather than `0`.
+
+**Why it exists.** Principle 1 (nothing claimed that was not measured) and §4.2's
+null-versus-zero rule, applied to the UI. The design file is a picture of what a
+screen holds. Rendering its examples would be a claim with no measurement behind
+it, and it would look identical to a real one.
+
+**For review:**
+- The example list is hand-picked. What distinctive mock-up value is missing?
+- Several screens show "not built" (hooks, plans, playbooks, knowledge,
+  requirements chat, service/collection overrides). Each is a real gap against
+  DESIGN.md. Is "not built" the right wording, or should each name its DESIGN
+  section?
+
+---
+
+### 28.4 Afterwards screens read the journal through report.py, not their own logic
+
+**What it checks.** Report renders a manifest's headline, measurement and limits.
+History refuses a comparison across environments by calling `report.compare`, and
+names a replay file in `results/` as "not a campaign manifest" instead of drawing
+an empty campaign.
+
+**Why it exists.** One comparability rule (§8, 26.5), not two. A second rule in
+the UI would drift from the CLI's `diff` and could permit a comparison the CLI
+refuses. This test found a real bug while it was being written: History read
+`final_measurement()["p99_ms"]` as a number when it is `{before, after}`.
+
+---
+
+### 28.5 Approve from the browser is bound, gated, and the action set is not widened
+
+**What it checks.** The ApprovalCard's `confirm.args` is the same binding as its
+`params`, and those equal the parked request's params. `POST …/decision`:
+- refuses different values with 409 and writes nothing;
+- on matching values writes a decision whose params come from the request, with
+  responder `ui:…`;
+- refuses a second decision on the same experiment;
+- returns 503 when no control token is configured and 401 for a wrong one.
+
+`REGISTERED_ACTIONS` is unchanged, and Abort is offered as `crucible abort
+<run-id>`.
+
+**Why it exists.** Session 12's sixth invariant and `approval.py`'s rule: the
+approval is bound to the final parameters. The browser gets no easier path than
+`crucible approve`. The params are checked three times: `decide_resume` in the
+route, `write_decision` copies from the request, and the campaign's file gate
+re-checks on read.
+
+**For review — the decisions that are yours:**
+- **Abort and Pause are not buttons.** A browser Abort needs a new registered
+  action (`abort`), which widens the event invariant for every surface an agent
+  can compose, not just these. Pause has no command at all: an unanswered
+  approval pauses a campaign, and nothing else does. Is a CLI line on the Live
+  screen acceptable for the demo, or should `abort` be registered?
+- **The token lives in page memory**, typed into the sidebar, never stored. Is
+  the control token the right credential for approving a change, or should
+  approvals have their own, as completions do?
+
+---
+
+### 28.6 Preflight shows the CLI's checks, and never the restarting rehearsal
+
+**What it checks.** With network probes stubbed, every check `crucible preflight`
+prints (apart from the two load checks) appears on the screen with "Run checks".
+An `apply_probe` query parameter does not trigger the rehearsal.
+
+**Why it exists.** `preflight_checks` was split out of `cmd_preflight` so the
+screen can't grow a second list. `--apply-probe` restarts the target, so it stays
+a deliberate CLI act rather than a button next to "Run checks".
+
+---
+
 # Review decisions — week 1
 
 Raised by Claude Code while implementing, decided by the operator on 10 September 2026.

@@ -239,6 +239,40 @@ def cmd_preflight(
         print(f"cannot load SLA: {refused}")
         return REFUSED
 
+    checks.extend(
+        preflight_checks(
+            profile, sla, sla_path,
+            workspace=workspace, apply_probe=apply_probe, probe_timeout_s=probe_timeout_s,
+        )
+    )
+
+    print(_rule("preflight"))
+    worst = OK
+    for check in checks:
+        mark = "PASS" if check.ok else ("FAIL" if check.blocking else "warn")
+        print(f"  [{mark}] {check.name}: {check.detail}")
+        if not check.ok and check.blocking:
+            worst = FAILED
+    print()
+    print("preflight passed" if worst == OK else "preflight FAILED -- fix the above before running a campaign")
+    return worst
+
+
+def preflight_checks(
+    profile: TargetProfile,
+    sla: Sla,
+    sla_path: str,
+    *,
+    workspace: str = ".",
+    apply_probe: bool = False,
+    probe_timeout_s: float = 5.0,
+) -> list[PreflightCheck]:
+    """Every check after the profile and SLA have loaded, as data.
+
+    Split out of :func:`cmd_preflight` so the Preflight screen shows the same
+    checks the CLI prints rather than a second list that could drift from it.
+    """
+    checks: list[PreflightCheck] = []
     try:
         check_environment(sla)
         checks.append(
@@ -280,17 +314,7 @@ def cmd_preflight(
                 blocking=False,
             )
         )
-
-    print(_rule("preflight"))
-    worst = OK
-    for check in checks:
-        mark = "PASS" if check.ok else ("FAIL" if check.blocking else "warn")
-        print(f"  [{mark}] {check.name}: {check.detail}")
-        if not check.ok and check.blocking:
-            worst = FAILED
-    print()
-    print("preflight passed" if worst == OK else "preflight FAILED -- fix the above before running a campaign")
-    return worst
+    return checks
 
 
 def _check_metrics(profile: TargetProfile, sla: Sla, timeout_s: float = 5.0) -> PreflightCheck:

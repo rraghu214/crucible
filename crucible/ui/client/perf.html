@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Crucible</title>
+<style>
+  :root{
+    --bg:#faf9f7;--s0:#f0eeea;--s1:#f5f4f1;--s2:#fffefc;--b:#e5e1da;--t:#1a1a18;--t2:#6b6862;--tm:#9c9890;
+    --acc:#3d6ea8;--accbg:#eaf1f9;--ok:#2f6d4f;--okbg:#eaf4ee;--warn:#8a6321;--warnbg:#f9f2e5;
+    --dang:#9c3a2f;--dangbg:#faeceb;--r:6px;
+    --fs:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    --fm:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{--bg:#141412;--s0:#22211e;--s1:#1b1a18;--s2:#1f1e1b;--b:#34322d;
+    --t:#ecebe7;--t2:#b3afa6;--tm:#858178;--accbg:#1d2a3a;--okbg:#18291f;--warnbg:#2f2615;--dangbg:#321b18}}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--fs);background:var(--bg);color:var(--t);font-size:14px;line-height:1.5}
+  .wrap{display:flex;min-height:100vh}
+  .side{width:236px;flex-shrink:0;border-right:1px solid var(--b);background:var(--s1);position:sticky;top:0;height:100vh;overflow-y:auto}
+  .side h1{font-size:15px;font-weight:600;padding:18px 18px 4px}
+  .side .sub{font-size:12px;color:var(--t2);padding:0 18px 12px}
+  .grp{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--tm);padding:14px 18px 6px;font-weight:600}
+  .nav{display:block;width:100%;text-align:left;background:none;border:0;font:inherit;font-size:13px;color:var(--t2);padding:7px 18px;cursor:pointer;border-left:2px solid transparent}
+  .nav:hover{background:var(--s0);color:var(--t)}
+  .nav.on{background:var(--s2);color:var(--t);border-left-color:var(--acc);font-weight:500}
+  .tok{padding:12px 18px 18px;font-size:11px;color:var(--t2)}
+  .tok input{width:100%;margin-top:4px;padding:5px 8px;border:1px solid var(--b);border-radius:var(--r);background:var(--s2);color:var(--t);font-family:var(--fm);font-size:11px}
+  .main{flex:1;min-width:0;padding:26px 30px 60px;max-width:1040px}
+  .bar{font-family:var(--fm);font-size:11px;color:var(--tm);margin-bottom:12px;min-height:14px}
+  .Column{display:flex;flex-direction:column;gap:14px}
+  .Row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start}
+  .Row>.StatTile{flex:1;min-width:130px}
+  .Card{background:var(--s2);border:1px solid var(--b);border-radius:10px;padding:14px 17px;display:flex;flex-direction:column;gap:10px}
+  .Card>.ct{font-size:12px;color:var(--t2)}
+  .Text.heading{font-size:20px;font-weight:600}
+  .Text.subtitle{font-size:13px;color:var(--t2);margin-top:-10px}
+  .Text.body{line-height:1.6}
+  .Text.caption{font-family:var(--fm);font-size:11.5px;line-height:1.8;white-space:pre-wrap;background:#1e1d1b;color:#d8d5cf;padding:12px 14px;border-radius:var(--r);overflow-x:auto}
+  .md-ul{padding-left:18px}.md-p{margin:3px 0}
+  .Notice{border:1px solid var(--b);border-radius:var(--r);padding:10px 12px;white-space:pre-wrap;font-size:13px}
+  .Notice.good{background:var(--okbg);color:var(--ok)}.Notice.warn{background:var(--warnbg);color:var(--warn)}
+  .Notice.bad{background:var(--dangbg);color:var(--dang)}.Notice.neutral{background:var(--s1)}
+  .StatTile{border:1px solid var(--b);border-radius:var(--r);padding:10px 12px;background:var(--s2)}
+  .StatTile .lab{font-size:12px;color:var(--t2)}.StatTile .val{font-size:19px;font-weight:500;margin-top:2px}
+  .StatTile .dl{font-size:11px;color:var(--tm);margin-top:2px}
+  .StatTile.warn .val{color:var(--warn)}.StatTile.bad .val{color:var(--dang)}.StatTile.good .val{color:var(--ok)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-size:12px;color:var(--t2);font-weight:500;padding:7px 10px;background:var(--s1);border-bottom:1px solid var(--b);cursor:pointer}
+  td{padding:7px 10px;border-bottom:1px solid var(--b);vertical-align:top;word-break:break-word}
+  tr:last-child td{border-bottom:0}
+  .filter{margin-bottom:6px;padding:5px 9px;border:1px solid var(--b);border-radius:var(--r);font-size:12px;background:var(--s2);color:var(--t)}
+  button.btn{font:inherit;font-size:12px;padding:5px 11px;border:1px solid var(--b);background:var(--s2);border-radius:var(--r);cursor:pointer;color:var(--t)}
+  button.btn:hover{background:var(--s0)} button.btn.pri{background:var(--acc);color:#fff;border-color:var(--acc)}
+  .tabs{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+  .tabs button{border:1px solid var(--b);background:var(--s2);border-radius:999px;padding:4px 12px;font-size:12px;cursor:pointer;color:var(--t2)}
+  .tabs button.on{background:var(--t);color:var(--bg);border-color:var(--t)}
+  .Approval{border:1px solid var(--warn);border-left:4px solid var(--warn);border-radius:var(--r);padding:12px;background:var(--warnbg)}
+  .Approval pre{font-family:var(--fm);font-size:12px;background:var(--s2);padding:8px;border-radius:var(--r);margin:8px 0;white-space:pre-wrap}
+  .field{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--t2)}
+  .field select{padding:5px 8px;border:1px solid var(--b);border-radius:var(--r);background:var(--s2);color:var(--t)}
+  svg text{fill:var(--t2)}
+  @media(max-width:820px){.wrap{flex-direction:column}.side{width:100%;height:auto;position:static}.main{padding:18px 16px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="side" id="side">
+    <h1>Crucible</h1>
+    <div class="sub">Nineteen screens, each a validated declarative surface over the data on disk.</div>
+    <div id="nav"></div>
+    <label class="tok">control token (for Approve / Skip only; kept in this page's memory)
+      <input id="token" type="password" autocomplete="off"></label>
+  </nav>
+  <main class="main"><div class="bar" id="bar"></div><div id="mount"></div></main>
+</div>
+<script>
+// The perf render client. Same contract as index.html: it maps trusted catalog
+// types to DOM, never sets innerHTML from a value, never evaluates a string.
+// Structure comes from the server's validated surface; data is shown as text.
+const $ = (t, cls) => { const e = document.createElement(t); if (cls) e.className = cls; return e; };
+const text = (t) => document.createTextNode(t == null ? "" : String(t));
+function pointer(dm, ptr){ let cur = dm; for (const seg of ptr.split("/").slice(1)) { if (cur == null) return null; cur = cur[seg]; } return cur; }
+function resolve(v, dm){ return (v && typeof v === "object" && "$bind" in v) ? pointer(dm, v["$bind"]) : v; }
+function resolveArgs(args, dm){ const out = {}; for (const [k, v] of Object.entries(args || {})) out[k] = resolve(v, dm); return out; }
+function setPointer(dm, ptr, val){ const segs = ptr.split("/").slice(1); let cur = dm; for (let i = 0; i < segs.length - 1; i++) { cur = cur[segs[i]] = cur[segs[i]] || {}; } cur[segs[segs.length - 1]] = val; }
+function mdInline(line, parent){ const re = /\*\*([^*]+)\*\*/g; let last = 0, m; while ((m = re.exec(line))) { if (m.index > last) parent.append(text(line.slice(last, m.index))); const b = $("strong"); b.textContent = m[1]; parent.append(b); last = re.lastIndex; } if (last < line.length) parent.append(text(line.slice(last))); }
+function md(t){ const f = document.createDocumentFragment(); let ul = null;
+  for (const raw of String(t == null ? "" : t).split(/\r?\n/)) { const line = raw.trim(); if (!line) { ul = null; continue; }
+    const b = line.match(/^[-*]\s+(.*)/); if (b) { if (!ul) { ul = $("ul", "md-ul"); f.append(ul); } const li = $("li"); mdInline(b[1], li); ul.append(li); }
+    else { ul = null; const p = $("div", "md-p"); mdInline(line, p); f.append(p); } } return f; }
+
+let current = { number: 1, query: {} };
+
+const R = {
+  Column: (c, x) => kids(c, x, $("div", "Column")),
+  List: (c, x) => kids(c, x, $("div", "Column")),
+  Row: (c, x) => kids(c, x, $("div", "Row")),
+  Card: (c, x) => { const e = $("div", "Card"); if (c.title) { const h = $("div", "ct"); h.append(text(c.title)); e.append(h); } return kids(c, x, e); },
+  Divider: () => $("hr"),
+  Text: (c, x) => { const v = resolve(c.text, x.dm); const e = $("div", "Text " + (c.variant || "body"));
+    (c.variant === "body" || !c.variant) ? e.append(md(v)) : e.append(text(v)); return e; },
+  Notice: (c, x) => { const e = $("div", "Notice " + (c.tone || "neutral")); e.append(text(resolve(c.text, x.dm))); return e; },
+  StatTile: (c, x) => { const e = $("div", "StatTile " + (c.tone || "neutral")); const l = $("div", "lab"); l.append(text(c.label));
+    const v = $("div", "val"); v.append(text(String(resolve(c.value, x.dm)) + (c.unit || ""))); const d = $("div", "dl"); d.append(text(resolve(c.delta, x.dm) || ""));
+    e.append(l, v, d); return e; },
+  DataTable: (c, x) => table(c, x),
+  Tabs: (c, x) => tabs(c, x),
+  Button: (c, x) => { const b = $("button", "btn"); b.append(text(c.label));
+    b.onclick = () => act(c.onPress && c.onPress.action, resolveArgs(c.onPress && c.onPress.args, x.dm)); return b; },
+  InputChoice: (c, x) => { const w = $("label", "field"); w.append(text(c.label || "")); const s = $("select");
+    const cur = resolve(c.value, x.dm); (resolve(c.options, x.dm) || []).forEach(o => { const op = $("option"); op.value = String(o); op.append(text(o)); if (String(o) === String(cur)) op.selected = true; s.append(op); });
+    s.onchange = () => { if (c.value && c.value.$bind) setPointer(x.dm, c.value.$bind, s.value); }; w.append(s); return w; },
+  Sparkline: (c, x) => spark(resolve(c.data, x.dm) || []),
+  BarChart: (c, x) => bars(c, resolve(c.data, x.dm) || []),
+  ApprovalCard: (c, x) => approval(c, x),
+};
+function kids(c, x, e){ for (const id of (c.children || [])) { const k = x.byId[id]; if (k) e.append(render(k, x)); } return e; }
+function render(c, x){ const r = R[c.type]; if (!r) { const s = $("div"); s.append(text("[not rendered: " + c.type + "]")); return s; } return r(c, x); }
+
+function table(c, x){ const wrap = $("div"); const cols = (c.columns || "").split(",").map(s => s.trim()); const rows = resolve(c.rows, x.dm) || [];
+  let sortCol = null, dir = 1, filter = "";
+  if (c.filterKey) { const f = $("input", "filter"); f.placeholder = "filter " + c.filterKey; f.oninput = () => { filter = f.value.toLowerCase(); draw(); }; wrap.append(f); }
+  const t = $("table"); wrap.append(t);
+  function draw(){ t.textContent = ""; const hr = $("tr"); cols.forEach(col => { const th = $("th"); th.append(text(col)); if (c.sortable) th.onclick = () => { dir = sortCol === col ? -dir : 1; sortCol = col; draw(); }; hr.append(th); }); t.append(hr);
+    let view = rows.filter(r => !filter || String(r[c.filterKey] || "").toLowerCase().includes(filter));
+    if (sortCol) view = view.slice().sort((a, b) => (a[sortCol] > b[sortCol] ? 1 : a[sortCol] < b[sortCol] ? -1 : 0) * dir);
+    view.forEach(r => { const tr = $("tr"); cols.forEach(col => { const td = $("td"); td.append(text(r[col])); tr.append(td); }); t.append(tr); }); }
+  draw(); return wrap; }
+
+function tabs(c, x){ const w = $("div"); const nav = $("div", "tabs"); const body = $("div"); w.append(nav, body);
+  const panels = (c.children || []).map(id => x.byId[id]).filter(Boolean); const labels = (c.labels || "").split(",").map(s => s.trim());
+  function show(i){ body.textContent = ""; [...nav.children].forEach((b, j) => b.classList.toggle("on", i === j)); if (panels[i]) body.append(render(panels[i], x)); }
+  panels.forEach((p, i) => { const b = $("button"); b.append(text(labels[i] || "tab " + (i + 1))); b.onclick = () => show(i); nav.append(b); });
+  if (panels.length) show(0); return w; }
+
+function spark(vals){ const ns = "http://www.w3.org/2000/svg", w = 300, h = 60; const svg = document.createElementNS(ns, "svg"); svg.setAttribute("viewBox", `0 0 ${w} ${h}`); svg.setAttribute("width", "100%"); svg.setAttribute("height", h);
+  const max = Math.max(...vals, 1), min = Math.min(...vals, 0), rng = (max - min) || 1; const pl = document.createElementNS(ns, "polyline");
+  pl.setAttribute("points", vals.map((v, i) => `${i / (vals.length - 1 || 1) * w},${h - 6 - (v - min) / rng * (h - 12)}`).join(" ")); pl.setAttribute("fill", "none"); pl.setAttribute("stroke", "var(--acc)"); pl.setAttribute("stroke-width", "2"); svg.append(pl); return svg; }
+
+function bars(c, data){ const ns = "http://www.w3.org/2000/svg", w = 420, h = 150, pad = 22; const svg = document.createElementNS(ns, "svg"); svg.setAttribute("viewBox", `0 0 ${w} ${h}`); svg.setAttribute("width", "100%");
+  const max = Math.max(...data.map(d => +d[c.yKey]), 1), slot = (w - pad * 2) / (data.length || 1), bw = slot * .6;
+  data.forEach((d, i) => { const x = pad + i * slot + (slot - bw) / 2, bh = (+d[c.yKey]) / max * (h - pad * 2);
+    const r = document.createElementNS(ns, "rect"); r.setAttribute("x", x); r.setAttribute("y", h - pad - bh); r.setAttribute("width", bw); r.setAttribute("height", bh); r.setAttribute("rx", 2); r.setAttribute("fill", "var(--acc)"); svg.append(r);
+    const tl = document.createElementNS(ns, "text"); tl.setAttribute("x", x + bw / 2); tl.setAttribute("y", h - 6); tl.setAttribute("text-anchor", "middle"); tl.setAttribute("font-size", "10"); tl.textContent = d[c.xKey]; svg.append(tl); });
+  return svg; }
+
+function approval(c, x){ const e = $("div", "Approval"); const sm = $("div"); sm.append(text(resolve(c.summary, x.dm)));
+  const params = resolve(c.params, x.dm); const pre = $("pre"); pre.append(text(JSON.stringify(params, null, 2)));
+  const where = (c.reject && c.reject.args) || {}; const row = $("div", "Row");
+  const ok = $("button", "btn pri"); ok.append(text("Approve")); ok.onclick = () => decide(where, "approve", resolve(c.confirm.args, x.dm));
+  const no = $("button", "btn"); no.append(text("Skip")); no.onclick = () => decide(where, "reject", {});
+  row.append(ok, no); e.append(sm, pre, row); return e; }
+
+async function decide(where, action, args){
+  const token = document.getElementById("token").value.trim();
+  const res = await fetch(`/v1/perf/runs/${encodeURIComponent(where.run_id)}/experiments/${where.experiment}/decision`, {
+    method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+    body: JSON.stringify({ action, args }) });
+  const body = await res.json().catch(() => ({}));
+  bar(res.ok ? `${action} recorded: ${body.written}` : `refused (${res.status}): ${body.detail || "no detail"}`);
+  if (res.ok) load(current.number, current.query);
+}
+
+function act(name, args){
+  if (name !== "request_data") { bar("action " + name + " has no handler on this screen"); return; }
+  const next = Object.assign({}, current.query, args); const screen = next.screen ? +next.screen : current.number; delete next.screen;
+  load(screen, next);
+}
+function bar(msg){ document.getElementById("bar").textContent = msg; }
+
+async function load(number, query){
+  current = { number, query: query || {} };
+  document.querySelectorAll(".nav").forEach(b => b.classList.toggle("on", +b.dataset.n === number));
+  const qs = new URLSearchParams(current.query).toString();
+  const res = await fetch(`/v1/perf/screens/${number}` + (qs ? "?" + qs : "")); const data = await res.json();
+  const byId = {}; data.surface.components.forEach(c => byId[c.id] = c);
+  const mount = document.getElementById("mount"); mount.textContent = "";
+  mount.append(render(byId[data.surface.root], { byId, dm: data.surface.dataModel || {} }));
+  bar(`${data.group} . screen ${data.number} . ${data.surface.components.length} components . ` +
+      (data.rejections.length ? data.rejections.length + " rejected by the validator" : "0 rejected"));
+  history.replaceState(null, "", "#" + number); window.scrollTo(0, 0);
+}
+
+async function boot(){
+  const nav = await (await fetch("/v1/perf/screens")).json(); const el = document.getElementById("nav");
+  nav.groups.forEach(g => { const h = $("div", "grp"); h.append(text(g.name)); el.append(h);
+    g.screens.forEach(s => { const b = $("button", "nav"); b.dataset.n = s.number; b.append(text(s.number + " . " + s.title)); b.onclick = () => load(s.number, {}); el.append(b); }); });
+  load(+(location.hash.slice(1)) || 1, {});
+}
+boot().catch(e => bar("error: " + e));
+</script>
+</body>
+</html>
