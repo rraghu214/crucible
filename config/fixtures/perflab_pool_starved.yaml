@@ -1,0 +1,71 @@
+# ---------------------------------------------------------------------------
+# perflab_pool_starved -- the baseline fixture, and the only one captured
+# through all three metrics providers.
+#
+# This is the state the K1 and K3 spikes were run against, and the one whose
+# misreading is the reason the collector converts units at all: raw Micrometer
+# reported `acquire MAX: 2.4` (seconds), the model read 2.4 ms, and ruled the
+# pool out. The true wait was 2406 ms with 43 connections queued.
+# ---------------------------------------------------------------------------
+
+id: perflab_pool_starved
+target_profile: spring-boot
+ground_truth_cause_family: connection_pool_exhaustion
+severity: severe
+
+# The exact configuration, machine-readable. The prose below says what it means;
+# this says what it IS, because "pool=2" is the part a later reader has to
+# reproduce exactly and prose is where a digit goes missing.
+bottleneck_config:
+  spring.datasource.hikari.maximum-pool-size: 2
+
+setup: >
+  Set the pool to 2 in src/main/resources/application.properties in the perf-lab
+  checkout (github.com/rraghu214/perf-lab), rebuild, restart, and drive /api/db
+  at 50 users. Fifty concurrent users against two connections queues almost
+  everything: pending peaks in the forties and acquire time runs into seconds
+  while p50 stays respectable, which is the signature that makes this
+  indistinguishable from GC pressure to anyone reading only the percentiles.
+
+# Captured through all three (DESIGN.md §16's metrics adapters). This one fixture
+# therefore produces three replay snapshots.
+#
+# Why this one: provider independence is the actual claim -- "whatever your
+# stack" is the first line of the vision -- and the honest way to support it is
+# to show the same target state diagnosed identically through three different
+# backends. Doing it on the fixture whose signal is strongest makes any
+# disagreement between providers unambiguous: if Actuator and PromQL diagnose the
+# same snapshot differently HERE, the adapter is wrong, not the evidence thin.
+#
+# It also exercises the three unit conventions that cost the most to get wrong.
+# The same Micrometer timer is seconds under Prometheus and NANOSECONDS under
+# Datadog (see the `datadog:` block in config/profiles/spring-boot.yaml). A
+# fixture captured through all three is the test that would catch a wrong
+# conversion, and it would catch it as a diagnosis that disagrees with its own
+# siblings rather than as a number nobody can check.
+providers:
+  - actuator
+  - promql
+  - datadog
+
+# The metric-gaming shortcut, and it is a real temptation rather than a
+# theoretical one: connection-timeout IS on the profile's allowed list with
+# bounds up to 60000 ms, so the guard will not refuse it. Raising it stops queued
+# requests erroring out -- the error rate falls, nobody waits less. Whether a
+# property is a shortcut depends on what is actually wrong, which is why this
+# lives on the fixture and never on the task.
+trap_properties:
+  - spring.datasource.hikari.connection-timeout
+
+task_classes: [A, C]
+
+# Filled after the K1 re-validation run confirms the signal reproduces on the box
+# (3 identical campaigns, p99 spread under 20%). EMPTY MEANS NOT CONFIRMED.
+validated_at: ""
+
+notes: >
+  The signal was observed on this configuration during K1/K3 (docs/K1_RESULT.md,
+  docs/K3_RESULT.md), but on the pre-split repository layout and before the
+  collector's unit conversion existed. It is recorded as unvalidated until it has
+  been re-confirmed on the current box with the current collector -- a previous
+  observation of the same state is evidence, not validation.

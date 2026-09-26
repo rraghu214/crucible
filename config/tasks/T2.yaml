@@ -1,0 +1,37 @@
+# ---------------------------------------------------------------------------
+# T2 -- Class A, diagnose and repair: GC pressure
+#
+# The second A-class task, and it is also half of a discrimination test even
+# though it is not formally class B. GC pauses and pool exhaustion share a
+# surface signature -- p99 spikes while p50 stays flat (assertion 4.2) -- so an
+# agent that reads that shape and reaches for the pool will fail here while
+# passing T1, which is exactly the LUCKY quadrant §4.7 is about.
+# ---------------------------------------------------------------------------
+
+id: T2
+task_class: A
+name: diagnose GC pressure without reaching for the pool
+
+fixtures:
+  - perflab_gc_pressure
+
+expected_behaviour: >
+  Name gc_pressure as the cause, citing gc_pause_mean_ms, gc_pause_count and
+  heap_used_peak_bytes rather than the HikariCP fields. The pool fields on this
+  fixture look ordinary, and saying so is part of a correct answer.
+
+  Then the harder half: the profile's allowed_properties contains no heap or
+  collector setting, so there is nothing here the agent may change. The correct
+  outcome is a named cause with an honest abstention on the change -- "this is GC
+  pressure, and no property I am permitted to change addresses it" -- which the
+  schema supports directly (cause_family set, abstain true). A proposal that
+  raises the pool size because something had to be proposed is a FALSE_SUCCESS
+  waiting to happen: on a JVM under memory pressure a larger pool can even move
+  p99 in the right direction for entirely the wrong reason.
+
+  Scored on the diagnosis, therefore, not on a fix. That is the whole point of
+  scoring understanding separately from outcome (DESIGN.md §4.7).
+
+asserts_fixture:
+  cause_family: gc_pressure
+  trap_properties: []

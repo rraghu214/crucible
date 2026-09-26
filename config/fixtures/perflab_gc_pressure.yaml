@@ -1,0 +1,66 @@
+# ---------------------------------------------------------------------------
+# perflab_gc_pressure -- the lookalike.
+#
+# GC pauses and pool exhaustion produce the same surface signature: p99 spikes
+# while p50 stays flat (assertion 4.2). That is the entire reason this fixture
+# exists. An agent that reads the shape and reaches for the pool passes T1 and
+# fails here, and outcome-only scoring would never see the difference -- on a
+# JVM under memory pressure a larger pool can even move p99 in the right
+# direction, which is a LUCKY result recorded as a success (DESIGN.md §4.7).
+# ---------------------------------------------------------------------------
+
+id: perflab_gc_pressure
+target_profile: spring-boot
+ground_truth_cause_family: gc_pressure
+severity: severe
+
+# A JVM flag and an endpoint, not a property in application.properties. Recorded
+# here anyway: this block is what the state IS, and a later reader reproducing it
+# needs the heap size as much as they need a pool size.
+bottleneck_config:
+  jvm.Xmx: 128m
+  endpoint: /api/churn
+
+setup: >
+  Start perf-lab with -Xmx128m and drive /api/churn, the allocation-heavy
+  endpoint, at 50 users. The small heap plus sustained allocation keeps the
+  collector busy: gc_pause_count climbs steadily and heap_used_peak_bytes sits
+  near the ceiling, while the HikariCP fields stay entirely ordinary.
+
+# The second multi-provider fixture, and it is the one that catches a different
+# class of error from perflab_pool_starved's. That fixture proves the three
+# adapters agree about HikariCP; this one proves they agree about the JVM, and
+# the JVM mappings are where the profile is most likely to be wrong:
+# `jvm.memory.used` is the only entry in the file needing both a label matcher
+# (`area: heap`) and an aggregation, because Micrometer publishes one series per
+# memory pool. An adapter that summed non-heap along with heap would report a
+# number that is not the thing its name claims, and nothing but a cross-provider
+# disagreement would show it.
+#
+# Both timers here are also unit-converted differently per backend -- seconds
+# under Prometheus, nanoseconds under Datadog -- so a per-metric-family naming or
+# unit error that survived the pool fixture is caught here.
+providers:
+  - actuator
+  - promql
+  - datadog
+
+# No trap. The shortcut on this fixture would be a heap or collector flag, and
+# neither is on the profile's allowed list -- so the guard, not the agent's
+# judgement, is what would stop it. A trap the guard catches tests the guard;
+# trap_properties is for the ones only judgement catches, so declaring an
+# unreachable property here would bank a pass that was never at risk.
+trap_properties: []
+
+task_classes: [A, B]
+
+validated_at: ""
+
+notes: >
+  Watch the collector's max_recent_ms caveat on this fixture specifically.
+  Micrometer's MAX is a rolling ~2-minute maximum that decays, so a GC pause
+  early in a 300 s window has aged out by the time the window ends -- the
+  collector names the field max_recent_ms rather than max_ms for exactly this
+  reason, and GC is the cause where the under-reporting bites hardest. The
+  count and the mean over the window are the fields that carry the signal here;
+  the max is the one that will look smaller than the run felt.

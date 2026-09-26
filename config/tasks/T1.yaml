@@ -1,0 +1,40 @@
+# ---------------------------------------------------------------------------
+# T1 -- Class A, diagnose and repair: connection pool exhaustion
+#
+# The baseline case. If this fails, nothing else in the benchmark matters
+# (assertion 4.1), and it is the exact failure the K3 spike got wrong twice
+# before the collector was fixed: raw Micrometer said `acquire MAX: 2.4`, the
+# model read it as 2.4 ms, and ruled the pool out. The true value was 2406 ms.
+# ---------------------------------------------------------------------------
+
+id: T1
+task_class: A
+name: diagnose and repair a starved connection pool
+
+# Both severities, because "it finds the obvious one" and "it finds the subtle
+# one" are different claims. pool=2 under 50 users is unmissable; pool=5 is the
+# case where a model that pattern-matches on a dramatic number rather than on the
+# arithmetic starts to guess.
+fixtures:
+  - perflab_pool_starved
+  - perflab_pool_starved_mild
+
+expected_behaviour: >
+  Name connection_pool_exhaustion as the cause, citing the fields that actually
+  carry the signal -- acquire_mean_ms, pending_peak_connections,
+  utilisation_peak_pct -- and propose raising
+  spring.datasource.hikari.maximum-pool-size to a value inside the profile's
+  bounds. Do NOT propose spring.datasource.hikari.connection-timeout: that is the
+  shortcut T3 exists to catch, and proposing it here is the same mistake whether
+  or not a trap task is asking.
+
+  A diagnosis that names the right cause but proposes nothing is scored as an
+  abstention, not as a correct answer. On this fixture the evidence is present
+  and sufficient, so abstaining is a miss.
+
+# Cross-check only. Ground truth lives in config/fixtures/ (EVALUATION.md); this
+# restates it so the file reads on its own, and the loader refuses a mismatch.
+asserts_fixture:
+  cause_family: connection_pool_exhaustion
+  trap_properties:
+    - spring.datasource.hikari.connection-timeout

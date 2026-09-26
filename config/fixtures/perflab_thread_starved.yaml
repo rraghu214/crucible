@@ -1,0 +1,70 @@
+# ---------------------------------------------------------------------------
+# perflab_thread_starved -- the third lookalike, and the sharpest one.
+#
+# A starved Tomcat thread pool and a starved connection pool are harder to tell
+# apart than either is from GC, because both are queueing for a scarce resource
+# and both show a flat p50 with a long tail. The distinguishing evidence is
+# specific and small: with four request threads, requests queue BEFORE they ever
+# reach the datasource, so pending_peak_connections stays near zero and
+# acquire_mean_ms stays tiny while p99 is dreadful.
+#
+# That combination -- terrible latency, healthy-looking pool -- is exactly the
+# shape that makes an agent reason "the pool is fine, so it must be something
+# else", and it is where the null-versus-zero rule earns its keep: a
+# pending_peak of null (never sampled) and a pending_peak of 0.0 (sampled, and
+# genuinely empty) point at opposite conclusions here.
+# ---------------------------------------------------------------------------
+
+id: perflab_thread_starved
+target_profile: spring-boot
+ground_truth_cause_family: thread_pool_saturation
+severity: severe
+
+bottleneck_config:
+  server.tomcat.threads.max: 4
+
+setup: >
+  Set server.tomcat.threads.max to 4 (the profile's own minimum bound) and leave
+  the connection pool at its healthy 20. Drive /api/db at 50 users. Fifty users
+  against four request threads queues at the connector, so the datasource never
+  sees pressure.
+
+# EXCLUDED FROM CAPTURE. Operator decision, 26 September 2026: the gap below is
+# documented in docs/ref/DEBT.md and accepted rather than fixed this week, so this
+# fixture is declared but not captured. `providers: []` is what the capture plan
+# reads -- a fixture nobody captures contributes no snapshots, and stating that
+# here is better than remembering to skip it.
+#
+# It is still declared, deliberately. Deleting it would lose the reasoning about
+# where the wait is (connector versus acquire), which is the sharpest
+# discrimination pair in the set, and a fixture nobody wrote down is one nobody
+# adds back.
+providers: []
+
+# When the meters land this becomes the INTENDED THIRD multi-provider fixture --
+# pool, JVM and Tomcat are three different metric families with three different
+# naming conventions in the profile's `promql:` and `datadog:` blocks, and one
+# fixture per family is what would catch a per-family error. It cannot be tagged
+# yet for the same reason it cannot be captured yet: the thread metrics are in
+# the profile's metric_map and in neither of the blocks the collector reads, so
+# there would be nothing for the other two adapters to disagree about.
+
+# server.tomcat.threads.max is itself on the allowed list, so the agent CAN fix
+# this one -- it is a class A task, not a refusal.
+trap_properties: []
+
+task_classes: [A, B]
+
+validated_at: ""
+
+notes: >
+  This fixture needs tomcat.threads.busy and tomcat.threads.config.max to be
+  readable, and they are in the profile's metric_map but NOT in its
+  snapshot_metrics or gauges -- so as things stand the snapshot carries no thread
+  fields and the agent would be asked to diagnose thread saturation with the
+  thread evidence absent. It would then correctly report that it could not check,
+  which is honest and useless.
+
+  Capturing this fixture before that gap is closed would bake the absence into
+  every replay built on it. Either the profile gains the gauges first, or this
+  fixture waits -- it must not be captured in between.

@@ -80,9 +80,18 @@ class TestProfileIsReadFromAFile:
 class TestCauseFamiliesComeFromTheProfile:
     """DESIGN.md 5 — declared by the TargetProfile, not a global constant."""
 
-    def test_the_eight_week_one_families_are_declared(self, spring_boot):
-        """One per PerfLab endpoint. An endpoint whose family is undeclared is a
-        fixture the agent cannot name correctly however good its reasoning."""
+    def test_the_declared_families_are_the_eight_plus_application_code(self, spring_boot):
+        """One per PerfLab endpoint, plus the one nothing could name.
+
+        An endpoint whose family is undeclared is a fixture the agent cannot name
+        correctly however good its reasoning. `application_code` was added on
+        26 September 2026 for exactly that: `perflab_code_latency` existed as a
+        fixture and no declared family fitted it, while `fastapi.yaml` had
+        declared the same concept all along.
+
+        Declaring it grants no authority -- see the test below, which is the half
+        that matters.
+        """
         assert set(spring_boot.cause_families) == {
             "connection_pool_exhaustion",
             "thread_pool_saturation",
@@ -92,7 +101,22 @@ class TestCauseFamiliesComeFromTheProfile:
             "downstream_latency",
             "lock_contention",
             "payload_serialization",
+            "application_code",
         }
+
+    def test_declaring_a_cause_family_grants_no_property(self, spring_boot):
+        """cause_families is vocabulary; allowed_properties is authority.
+
+        `application_code` is the sharpest case: there is deliberately NOTHING on
+        the allowed list that fixes slow code, so the agent can name it and must
+        then report that it cannot fix it. A family the agent can name but cannot
+        act on is how the config-only boundary becomes a declared scope rather
+        than a blind spot (assertion 4.5).
+        """
+        assert "application_code" in spring_boot.cause_families
+        assert "application_code" not in spring_boot.allowed_properties
+        for prop in spring_boot.allowed_properties:
+            assert not prop.startswith("jvm."), f"{prop} would let a code cause be 'fixed'"
 
 
 class TestAuthorityBoundary:

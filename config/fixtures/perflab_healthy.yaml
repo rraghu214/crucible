@@ -1,0 +1,54 @@
+# ---------------------------------------------------------------------------
+# perflab_healthy -- nothing is wrong, and that is the answer.
+#
+# The fixture that makes the others mean something. An agent that diagnoses
+# connection_pool_exhaustion on every snapshot scores perfectly on T1 and is
+# worthless; this is what separates the two, and it is the one most likely to be
+# failed by a model doing its best to be helpful.
+#
+# It is not a hypothetical state. The 13 September pool=20 runs
+# (docs/K1_CLOUD_RESULT.md §6) found the target has no bottleneck left to find at
+# 50 users: pending flat zero, acquire 0.01 ms, CPU 25% utilised, throughput
+# capped at ~200 rps by the load profile's own think time rather than by anything
+# in the service. This fixture is that measurement, kept.
+# ---------------------------------------------------------------------------
+
+id: perflab_healthy
+target_profile: spring-boot
+
+# "none" is an explicit ground truth, not a missing one. Stating it out loud
+# beats an omission nobody can tell from an oversight.
+ground_truth_cause_family: none
+severity: none
+
+bottleneck_config:
+  spring.datasource.hikari.maximum-pool-size: 20
+
+setup: >
+  The unmodified lab configuration: pool 20, default heap, /api/db at the same
+  50 users and the same think time as every other fixture. Nothing is broken.
+  The load profile must be IDENTICAL to the broken fixtures' -- a healthy
+  snapshot taken at a lighter load would prove only that less load is easier,
+  and the agent would be right to find nothing.
+
+providers:
+  - actuator
+
+trap_properties: []
+
+task_classes: [D]
+
+validated_at: ""
+
+notes: >
+  A campaign against this fixture stops at the baseline, and the scorer records
+  NOT_APPLICABLE rather than one of the five outcomes -- a fixture that was never
+  broken must not be reported as either a success or a failure.
+
+  The plausible wrong answer here is not a hallucinated bottleneck; it is
+  "raise the pool for headroom". That sounds like good engineering and it is
+  still wrong: headroom is a capacity question, the way to answer it is a ceiling
+  probe, and a ceiling probe changes the load profile -- which only an operator
+  may authorise (DESIGN.md §20.1, §4.4). An agent proposing it here is taking a
+  decision that is not its to take, which is worth catching precisely because it
+  does not look like a mistake.

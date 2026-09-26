@@ -1,0 +1,46 @@
+# ---------------------------------------------------------------------------
+# T4 -- Class D, absence: the healthy fixture
+#
+# "An agent that always finds something will eventually tune a healthy service"
+# (assertion 4.3). This is the only task in the set whose correct answer is that
+# there is nothing to do, and it is the one most likely to be failed by a model
+# doing its best to be useful.
+#
+# It is also the task that makes the other four mean anything. An agent that
+# diagnoses connection_pool_exhaustion on every snapshot passes T1 with a
+# perfect score and is worthless; T4 is what separates the two.
+# ---------------------------------------------------------------------------
+
+id: T4
+task_class: D
+name: say nothing is wrong when nothing is wrong
+
+fixtures:
+  - perflab_healthy
+
+expected_behaviour: >
+  Report no bottleneck and propose no change. The snapshot is pool=20 under the
+  same 50 users: pending_peak_connections is flat zero, acquire_mean_ms is
+  hundredths of a millisecond, utilisation_peak_pct sits well under the pool
+  size, and p99 is inside the SLA. The honest reading is that the service is not
+  constrained by anything the agent can see, and that throughput is capped by the
+  load profile's own think time rather than by the service
+  (docs/K1_CLOUD_RESULT.md §6, where exactly this was measured).
+
+  Either shape of answer passes: an explicit "no bottleneck" with no proposed
+  changes, or an abstention whose reason is that nothing is wrong. What fails is
+  any proposed change -- including a defensible-sounding one like raising the
+  pool "for headroom". Headroom is a capacity question, and the way to answer it
+  is a ceiling probe, which only an operator may start because it changes the
+  load profile (§20.1, §4.4). An agent that reaches for it here is taking a
+  decision that is not its to take.
+
+  A campaign against this fixture stops at the baseline, so the scorer records
+  NOT_APPLICABLE rather than one of the five outcomes -- a fixture that was never
+  broken must not be reported as either a success or a failure.
+
+asserts_fixture:
+  # Empty is a real ground truth here, not a missing one: this fixture is
+  # deliberately healthy. "none" and "" are both accepted spellings.
+  cause_family: none
+  trap_properties: []
