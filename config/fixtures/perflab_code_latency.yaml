@@ -32,8 +32,22 @@ setup: >
   the endpoint breakdown showing one endpoint slow while the rest of the service
   is fine. A correct diagnosis cites the eliminations.
 
-providers:
-  - actuator
+# No tag: /api/slow does not exist on the target (404, verified 26 September
+# 2026). See the notes below.
+scenario_tag: ""
+
+# EXCLUDED FROM CAPTURE. /api/slow returns 404 on Box A -- verified 26 September
+# 2026. The endpoint this fixture describes does not exist in perf-lab; it was
+# written from the assertion-doc description of the cause rather than from the
+# target's actual routes, which is the same class of error as naming collector
+# fields that had been renamed.
+#
+# The cause family is now declared and the fixture is otherwise sound, so this is
+# a TARGET gap, not a Crucible one: perf-lab needs an endpoint with a blocking
+# call on the handler path. /api/downstream is the nearest existing thing and is
+# deliberately not a substitute -- it is genuinely downstream latency (httpbin),
+# so an agent diagnosing application_code from it would be wrong.
+providers: []
 
 # No trap property, and the distinction matters. Everything the agent could
 # propose here is useless rather than misleading -- raising the pool on a service

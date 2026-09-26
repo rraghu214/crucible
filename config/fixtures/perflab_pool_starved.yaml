@@ -43,6 +43,11 @@ setup: >
 # fixture captured through all three is the test that would catch a wrong
 # conversion, and it would catch it as a diagnosis that disagrees with its own
 # siblings rather than as a number nobody can check.
+# The locust tag that selects this fixture's endpoint. One family at a time:
+# an untagged run measures a blend of all nine and dilutes the signal to
+# nothing (observed on Box A, 26 September 2026).
+scenario_tag: db
+
 providers:
   - actuator
   - promql

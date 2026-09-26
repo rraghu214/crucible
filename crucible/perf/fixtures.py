@@ -101,6 +101,20 @@ class FixtureSpec:
     #: every replay case built on it scores the model against an answer that was
     #: never in the data.
     validated_at: str = ""
+    #: The load-generator tag that selects THIS fixture's endpoint.
+    #:
+    #: Declared, never guessed, and never empty. ``locust/locustfile.py`` has one
+    #: tagged task per cause family and says in its own docstring to "run one
+    #: family at a time, selected by tag, so a scenario measures one signal". A
+    #: capture that omitted the tag ran all nine tasks and measured a BLEND:
+    #: observed on Box A on 26 September 2026, where an untagged run reported an
+    #: aggregate p99 of 420 ms that belonged almost entirely to `/api/downstream`
+    #: (410 ms p50, httpbin behaving exactly as designed) while `/api/db`, the
+    #: endpoint the SLA is about, sat at 56/210 and contributed a ninth of the
+    #: traffic. A pool-starvation signal measured that way is diluted to
+    #: invisibility, and the resulting fixture would look plausible and be
+    #: worthless.
+    scenario_tag: str = ""
     #: Which metrics providers to capture this state through. A fixture is a
     #: target state seen THROUGH a provider, so the same state under Actuator and
     #: under PromQL is two snapshots (`EVALUATION.md`, "Open: fixtures vs
@@ -141,6 +155,7 @@ class FixtureSpec:
             trap_properties=tuple(str(p) for p in (data.get("trap_properties") or [])),
             bottleneck_config=dict(data.get("bottleneck_config") or {}),
             severity=str(data.get("severity", "")),
+            scenario_tag=str(data.get("scenario_tag", "")),
             validated_at=str(data.get("validated_at") or ""),
             # `or` would be wrong here. An EMPTY providers list is a deliberate
             # statement -- "declared but not captured", which is how a fixture

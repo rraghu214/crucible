@@ -40,6 +40,11 @@ setup: >
 # Both timers here are also unit-converted differently per backend -- seconds
 # under Prometheus, nanoseconds under Datadog -- so a per-metric-family naming or
 # unit error that survived the pool fixture is caught here.
+# The locust tag that selects this fixture's endpoint. One family at a time:
+# an untagged run measures a blend of all nine and dilutes the signal to
+# nothing (observed on Box A, 26 September 2026).
+scenario_tag: churn
+
 providers:
   - actuator
   - promql

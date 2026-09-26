@@ -188,6 +188,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     capture.add_argument("--provider", default="actuator", help="which metrics provider to capture through")
     capture.add_argument(
+        "--tag", default="",
+        help="locust tag for --revalidate (default: derived from the SLA endpoint). A "
+             "fixture capture takes its tag from the fixture and ignores this",
+    )
+    capture.add_argument(
         "--revalidate", type=int, default=0, metavar="N",
         help="run N identical measurements first and refuse to capture if the p99 spread "
              "exceeds 20%%. Run this BEFORE the first capture, never after",
@@ -314,6 +319,7 @@ def main() -> int:
             warmup_s=args.warmup,
             measure_s=args.measure,
             provider_name=args.provider,
+            tag=args.tag,
             revalidate=args.revalidate,
             show_plan=args.show_plan,
         )

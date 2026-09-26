@@ -235,8 +235,10 @@ def test_the_plan_counts_snapshots_not_fixtures(specs):
     """A fixture tagged for three providers is three captures, not one."""
     plan = capture_plan(specs)
     assert plan["fixtures"] == 6
-    assert plan["capturing"] == 5
-    assert plan["snapshots"] == 9
+    # Two of the six are excluded: perflab_thread_starved (its meters are not in
+    # the snapshot) and perflab_code_latency (/api/slow 404s on the target).
+    assert plan["capturing"] == 4
+    assert plan["snapshots"] == 8
     assert set(plan["providers"]) == {"actuator", "promql", "datadog"}
 
 
@@ -248,8 +250,9 @@ def test_a_fixture_excluded_from_capture_declares_no_providers_and_is_named(spec
     responses, and rolling them together buries a decision inside a warning.
     """
     plan = capture_plan(specs)
-    assert plan["excluded"] == ["perflab_thread_starved"]
-    assert "perflab_thread_starved" not in plan["unvalidated"]
+    assert plan["excluded"] == ["perflab_code_latency", "perflab_thread_starved"]
+    for excluded in plan["excluded"]:
+        assert excluded not in plan["unvalidated"]
     assert "DEBT.md" in plan["excluded_note"]
 
 
@@ -363,3 +366,57 @@ def test_every_fixtures_ground_truth_is_nameable_by_its_own_profile(specs):
             f"{spec.profile!r} does not declare. The agent could name it only as a "
             "novel cause, and would be scored against a name it had to invent."
         )
+
+
+# ---------------------------------------------------------------------------
+# 24.7 The scenario tag -- found by running the capture, not by reading it
+# ---------------------------------------------------------------------------
+
+
+def test_every_capturable_fixture_declares_the_tag_that_selects_its_endpoint(specs):
+    """An untagged capture measures a blend of all nine endpoints.
+
+    `locust/locustfile.py` has one tagged task per cause family and says in its
+    own docstring to "run one family at a time, selected by tag, so a scenario
+    measures one signal". `cmd_capture` originally built its Scenario without
+    tags, so Locust ran every task.
+
+    Observed on Box A, 26 September 2026: an untagged run reported an aggregate
+    p99 of 420 ms, of which `/api/downstream` owned 410 (httpbin, behaving
+    exactly as designed), while `/api/db` -- the endpoint the SLA is about --
+    sat at 56/210 and was one ninth of 53,191 requests. A pool-starvation signal
+    measured through that blend is diluted to invisibility, and the fixture
+    would have looked entirely plausible.
+    """
+    for spec in specs:
+        if not spec.providers:
+            continue  # excluded from capture; its tag is moot
+        assert spec.scenario_tag, (
+            f"{spec.id} is declared for capture but names no scenario_tag. "
+            "An untagged capture measures a blend of every endpoint."
+        )
+
+
+def test_the_tag_matches_the_endpoint_the_fixture_describes(specs):
+    """db fixtures drive /api/db, the GC fixture drives /api/churn."""
+    expected = {
+        "perflab_pool_starved": "db",
+        "perflab_pool_starved_mild": "db",
+        "perflab_healthy": "db",
+        "perflab_gc_pressure": "churn",
+    }
+    by_id = {s.id: s for s in specs}
+    for fixture_id, tag in expected.items():
+        assert by_id[fixture_id].scenario_tag == tag
+
+
+def test_a_fixture_with_no_tag_is_refused_rather_than_captured_untagged():
+    """Declared, never guessed -- the same rule as every other runtime fact.
+
+    Defaulting to "all endpoints" is the one behaviour that must not happen: it
+    produces a snapshot that is real, plausible, and about the wrong thing.
+    """
+    from crucible.perf.fixtures import FixtureSpec
+
+    untagged = FixtureSpec(id="f1", cause_family="x", providers=("actuator",))
+    assert untagged.scenario_tag == ""

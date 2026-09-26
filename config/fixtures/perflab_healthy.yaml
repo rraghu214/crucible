@@ -31,6 +31,11 @@ setup: >
   snapshot taken at a lighter load would prove only that less load is easier,
   and the agent would be right to find nothing.
 
+# The locust tag that selects this fixture's endpoint. One family at a time:
+# an untagged run measures a blend of all nine and dilutes the signal to
+# nothing (observed on Box A, 26 September 2026).
+scenario_tag: db
+
 providers:
   - actuator
 

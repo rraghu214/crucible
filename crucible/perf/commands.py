@@ -1135,6 +1135,7 @@ def cmd_capture(
     warmup_s: float = 0.0,
     measure_s: float = 0.0,
     provider_name: str = "actuator",
+    tag: str = "",
     revalidate: int = 0,
     show_plan: bool = False,
 ) -> int:
@@ -1200,14 +1201,21 @@ def cmd_capture(
         # the environment rather than about any one target state.
         profile = TargetProfile.named(profile_name or "spring-boot")
         measure = build_measure(profile, sla)
+        # Tagged, exactly as build_campaign tags its scenario. An untagged K1
+        # measures a blend of every endpoint, so its spread would describe the
+        # noise of a load profile no fixture uses -- and it was the blend that
+        # made three runs agree to 0.1 ms on Box A, because the aggregate p99
+        # was pinned by /api/downstream rather than by anything the SLA is about.
+        k1_tag = tag or ("db" if sla.endpoint.endswith("/db") else "")
         scenario = Scenario(
             name=scenario_name,
             host=sla.target_base_url,
             users=users,
             warmup_s=warmup_s,
             measure_s=measure_s,
+            tags=(k1_tag,) if k1_tag else (),
         )
-        print(_rule(f"K1 re-validation | {revalidate} identical runs"))
+        print(_rule(f"K1 re-validation | {revalidate} identical runs | tag {k1_tag or '(none)'}"))
         p99s = []
         for n in range(1, revalidate + 1):
             print(f"  run {n} of {revalidate}...")
@@ -1265,7 +1273,19 @@ def cmd_capture(
         )
         return REFUSED
 
-    print(_rule(f"capture | {spec.id} | {provider_name}"))
+    if not spec.scenario_tag:
+        print(
+            f"capture refused: {spec.id} declares no scenario_tag, so there is no way "
+            "to know which endpoint carries its signal.\n"
+            "  An untagged run drives all nine of the locustfile's tasks at once and "
+            "measures a blend. On Box A that blend reported p99 420 ms, of which "
+            "/api/downstream owned 410 -- while /api/db, the endpoint the SLA is "
+            "about, sat at 56/210 and was a ninth of the traffic. A fixture captured "
+            "that way looks plausible and is worthless."
+        )
+        return REFUSED
+
+    print(_rule(f"capture | {spec.id} | {provider_name} | tag {spec.scenario_tag}"))
     print(f"\n  ground truth : {spec.cause_family or '(none - healthy fixture)'}")
     print(f"  severity     : {spec.severity or '(unstated)'}")
     print("  set up by    : a human, BEFORE this command (Crucible does not set the")
@@ -1282,6 +1302,7 @@ def cmd_capture(
         users=users,
         warmup_s=warmup_s,
         measure_s=measure_s,
+        tags=(spec.scenario_tag,),
     )
 
     try:

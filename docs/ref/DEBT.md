@@ -126,3 +126,38 @@ work. Fix only when touching the file for another reason.
 
   Both open as of 26 September 2026, both in `tests/test_perf_datadog.py`'s
   group (GROUP 19), which is the one group still marked REVIEW NEEDED.
+
+- **`perflab_code_latency` describes an endpoint the target does not have.** The
+  fixture declares `/api/slow` with a 400 ms blocking call; Box A returns **404**
+  for it (verified 26 September 2026). It was written from the assertion doc's
+  description of the cause rather than from perf-lab's actual routes -- the same
+  class of error as a skill naming collector fields that had been renamed, and
+  caught the same way, by running the thing rather than reading it.
+
+  Excluded from capture (`providers: []`) until perf-lab grows the endpoint. This
+  is a TARGET gap rather than a Crucible one, and it is small: a handler with a
+  `Thread.sleep(400)` and a `@tag("slow")` task in `locust/locustfile.py`.
+  `/api/downstream` is the nearest existing endpoint and is deliberately NOT a
+  substitute -- it is genuinely downstream latency through httpbin, so an agent
+  diagnosing `application_code` from it would be marked correct for a wrong
+  reason, which is precisely the LUCKY quadrant the benchmark exists to expose.
+
+  Consequence for the benchmark: **T5 (class D, outside authority) has no fixture
+  to run against**, so "can it say this is not mine to fix?" is currently
+  untested. T4's "nothing is wrong" still has `perflab_healthy`.
+
+- **Neither PromQL nor Datadog can be captured on Box A today.** Prometheus is not
+  running on `10.0.0.79:9090` (connection refused, 26 September 2026) and no
+  Datadog credentials exist on Box B. Both adapters are implemented and unit
+  tested; neither has been exercised against a live backend.
+
+  This is the gap that matters most for the product's central claim. "Whatever
+  your stack" rests on provider independence, and the honest evidence for it is
+  the same target state diagnosed identically through three backends -- which is
+  exactly what `perflab_pool_starved` and `perflab_gc_pressure` are tagged for and
+  cannot yet deliver. Until then the benchmark demonstrates ONE provider, and the
+  claim must say so.
+
+  Prometheus is the cheap half: it is already in the §16 target stack and needs a
+  container on Box A plus the scrape config. Datadog needs an account and an
+  agent, and its free tier is 1 host with 1-day retention.
