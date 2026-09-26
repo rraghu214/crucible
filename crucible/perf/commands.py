@@ -575,6 +575,13 @@ def cmd_clear_abort(run_id: str, state_dir: str | None = None) -> int:
 # ---------------------------------------------------------------------------
 
 
+#: The metrics providers :func:`build_measure` can actually read through. It
+#: constructs an ``ActuatorMetricsProvider`` and nothing else, so this is the
+#: whole list until that changes -- and it lives beside the function so that
+#: whoever teaches it a second provider sees the list they must extend.
+MEASURABLE_PROVIDERS: tuple[str, ...] = ("actuator",)
+
+
 def build_measure(
     profile: TargetProfile,
     sla: Any,
@@ -1270,6 +1277,19 @@ def cmd_capture(
         print(
             f"capture refused: {spec.id} is declared for "
             f"{', '.join(spec.providers)}, not {provider_name!r}."
+        )
+        return REFUSED
+    if provider_name not in MEASURABLE_PROVIDERS:
+        # Without this, `--provider promql` measured through Actuator and wrote
+        # the result as <id>.promql.json. The numbers would agree with the
+        # actuator sibling perfectly -- because they ARE the actuator sibling --
+        # so the multi-provider comparison these fixtures exist for would pass
+        # while comparing one backend with itself.
+        print(
+            f"capture refused: the measurement reads {', '.join(MEASURABLE_PROVIDERS)} "
+            f"only, so a {provider_name!r} capture would be Actuator numbers written "
+            f"under the name {spec.id}.{provider_name}.json. Teach build_measure "
+            f"to read {provider_name!r} first."
         )
         return REFUSED
 

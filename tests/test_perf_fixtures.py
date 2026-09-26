@@ -253,3 +253,73 @@ class TestK1Revalidation:
 
         assert report["passed"] is False
         assert "at least two" in report["reason"]
+
+
+# ---------------------------------------------------------------------------
+# 21.5 — a capture is labelled with the provider that actually measured it
+#
+# DRAFTED by Claude Code, 26 September 2026. NOT YET REVIEWED by the operator.
+# ---------------------------------------------------------------------------
+
+
+def _write_spec(directory, *, providers):
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "perflab_pool_starved.yaml").write_text(
+        "id: perflab_pool_starved\n"
+        "target_profile: spring-boot\n"
+        "ground_truth_cause_family: connection_pool_exhaustion\n"
+        "scenario_tag: db\n"
+        f"providers: {list(providers)}\n",
+        encoding="utf-8",
+    )
+
+
+class TestCaptureRefusesAProviderTheMeasurementDoesNotRead:
+    """`build_measure` constructs an Actuator client and nothing else. Before
+    this refusal, `--provider promql` measured through Actuator and wrote the
+    result as `<id>.promql.json` -- and the cross-provider comparison those
+    fixtures exist for would then pass, comparing one backend with itself."""
+
+    def test_a_promql_capture_is_refused_before_anything_is_measured(self, tmp_path, monkeypatch):
+        from crucible.perf import commands
+
+        _write_spec(tmp_path / "specs", providers=["actuator", "promql"])
+        reached = []
+        monkeypatch.setattr(commands, "build_measure", lambda *a, **k: reached.append(1))
+
+        code = commands.cmd_capture(
+            fixture_id="perflab_pool_starved",
+            fixture_config_dir=str(tmp_path / "specs"),
+            out_dir=str(tmp_path / "out"),
+            provider_name="promql",
+        )
+
+        assert code == commands.REFUSED
+        assert reached == [], "the measurement ran for a provider it cannot read"
+        assert not (tmp_path / "out").exists()
+
+    def test_actuator_still_reaches_the_measurement(self, tmp_path, monkeypatch):
+        """The refusal is about which provider, not a blanket stop: the one
+        provider the measurement really reads must still get as far as
+        measuring."""
+        from crucible.perf import commands
+
+        _write_spec(tmp_path / "specs", providers=["actuator", "promql"])
+        reached = []
+
+        def fake_build_measure(*_a, **_k):
+            reached.append(1)
+            return lambda _scenario, _rid: (object(), _snapshot())
+
+        monkeypatch.setattr(commands, "build_measure", fake_build_measure)
+
+        code = commands.cmd_capture(
+            fixture_id="perflab_pool_starved",
+            fixture_config_dir=str(tmp_path / "specs"),
+            out_dir=str(tmp_path / "out"),
+            provider_name="actuator",
+        )
+
+        assert code == commands.OK
+        assert reached == [1]
+        assert (tmp_path / "out" / "perflab_pool_starved.actuator.json").exists()

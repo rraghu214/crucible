@@ -1901,7 +1901,7 @@ plus a recapture, not a one-line change. The existing name was kept on that basi
 # GROUP 21 — Fixture capture
 
 *Week 3, `crucible/perf/fixtures.py`. Implemented in `tests/test_perf_fixtures.py`
-(19 assertions). EVALUATION.md, DESIGN.md §7.*
+(21 assertions). EVALUATION.md, DESIGN.md §7.*
 
 **REVIEWED AND APPROVED** by the operator, 26 September 2026.
 
@@ -1971,6 +1971,33 @@ answer different questions: 20% asks "is this box stable enough to capture fixtu
 on", the per-environment floor (2.08% on Oracle, 14.3% on the Windows laptop) asks
 "is this particular improvement real". Using the tighter number here would block
 capture on a box that is perfectly adequate for it.
+
+---
+
+### 21.5 A capture is labelled with the provider that actually measured it
+
+**REVIEW NEEDED** — added 26 September 2026, after this group was approved.
+
+**What it checks.** `crucible capture --provider promql` on a fixture that declares
+`promql` is refused **before anything is measured** and writes no file, while
+`--provider actuator` on the same fixture still reaches the measurement and writes
+`<id>.actuator.json`.
+
+**Why it exists.** `build_measure` constructs an `ActuatorMetricsProvider` and
+nothing else. Until this refusal, a PromQL "capture" measured through Actuator and
+wrote the result as `perflab_pool_starved.promql.json`. Its numbers would agree
+with the Actuator sibling perfectly — because they *are* the Actuator sibling — so
+the multi-provider comparison those fixtures exist for (README in
+`config/fixtures/`, 24.5) would pass while comparing one backend with itself.
+Found while preparing the week-4 capture run; unreachable only because Prometheus
+was not yet running on Box A.
+
+**For review:**
+- Is refusing right, or should `build_measure` learn PromQL/Datadog now? Refusing
+  is the one-line safe state; teaching it is the real fix and is its own change.
+- The allowed list is a constant (`MEASURABLE_PROVIDERS`) beside `build_measure`
+  rather than derived from it. Derivation would need `build_measure` to report
+  what it built, which is a larger change than the bug.
 
 ---
 
