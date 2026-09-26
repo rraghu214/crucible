@@ -226,12 +226,23 @@ def build_prompt(
     *,
     ruled_out: tuple[str, ...] = (),
     unreadable_metrics: dict[str, Any] | None = None,
+    prior_findings: str = "",
 ) -> str:
     """The user turn: the SLA, the snapshot, the gaps, and what is already ruled out.
 
-    ``ruled_out`` carries hypotheses previous experiments disproved *with
-    measurements*. Feeding them back is what stops the loop re-proposing a
-    disproven cause on experiment 4 because it looked good on experiment 1.
+    ``ruled_out`` carries hypotheses THIS campaign disproved *with measurements*.
+    Feeding them back is what stops the loop re-proposing a disproven cause on
+    experiment 4 because it looked good on experiment 1.
+
+    ``prior_findings`` is the journal RAG (``DESIGN.md`` section 14): what EARLIER
+    campaigns measured on this target. The two are rendered separately and
+    deliberately. This campaign's ruled-out list was measured against the
+    configuration now in force, so it is a fact about now and is phrased as an
+    instruction. A finding from three weeks ago was measured against a target that
+    has had other changes kept on it since, and possibly by a different collector,
+    so it is phrased as evidence carrying its own date. Flattening the two into one
+    list of prohibitions would make the older half look more binding than the
+    measurements support.
     """
     sections = [
         "SLA for this investigation (you cannot change it, and you are not being "
@@ -252,6 +263,8 @@ def build_prompt(
             "Already disproved by measurement in this campaign -- do not propose "
             "these again:\n" + "\n".join(f"  - {r}" for r in ruled_out)
         )
+    if prior_findings:
+        sections.append(prior_findings)
     sections.append("Diagnose the SLA miss and answer with the JSON object described above.")
     return "\n\n".join(sections)
 
@@ -404,6 +417,7 @@ class Diagnoser:
         sla: dict[str, Any],
         *,
         ruled_out: tuple[str, ...] = (),
+        prior_findings: str = "",
     ) -> Diagnosis:
         """Ask for one diagnosis. Never raises on a bad reply -- abstains instead.
 
@@ -419,6 +433,7 @@ class Diagnoser:
             sla,
             ruled_out=ruled_out,
             unreadable_metrics=snapshot.get("unreadable_metrics"),
+            prior_findings=prior_findings,
         )
         try:
             reply = await self.transport.chat(
