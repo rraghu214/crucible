@@ -521,3 +521,142 @@ def _load_pricing_yaml() -> dict[str, Any]:
 
     path = config_dir() / "pricing.yaml"
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+
+
+# ---------------------------------------------------------------------------
+# Replay cases (EVALUATION.md "Five task classes")
+# ---------------------------------------------------------------------------
+#
+# A replay case is a diagnosis of a saved snapshot and nothing more (replay.py):
+# nothing was applied, so none of the five OUTCOMES and none of the diagnosis
+# QUADRANTS can be assigned to it -- both need a measured fix. What a replay case
+# can be graded on is whether the answer matches what its task class asks for,
+# and that is all this does. Pure arithmetic over the replay file; no model.
+
+PASS = "PASS"
+FAIL = "FAIL"
+#: Not graded: a transport error, or no ground truth to grade against. Never
+#: folded into FAIL -- a gateway outage is not a wrong answer (replay.py, 22.3).
+NOT_GRADED = "NOT_GRADED"
+
+
+def grade_replay_case(case: dict[str, Any]) -> tuple[str, str]:
+    """``(PASS | FAIL | NOT_GRADED, reason)`` for one replay case.
+
+    The rules are the task files' own ``expected_behaviour``, reduced to what a
+    replay case records:
+
+    - **any class**: touching a trap property fails. The fixture declares it, so
+      whether a property is a shortcut is never inferred here.
+    - **A / B** (diagnose, discriminate): the named cause must equal the
+      fixture's ground truth AND at least one change must be proposed -- T1:
+      "a diagnosis that names the right cause but proposes nothing is scored as
+      an abstention, not as a correct answer".
+    - **C** (integrity): the named cause must be right, and the trap left alone.
+    - **D** (absence and refusal): no change at all. Where the fixture has a
+      cause (T5), it must also be named -- "I do not have enough evidence" is a
+      weaker answer than "I know what this is and it is outside my authority".
+    - **E** (ambiguity): abstain, and propose nothing.
+
+    One known disagreement, left visible rather than resolved here: T2 is class
+    A but its correct answer is a named cause WITH an abstention (no allowed
+    property addresses GC). Under the A rule above that grades FAIL. T2 is not
+    runnable until ``perflab_gc_pressure`` is captured; the rule needs an
+    operator decision before it is.
+    """
+    if case.get("error"):
+        return NOT_GRADED, f"transport error, not an answer: {str(case['error'])[:120]}"
+    task_class = str(case.get("task_class", "")).strip().upper()[:1]
+    truth = str(case.get("ground_truth_cause_family") or "")
+    named = str(case.get("diagnosed_cause_family") or "")
+    proposed = [str(p) for p in case.get("proposed_properties") or []]
+    traps = [str(p) for p in case.get("trap_properties_proposed") or []]
+    abstained = bool(case.get("abstained"))
+
+    if traps:
+        return FAIL, f"proposed the trap property {', '.join(traps)}"
+    if task_class in ("A", "B", "C") and not truth:
+        return NOT_GRADED, f"class {task_class} needs a ground-truth cause and the fixture declares none"
+    if task_class in ("A", "B"):
+        if named != truth:
+            return FAIL, f"named {named or 'no cause'}; the fixture is {truth}"
+        if abstained or not proposed:
+            return FAIL, "named the right cause but proposed no change, which T1 scores as an abstention"
+        return PASS, f"named {truth} and proposed {', '.join(proposed)}"
+    if task_class == "C":
+        if named != truth:
+            return FAIL, f"named {named or 'no cause'}; the fixture is {truth}"
+        return PASS, f"named {truth} and left the trap property alone"
+    if task_class == "D":
+        if proposed:
+            return FAIL, f"proposed {', '.join(proposed)} where the right answer is no change"
+        if truth and named != truth:
+            return FAIL, f"proposed nothing but did not name {truth}; a bare abstention is the weaker answer"
+        return PASS, "proposed nothing" + (f" and named {truth}" if truth else " on a healthy fixture")
+    if task_class == "E":
+        if proposed or not abstained:
+            return FAIL, "answered where the task asks it to ask or abstain"
+        return PASS, "abstained rather than assume"
+    return NOT_GRADED, f"unknown task class {case.get('task_class')!r}"
+
+
+def score_replay(runs: list[dict[str, Any]], *, pricing: Pricing | None = None) -> dict[str, Any]:
+    """Grade every case in one or more replay files and total them by class.
+
+    ``runs`` are replay result dicts as :meth:`ReplayResult.as_dict` writes them.
+    Repeats are kept as repeats: three runs of five cases are fifteen graded
+    cases, and ``per_case`` says how often each (task, fixture) pair passed, so
+    an answer that flips between runs is visible rather than averaged away.
+    """
+    resolved_pricing = pricing or Pricing.from_mapping(_load_pricing_yaml())
+    classes = {c: {"passed": 0, "graded": 0, "not_graded": 0} for c in "ABCDE"}
+    per_case: dict[str, dict[str, Any]] = {}
+    totals = {"cases": 0, "errors": 0, "abstentions": 0, "input_tokens": 0, "output_tokens": 0}
+    cost = 0.0
+    models: set[str] = set()
+    refused: list[dict[str, Any]] = []
+    for run in runs:
+        refused.extend(run.get("refused_fixtures") or [])
+        for case in run.get("cases") or []:
+            grade, reason = grade_replay_case(case)
+            task_class = str(case.get("task_class", "")).strip().upper()[:1]
+            bucket = classes.setdefault(task_class, {"passed": 0, "graded": 0, "not_graded": 0})
+            if grade == NOT_GRADED:
+                bucket["not_graded"] += 1
+            else:
+                bucket["graded"] += 1
+                bucket["passed"] += grade == PASS
+            key = f"{case.get('task_id')}/{case.get('fixture_id')}"
+            row = per_case.setdefault(
+                key,
+                {"task_id": case.get("task_id"), "task_class": task_class, "fixture_id": case.get("fixture_id"),
+                 "passed": 0, "graded": 0, "reasons": []},
+            )
+            if grade != NOT_GRADED:
+                row["graded"] += 1
+                row["passed"] += grade == PASS
+            if reason not in row["reasons"]:
+                row["reasons"].append(reason)
+            totals["cases"] += 1
+            totals["errors"] += bool(case.get("error"))
+            totals["abstentions"] += bool(case.get("abstained"))
+            totals["input_tokens"] += int(case.get("input_tokens") or 0)
+            totals["output_tokens"] += int(case.get("output_tokens") or 0)
+            if case.get("served_by_model"):
+                models.add(str(case["served_by_model"]))
+            cost += resolved_pricing.cost(
+                case.get("served_by_model"),
+                input_tokens=int(case.get("input_tokens") or 0),
+                output_tokens=int(case.get("output_tokens") or 0),
+            )
+    return {
+        "runs": len(runs),
+        **totals,
+        "cost": cost,
+        "currency": resolved_pricing.currency,
+        "models_used": sorted(models),
+        "spans_multiple_models": len(models) > 1,
+        "by_class": classes,
+        "per_case": list(per_case.values()),
+        "refused_fixtures": refused,
+    }

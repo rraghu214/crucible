@@ -1,0 +1,115 @@
+{
+  "task_set": "tasks-T1-T3-T4",
+  "fixture_dir": "fixtures",
+  "cases": [
+    {
+      "task_id": "T1",
+      "task_class": "A",
+      "fixture_id": "perflab_pool_starved",
+      "ground_truth_cause_family": "connection_pool_exhaustion",
+      "diagnosed_cause_family": "connection_pool_exhaustion",
+      "abstained": false,
+      "abstain_reason": "",
+      "confidence": 1.0,
+      "proposed_properties": [
+        "spring.datasource.hikari.maximum-pool-size"
+      ],
+      "trap_properties_proposed": [],
+      "served_by_model": "gemini-3.5-flash-lite",
+      "served_by_provider": "gemini_1",
+      "input_tokens": 4153,
+      "output_tokens": 342,
+      "latency_ms": 1406.0,
+      "error": "",
+      "diagnosis_correct": true
+    },
+    {
+      "task_id": "T1",
+      "task_class": "A",
+      "fixture_id": "perflab_pool_starved_mild",
+      "ground_truth_cause_family": "connection_pool_exhaustion",
+      "diagnosed_cause_family": "connection_pool_exhaustion",
+      "abstained": false,
+      "abstain_reason": "",
+      "confidence": 1.0,
+      "proposed_properties": [
+        "spring.datasource.hikari.maximum-pool-size"
+      ],
+      "trap_properties_proposed": [],
+      "served_by_model": "gemini-3.5-flash-lite",
+      "served_by_provider": "gemini_1",
+      "input_tokens": 4173,
+      "output_tokens": 329,
+      "latency_ms": 1684.0,
+      "error": "",
+      "diagnosis_correct": true
+    },
+    {
+      "task_id": "T3",
+      "task_class": "C",
+      "fixture_id": "perflab_pool_starved",
+      "ground_truth_cause_family": "connection_pool_exhaustion",
+      "diagnosed_cause_family": "connection_pool_exhaustion",
+      "abstained": false,
+      "abstain_reason": "",
+      "confidence": 1.0,
+      "proposed_properties": [
+        "spring.datasource.hikari.maximum-pool-size"
+      ],
+      "trap_properties_proposed": [],
+      "served_by_model": "gemini-3.5-flash-lite",
+      "served_by_provider": "gemini_1",
+      "input_tokens": 4153,
+      "output_tokens": 290,
+      "latency_ms": 1442.0,
+      "error": "",
+      "diagnosis_correct": true
+    },
+    {
+      "task_id": "T3",
+      "task_class": "C",
+      "fixture_id": "perflab_pool_starved_mild",
+      "ground_truth_cause_family": "connection_pool_exhaustion",
+      "diagnosed_cause_family": "connection_pool_exhaustion",
+      "abstained": false,
+      "abstain_reason": "",
+      "confidence": 1.0,
+      "proposed_properties": [
+        "spring.datasource.hikari.maximum-pool-size"
+      ],
+      "trap_properties_proposed": [],
+      "served_by_model": "gemini-3.5-flash-lite",
+      "served_by_provider": "gemini_1",
+      "input_tokens": 4173,
+      "output_tokens": 286,
+      "latency_ms": 1251.0,
+      "error": "",
+      "diagnosis_correct": true
+    },
+    {
+      "task_id": "T4",
+      "task_class": "D",
+      "fixture_id": "perflab_healthy",
+      "ground_truth_cause_family": "",
+      "diagnosed_cause_family": "",
+      "abstained": true,
+      "abstain_reason": "The measured snapshot indicates that the service is actually healthy and meeting the SLA. The p99_ms in the load summary is 58.0 ms, which is well below the SLA limit of 120.0 ms, and the error rate is 0.0%. There is no SLA miss to diagnose.",
+      "confidence": 1.0,
+      "proposed_properties": [],
+      "trap_properties_proposed": [],
+      "served_by_model": "gemini-3.5-flash-lite",
+      "served_by_provider": "gemini_1",
+      "input_tokens": 4174,
+      "output_tokens": 240,
+      "latency_ms": 1425.0,
+      "error": "",
+      "diagnosis_correct": null
+    }
+  ],
+  "refused_fixtures": [],
+  "models_used": [
+    "gemini-3.5-flash-lite"
+  ],
+  "spans_multiple_models": false,
+  "comparability_warning": ""
+}

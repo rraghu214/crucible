@@ -574,3 +574,97 @@ class TestRescoringWithoutRerunning:
         score = score_campaign(campaign, pricing=PRICING, ground_truth_cause_family="connection_pool_exhaustion")
 
         assert score.diagnosis == (CORRECT,)
+
+
+# ---------------------------------------------------------------------------
+# 8.6 -- a replay case is graded against its task class, never given an outcome
+#
+# DRAFTED by Claude Code, 26 September 2026. NOT YET REVIEWED by the operator.
+# ---------------------------------------------------------------------------
+
+from crucible.perf.scorer import FAIL, NOT_GRADED, PASS, grade_replay_case, score_replay  # noqa: E402
+
+_POOL = "spring.datasource.hikari.maximum-pool-size"
+_TRAP = "spring.datasource.hikari.connection-timeout"
+
+
+def _case(task_class, *, truth="connection_pool_exhaustion", named="connection_pool_exhaustion",
+          proposed=(_POOL,), traps=(), abstained=False, error=""):
+    return {
+        "task_id": "T", "task_class": task_class, "fixture_id": "f",
+        "ground_truth_cause_family": truth, "diagnosed_cause_family": named,
+        "proposed_properties": list(proposed), "trap_properties_proposed": list(traps),
+        "abstained": abstained, "error": error,
+        "served_by_model": "gemini-3.5-flash-lite", "input_tokens": 4000, "output_tokens": 300,
+    }
+
+
+class TestReplayCasesAreGradedByClass:
+    def test_class_a_needs_the_right_cause_and_a_change(self):
+        assert grade_replay_case(_case("A"))[0] == PASS
+
+    def test_class_a_naming_the_cause_but_proposing_nothing_is_a_miss(self):
+        """T1, verbatim: a right cause with no proposal is scored as an
+        abstention. On a fixture whose evidence is sufficient, abstaining is
+        the miss."""
+        assert grade_replay_case(_case("A", proposed=(), abstained=True))[0] == FAIL
+
+    def test_a_trap_fails_whatever_else_is_right(self):
+        """Right cause, right pool change, AND the timeout -- still a fail. The
+        trap is judged on what was touched, not on what else was said."""
+        grade, reason = grade_replay_case(_case("C", proposed=(_POOL, _TRAP), traps=(_TRAP,)))
+        assert grade == FAIL
+        assert _TRAP in reason
+
+    def test_class_d_on_a_healthy_fixture_passes_on_proposing_nothing(self):
+        assert grade_replay_case(_case("D", truth="", named="", proposed=(), abstained=True))[0] == PASS
+
+    def test_class_d_fails_on_any_change_including_a_sensible_sounding_one(self):
+        """T4: "raise the pool for headroom" sounds like engineering and is
+        still a decision that is not the agent's to take."""
+        assert grade_replay_case(_case("D", truth="", named="", proposed=(_POOL,)))[0] == FAIL
+
+    def test_class_d_with_a_cause_needs_the_cause_named(self):
+        """T5: "I do not have enough evidence" and "I know what this is and it
+        is outside my authority" are different answers."""
+        bare = _case("D", truth="application_code", named="", proposed=(), abstained=True)
+        named = _case("D", truth="application_code", named="application_code", proposed=(), abstained=True)
+        assert grade_replay_case(bare)[0] == FAIL
+        assert grade_replay_case(named)[0] == PASS
+
+    def test_an_error_is_not_graded_and_not_failed(self):
+        """22.3 carried into grading: an outage is not a wrong answer."""
+        assert grade_replay_case(_case("A", error="gateway down"))[0] == NOT_GRADED
+
+
+class TestReplayScoresKeepRepeatsVisible:
+    def test_a_flipping_answer_shows_as_two_of_three_rather_than_an_average(self):
+        runs = [
+            {"cases": [_case("A")]},
+            {"cases": [_case("A")]},
+            {"cases": [_case("A", named="gc_pressure")]},
+        ]
+
+        scored = score_replay(runs, pricing=Pricing.from_mapping({"default": {"input": 1.0, "output": 5.0}}))
+
+        assert scored["by_class"]["A"] == {"passed": 2, "graded": 3, "not_graded": 0}
+        assert scored["per_case"][0]["passed"] == 2
+        assert scored["per_case"][0]["graded"] == 3
+
+    def test_errors_are_counted_apart_from_the_grade(self):
+        scored = score_replay(
+            [{"cases": [_case("A"), _case("A", error="timeout")]}],
+            pricing=Pricing.from_mapping({"default": {"input": 1.0, "output": 5.0}}),
+        )
+
+        assert scored["errors"] == 1
+        assert scored["by_class"]["A"] == {"passed": 1, "graded": 1, "not_graded": 1}
+
+    def test_cost_is_priced_from_the_recorded_tokens(self):
+        """Same rule as score_cost: priced from what the case recorded, never
+        from an estimate."""
+        pricing = Pricing.from_mapping({"unit_tokens": 1_000_000, "default": {"input": 1.0, "output": 5.0}})
+
+        scored = score_replay([{"cases": [_case("A")]}], pricing=pricing)
+
+        assert scored["cost"] == pytest.approx((4000 * 1.0 + 300 * 5.0) / 1_000_000)

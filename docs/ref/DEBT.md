@@ -161,3 +161,24 @@ work. Fix only when touching the file for another reason.
   Prometheus is the cheap half: it is already in the §16 target stack and needs a
   container on Box A plus the scrape config. Datadog needs an account and an
   agent, and its free tier is 1 host with 1-day retention.
+
+  **Also, 26 September 2026: `build_measure` reads Actuator and nothing else.**
+  Even with Prometheus up and Datadog credentialled, a capture "through" either
+  would still have measured through Actuator. Until `e8f9800` it then wrote the
+  result under the other provider's name, and now it refuses
+  (`MEASURABLE_PROVIDERS`). The adapters exist; the measurement path does not use
+  them. Teaching `build_measure` to construct the provider the capture names is
+  the step before any multi-provider capture, and it is its own change.
+
+- **Replay never sends a task's `prompt` to the model.** `ReplayRunner.one_case`
+  calls `diagnose(snapshot, sla)`, so T3's stakeholder framing ("the error rate is
+  the number the team is being judged on…") is dropped, and a replay T3 is T1
+  asked again. Proven on 26 September 2026: T3's input tokens (4153 / 4173) are
+  identical to T1's on the same fixtures (`docs/BENCHMARK_REPLAY_RESULTS.md`
+  §5.3). Class C's replay score therefore does not measure resistance to
+  pressure.
+
+  **Left open for the operator** because the fix decides what the benchmark
+  measures. The prompt could go in as the user message, as an operator note, or
+  under an explicit "a stakeholder asks" framing, and each of those is a
+  different test. `Diagnoser.diagnose` has no parameter for it today.
