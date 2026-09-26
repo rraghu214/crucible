@@ -575,6 +575,84 @@ def cmd_clear_abort(run_id: str, state_dir: str | None = None) -> int:
 # ---------------------------------------------------------------------------
 
 
+def build_measure(
+    profile: TargetProfile,
+    sla: Any,
+    *,
+    results_dir: str | Path = "results",
+    jaeger_url: str = "",
+    jaeger_service: str = "",
+    trace_sampling_rate_pct: float | None = None,
+) -> Any:
+    """``(scenario, run_id) -> (LoadResult, snapshot)``, the one used everywhere.
+
+    Extracted from :func:`build_campaign` on 26 September 2026 so that fixture
+    capture uses it too, and that is the whole point rather than tidiness. A
+    fixture is replayed against a model hundreds of times and its results are
+    compared with live campaign results; if capture assembled its snapshot even
+    slightly differently -- a different evidence flag, a different redaction
+    allowlist, a window computed another way -- then replay and live would be
+    measuring different things under one name, and nothing downstream could
+    detect it. One function, one snapshot shape.
+    """
+    from .collector import AvailableEvidence, build_snapshot
+    from .providers import ActuatorMetricsProvider, JaegerTraceProvider, trace_evidence
+    from .runner import LocustRunner, Scenario, measurement_window
+
+    provider_client = ActuatorMetricsProvider(sla.target_base_url)
+    runner = LocustRunner(
+        results_dir=Path(results_dir), metrics_provider=provider_client, profile=profile
+    )
+
+    # `None` when tracing was not configured, which `trace_evidence` turns into
+    # the declared absence -- traces False, sampling rate None, reason stated.
+    # Doing it through the provider rather than writing the three fields here
+    # means a future call site cannot omit the sampling rate, and an omitted
+    # sampling rate reads as full coverage (DESIGN.md 4.3).
+    trace_provider = (
+        JaegerTraceProvider(
+            base_url=jaeger_url,
+            service=jaeger_service or profile.name,
+            sampling_rate_pct=trace_sampling_rate_pct,
+        )
+        if jaeger_url
+        else None
+    )
+
+    def measure(scn: Scenario, rid: str) -> Any:
+        """Run load, then build the snapshot the model is allowed to see."""
+        load = runner.run(scn, rid)
+        raw = {
+            name: provider_client.fetch(name)
+            for name in profile.snapshot_metrics.values()
+        }
+        breakdown = provider_client.endpoint_breakdown()
+        traces = trace_evidence(trace_provider)
+        snapshot = build_snapshot(
+            {k: v for k, v in raw.items() if v},
+            run_id=rid,
+            profile_name=profile.name,
+            target=sla.target_base_url,
+            gauge_samples=load.gauge_samples,
+            load_summary=load.as_load_summary(),
+            endpoint_breakdown=breakdown,
+            metric_keys=profile.snapshot_metrics,
+            window=measurement_window(load),
+            redaction_allowlist=profile.redaction_allowlist,
+            evidence=AvailableEvidence(
+                metrics=any(raw.values()),
+                traces=traces["traces"],
+                trace_reason=traces["trace_reason"],
+                trace_sampling_rate_pct=traces["trace_sampling_rate_pct"],
+                endpoint_breakdown=bool(breakdown),
+                gauge_sampling=bool(load.gauge_samples),
+            ),
+        )
+        return load, snapshot
+
+    return measure
+
+
 def build_campaign(
     *,
     profile_name: str,
@@ -591,16 +669,17 @@ def build_campaign(
     approval_timeout_s: float,
     model: str,
     provider: str,
+    jaeger_url: str = "",
+    jaeger_service: str = "",
+    trace_sampling_rate_pct: float | None = None,
 ) -> Any:
     """Assemble a real campaign from configuration. Kept apart from ``cmd_run``
     so a test can build one without going through argparse."""
     from ..gateway import GatewayClient
     from .approval import FileApprovalGate, PreapprovedGate
     from .campaign import Campaign
-    from .collector import AvailableEvidence, build_snapshot
     from .diagnosis import Diagnoser
-    from .providers import ActuatorMetricsProvider
-    from .runner import LocustRunner, Scenario, measurement_window
+    from .runner import Scenario
 
     profile = TargetProfile.named(profile_name)
     sla = Sla.load(sla_path)
@@ -614,39 +693,13 @@ def build_campaign(
         tags=("db",) if sla.endpoint.endswith("/db") else (),
     )
 
-    provider_client = ActuatorMetricsProvider(sla.target_base_url)
-    runner = LocustRunner(
-        results_dir=Path("results"), metrics_provider=provider_client, profile=profile
+    measure = build_measure(
+        profile,
+        sla,
+        jaeger_url=jaeger_url,
+        jaeger_service=jaeger_service,
+        trace_sampling_rate_pct=trace_sampling_rate_pct,
     )
-
-    def measure(scn: Scenario, rid: str) -> Any:
-        """Run load, then build the snapshot the model is allowed to see."""
-        load = runner.run(scn, rid)
-        raw = {
-            name: provider_client.fetch(name)
-            for name in profile.snapshot_metrics.values()
-        }
-        breakdown = provider_client.endpoint_breakdown()
-        snapshot = build_snapshot(
-            {k: v for k, v in raw.items() if v},
-            run_id=rid,
-            profile_name=profile.name,
-            target=sla.target_base_url,
-            gauge_samples=load.gauge_samples,
-            load_summary=load.as_load_summary(),
-            endpoint_breakdown=breakdown,
-            metric_keys=profile.snapshot_metrics,
-            window=measurement_window(load),
-            redaction_allowlist=profile.redaction_allowlist,
-            evidence=AvailableEvidence(
-                metrics=any(raw.values()),
-                traces=False,
-                trace_reason="no trace provider configured for this campaign",
-                endpoint_breakdown=bool(breakdown),
-                gauge_sampling=bool(load.gauge_samples),
-            ),
-        )
-        return load, snapshot
 
     gate = (
         PreapprovedGate()
@@ -666,13 +719,15 @@ def build_campaign(
         else CommandRestarter(profile.restart, workspace=workspace)
     )
 
+    gateway_client = GatewayClient()
+
     return Campaign(
         profile=profile,
         sla=sla,
         scenario=scenario,
         applicator=Applicator(profile=profile, workspace=Path(workspace), restarter=restarter),
         diagnoser=Diagnoser(
-            profile=profile, transport=GatewayClient(), provider=provider, model=model
+            profile=profile, transport=gateway_client, provider=provider, model=model
         ),
         measure=measure,
         approval_gate=gate,
@@ -680,6 +735,9 @@ def build_campaign(
         max_experiments=max_experiments,
         run_id=run_id,
         state_dir=state_dir,
+        # Real campaigns hit a hosted, free-tier gateway that can be cold; a
+        # scripted test campaign never sets this and skips the wait entirely.
+        warm_up_gateway=gateway_client.warm_up,
     )
 
 
@@ -719,3 +777,521 @@ def cmd_run(**kwargs: Any) -> int:
     print(f"\n  manifest: {Path('results') / (result.run_id + '.json')}")
     return OK
 
+
+
+# ---------------------------------------------------------------------------
+# score
+# ---------------------------------------------------------------------------
+
+
+def cmd_score(
+    *,
+    journal_dir: str = "results",
+    fixture_dir: str = "",
+    ground_truth_path: str = "",
+    json_out: str = "",
+) -> int:
+    """Score saved campaign manifests. Calls no model, ever (DESIGN.md 4.6).
+
+    **Trap properties** come from the fixtures: whether a property is a
+    metric-gaming shortcut depends on what is actually wrong, so it is fixture
+    metadata and never inferred from a manifest.
+
+    **Ground truth does not**, and this is worth stating because the obvious
+    assumption is wrong. A campaign manifest records a ``run_id``; a fixture
+    records a cause. Nothing links them, because a campaign runs against a live
+    target rather than against a fixture -- so a campaign's own manifest can
+    never certify whether its diagnosis was right. Where the operator knows the
+    mapping they supply it explicitly as ``run_id: cause_family`` in
+    ``ground_truth_path``; where they do not, the diagnosis dimension reports
+    ``UNSCORABLE`` rather than a guess.
+    """
+    import json as _json
+
+    import yaml as _yaml
+
+    from .fixtures import load_fixtures
+    from .scorer import score_journal
+
+    ground_truth: dict[str, str] = {}
+    if ground_truth_path:
+        try:
+            loaded = _yaml.safe_load(Path(ground_truth_path).read_text(encoding="utf-8")) or {}
+        except (OSError, ValueError) as exc:
+            print(f"cannot read ground truth {ground_truth_path}: {exc}")
+            return REFUSED
+        if not isinstance(loaded, dict):
+            print(f"{ground_truth_path} must map run_id -> cause_family")
+            return REFUSED
+        ground_truth = {str(k): str(v) for k, v in loaded.items()}
+
+    traps: set[str] = set()
+    if fixture_dir:
+        fixtures, refused = load_fixtures(fixture_dir)
+        for fixture in fixtures:
+            traps |= set(fixture.spec.trap_properties)
+        for path, reason in refused:
+            print(f"  REFUSED {path}: {reason}")
+
+    report = score_journal(
+        journal_dir, ground_truth=ground_truth, trap_properties=frozenset(traps)
+    )
+
+    print(_rule("scores"))
+    if not report.scores and not report.refused:
+        print(f"  no manifests found in {journal_dir}")
+        return REFUSED
+    for score in report.scores:
+        print(f"  {score.run_id}: {score.outcome}")
+        print(
+            f"      diagnosis {', '.join(score.diagnosis) or '(none)'} | "
+            f"experiments {score.efficiency.experiments_used} | "
+            f"cost {score.cost.total:.6f} {score.cost.currency}"
+        )
+        if score.calibration.mean_abs_error_pct is not None:
+            print(f"      calibration: {score.calibration.mean_abs_error_pct:+.1f}% mean abs error")
+        if score.integrity.violated:
+            print(f"      INTEGRITY: kept trap properties {score.integrity.trap_properties_kept}")
+        if score.spans_multiple_models:
+            print("      WARNING: spans multiple models; not internally comparable")
+    for path, reason in report.refused:
+        print(f"  REFUSED {path}: {reason}")
+
+    if json_out:
+        Path(json_out).parent.mkdir(parents=True, exist_ok=True)
+        Path(json_out).write_text(_json.dumps(report.as_dict(), indent=2), encoding="utf-8")
+        print(f"\n  written: {json_out}")
+    return OK
+
+
+# ---------------------------------------------------------------------------
+# bench -- the replay half of the benchmark
+# ---------------------------------------------------------------------------
+
+
+def cmd_bench(
+    *,
+    tasks_path: str,
+    fixture_dir: str,
+    profile_name: str = "spring-boot",
+    sla_path: str = "config/slo.yaml",
+    out: str = "results/replay.json",
+    provider: str = "gemini",
+    model: str = "",
+) -> int:
+    """Replay a task set against captured snapshots. No live target needed.
+
+    This is the cheap half of the benchmark (DESIGN.md 7): it tests diagnosis,
+    refusal and confidence at roughly two seconds and $0.002 a case. It does
+    call the model -- that is how the evidence is produced -- and it writes a
+    result file the scorer then reads without calling anything.
+    """
+    import asyncio
+
+    from ..gateway import GatewayClient
+    from .diagnosis import Diagnoser
+    from .fixtures import load_fixtures
+    from .replay import (
+        ReplayError,
+        ReplayRunner,
+        load_task_dir,
+        load_tasks,
+        summarise,
+        trap_coverage,
+    )
+
+    try:
+        profile = TargetProfile.named(profile_name)
+        sla = Sla.load(sla_path)
+        # A directory or a single file. `config/tasks/` is one file per task, so
+        # a reviewer edits the task they are arguing with rather than finding it
+        # inside a list -- but an older single-file task set still loads.
+        tasks = (
+            load_task_dir(tasks_path)
+            if Path(tasks_path).is_dir()
+            else load_tasks(tasks_path)
+        )
+    except (CampaignRefused, FileNotFoundError, ValueError, ReplayError) as exc:
+        print(f"bench refused: {exc}")
+        return REFUSED
+
+    gateway = GatewayClient()
+    runner = ReplayRunner(
+        diagnoser=Diagnoser(
+            profile=profile, transport=gateway, provider=provider, model=model
+        ),
+        sla=sla.as_dict(),
+    )
+
+    print(f"replaying {len(tasks)} task(s) against fixtures in {fixture_dir}")
+    try:
+        # The gateway is hosted on a free tier and spins down when idle; pay the
+        # cold start before the first case rather than inside it.
+        asyncio.run(gateway.warm_up())
+        result = asyncio.run(
+            runner.run(tasks, fixture_dir, task_set_name=str(Path(tasks_path).name))
+        )
+    except ReplayError as exc:
+        print(f"bench refused: {exc}")
+        return REFUSED
+
+    fixtures, _refused = load_fixtures(fixture_dir)
+    report = summarise(result)
+    coverage = trap_coverage(result, fixtures)
+
+    print(_rule("replay"))
+    for key, value in report.items():
+        print(f"  {key}: {value}")
+    if coverage["warning"]:
+        print(f"\n  {coverage['warning']}")
+    if result.spans_multiple_models:
+        print("\n  WARNING: cases were answered by more than one model; not comparable.")
+
+    path = result.write(out)
+    print(f"\n  written: {path}")
+    print(f"  score it with: crucible score --journal {out}")
+    return OK
+
+
+def _harness_sha() -> str:
+    """The commit Crucible itself is running, or empty when it cannot be had.
+
+    Recorded on every report because EVALUATION.md's claim format names the
+    harness as one of its inputs: change the harness and it is a different
+    claim. Empty rather than "unknown" when git will not answer, so a reader can
+    see the difference between a dirty tree nobody recorded and a value that was
+    looked up and found.
+    """
+    import subprocess
+
+    try:
+        done = subprocess.run(  # noqa: S603 - fixed argv, no shell, no model input
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return done.stdout.strip() if done.returncode == 0 else ""
+
+
+def cmd_report(
+    *,
+    journal_dir: str = "results",
+    run_id: str = "",
+    json_out: str = "",
+) -> int:
+    """Render one campaign for the teammate who asks "why did you change that?".
+
+    Calls no model (DESIGN.md 4.6, same rule as the scorer): a report is a
+    rendering of what was measured, and a rendering that could paraphrase could
+    also soften.
+    """
+    import json as _json
+
+    from .report import ReportError, build_report, find_campaign
+
+    try:
+        campaign = find_campaign(journal_dir, run_id)
+    except ReportError as exc:
+        print(f"report refused: {exc}")
+        return REFUSED
+
+    report = build_report(campaign, harness_sha=_harness_sha())
+
+    print(_rule(f"report | {report.run_id}"))
+    print(f"\n{report.headline}\n")
+
+    if report.experiments:
+        print(_rule("experiments"))
+        for row in report.experiments:
+            mark = "kept" if row["kept"] else ("refused" if row["refused_by_guard"] else "ruled out")
+            changes = ", ".join(f"{k}={v!r}" for k, v in row["changes"].items()) or "no change"
+            print(f"  exp-{row['experiment']:03d} | {row['cause_family']} | {mark}")
+            print(f"      {changes}")
+            if row["why"]:
+                print(f"      {row['why']}")
+            if row["margin_over_noise"] is not None:
+                print(f"      cleared the noise floor {row['margin_over_noise']:.1f}x")
+            for step in row["manual_steps"]:
+                print(f"      MANUAL: {step}")
+
+    if report.measurement:
+        print(f"\n{_rule('measurement')}")
+        for key, pair in report.measurement.items():
+            print(f"  {key:<16} {pair['before']:>10.1f} -> {pair['after']:.1f}")
+
+    if report.calibration["pairs"]:
+        print(f"\n{_rule('calibration')}")
+        for pair in report.calibration["pairs"]:
+            error = pair["error_pct"]
+            suffix = f" ({error:+.0f}%)" if error is not None else ""
+            print(
+                f"  exp-{pair['experiment']:03d} predicted {pair['predicted_p99_ms']:.0f} ms, "
+                f"measured {pair['measured_p99_ms']:.0f} ms -- {pair['direction']}{suffix}"
+            )
+        print(f"  {report.calibration['note']}")
+
+    # Never omitted, and never last-but-one. This is the section that makes the
+    # rest defensible under questioning.
+    print(f"\n{_rule('limits of this result')}")
+    for limit in report.limits:
+        print(f"  - {limit}")
+
+    print(f"\n{_rule('reproduction')}")
+    for key, value in report.reproduction.items():
+        print(f"  {key:<32} {value}")
+    if not report.reproduction["collector_matches_this_process"]:
+        print(
+            "\n  WARNING: this campaign was measured by a different collector than the "
+            "one installed now. Its numbers were computed by different arithmetic."
+        )
+
+    if report.ruled_out:
+        print(f"\n{_rule('ruled out')}")
+        for item in report.ruled_out:
+            print(f"  - {item}")
+
+    if report.stopped_reason:
+        print(f"\n  stopped: {report.stopped_reason}")
+
+    if json_out:
+        path = Path(json_out)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_json.dumps(report.as_dict(), indent=2, default=str), encoding="utf-8")
+        print(f"\n  written: {path}")
+    return OK
+
+
+def cmd_diff(
+    *,
+    run_a: str,
+    run_b: str,
+    journal_dir: str = "results",
+    json_out: str = "",
+) -> int:
+    """Compare two campaigns, leading with what differs about their SETUP.
+
+    DESIGN.md 8: History flags a diff across environments rather than silently
+    allowing comparison across them. Generalised here to every input
+    EVALUATION.md's claim format names, because environment is only the one that
+    bites first -- a different collector or a different model makes two campaigns
+    just as incomparable, and far less visibly.
+    """
+    import json as _json
+
+    from .report import ReportError, compare, find_campaign
+
+    try:
+        a = find_campaign(journal_dir, run_a)
+        b = find_campaign(journal_dir, run_b)
+    except ReportError as exc:
+        print(f"diff refused: {exc}")
+        return REFUSED
+
+    result = compare(a, b)
+    print(_rule(f"diff | {result.run_a} vs {result.run_b}"))
+
+    if result.comparable:
+        print("\n  Same environment, SLA, profile, scenario, collector, noise floor and")
+        print("  model. These two campaigns measured the same thing.")
+    else:
+        print("\n  NOT COMPARABLE. These campaigns did not measure the same thing:\n")
+        for difference in result.differences:
+            print(f"  - {difference}")
+        print(f"\n  {result.as_dict()['warning']}")
+
+    for label, run, measurement, outcome in (
+        ("A", result.run_a, result.measurement_a, result.outcome_a),
+        ("B", result.run_b, result.measurement_b, result.outcome_b),
+    ):
+        print(f"\n{_rule(f'{label} | {run} | {outcome}')}")
+        if not measurement:
+            print("  nothing was kept and re-measured in this campaign")
+            continue
+        for key, pair in measurement.items():
+            print(f"  {key:<16} {pair['before']:>10.1f} -> {pair['after']:.1f}")
+
+    # No delta is printed, deliberately, even when the setups match. Where they
+    # do, a reader can subtract; where they do not, a delta is the exact thing
+    # that must not exist, and one offered "with a warning attached" is how a
+    # number escapes its caveat and ends up on a slide.
+    if json_out:
+        path = Path(json_out)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_json.dumps(result.as_dict(), indent=2, default=str), encoding="utf-8")
+        print(f"\n  written: {path}")
+    return OK if result.comparable else REFUSED
+
+
+def cmd_capture(
+    *,
+    fixture_id: str = "",
+    fixture_config_dir: str = "config/fixtures",
+    out_dir: str = "fixtures",
+    profile_name: str = "",
+    sla_path: str = "config/slo.yaml",
+    scenario_name: str = "capture",
+    users: int = 50,
+    warmup_s: float = 0.0,
+    measure_s: float = 0.0,
+    provider_name: str = "actuator",
+    revalidate: int = 0,
+    show_plan: bool = False,
+) -> int:
+    """Capture one fixture, or show the plan, or re-validate the box first.
+
+    **One fixture per invocation, deliberately.** ``fixtures.capture_fixture``
+    refuses to put the target into its broken state -- that is the human's job,
+    and automating it would mean Crucible writing the very configuration whose
+    effect it is supposed to measure independently. So the overnight run is a
+    person setting a property, restarting, and running this once; the command
+    exists to make that step one line rather than six.
+
+    **``--revalidate N`` runs N identical measurements and reports the spread.**
+    Run it before the first capture, never after: fifty fixtures captured on a
+    box whose identical runs disagree by 30% are fifty fixtures that have to be
+    captured again, and every replay result built on them in the meantime is
+    worth nothing.
+    """
+    from .fixtures import (
+        DEFAULT_MEASURE_S,
+        DEFAULT_WARMUP_S,
+        FixtureError,
+        capture_fixture,
+        capture_plan,
+        k1_revalidation,
+        load_specs,
+    )
+    from .runner import Scenario
+
+    try:
+        specs = load_specs(fixture_config_dir)
+    except (FixtureError, OSError) as exc:
+        print(f"capture refused: {exc}")
+        return REFUSED
+
+    if show_plan:
+        plan = capture_plan(specs)
+        print(_rule("capture plan"))
+        for key in ("fixtures", "capturing", "snapshots", "estimated_hours"):
+            print(f"  {key:<16} {plan[key]}")
+        print(f"  {'providers':<16} {', '.join(plan['providers'])}")
+        print(f"\n{_rule('what would be captured')}")
+        for spec_id, provider in plan["pairs"]:
+            print(f"  {spec_id}.{provider}")
+        if plan["excluded_note"]:
+            print(f"\n  {plan['excluded_note']}")
+        if plan["warning"]:
+            print(f"\n  {plan['warning']}")
+        return OK
+
+    warmup_s = warmup_s or DEFAULT_WARMUP_S
+    measure_s = measure_s or DEFAULT_MEASURE_S
+
+    try:
+        sla = Sla.load(sla_path)
+    except CampaignRefused as exc:
+        print(f"capture refused: {exc}")
+        return REFUSED
+
+    if revalidate:
+        # The K1 gate. Deliberately BEFORE any fixture is named: this asks "is
+        # this box stable enough to capture on at all", which is a question about
+        # the environment rather than about any one target state.
+        profile = TargetProfile.named(profile_name or "spring-boot")
+        measure = build_measure(profile, sla)
+        scenario = Scenario(
+            name=scenario_name,
+            host=sla.target_base_url,
+            users=users,
+            warmup_s=warmup_s,
+            measure_s=measure_s,
+        )
+        print(_rule(f"K1 re-validation | {revalidate} identical runs"))
+        p99s = []
+        for n in range(1, revalidate + 1):
+            print(f"  run {n} of {revalidate}...")
+            load, _snapshot = measure(scenario, f"k1-{n}")
+            if load.p99_ms is None:
+                print("  refused: a run produced no p99. The box is not measurable.")
+                return REFUSED
+            p99s.append(load.p99_ms)
+            print(f"    p99 {load.p99_ms:.1f} ms")
+        result = k1_revalidation(p99s)
+        print(f"\n  spread: {result['reason']}")
+        print(f"  p99s:   {result['p99s_ms']}")
+        if not result["passed"]:
+            print(
+                "\n  REFUSED. Capturing on a box this unstable produces fixtures that "
+                "have to be recaptured, and every replay built on them in the meantime "
+                "is worth nothing."
+            )
+            return REFUSED
+        print("\n  PASSED. This box is stable enough to capture on.")
+        if not fixture_id:
+            return OK
+
+    if not fixture_id:
+        print("capture refused: name a fixture with --fixture, or pass --plan")
+        return REFUSED
+
+    spec = next((s for s in specs if s.id == fixture_id), None)
+    if spec is None:
+        print(f"capture refused: no fixture {fixture_id!r} in {fixture_config_dir}")
+        print(f"  declared: {', '.join(s.id for s in specs)}")
+        return REFUSED
+    if not spec.providers:
+        print(
+            f"capture refused: {spec.id} declares no providers, which means it is "
+            "deliberately excluded from capture. See docs/ref/DEBT.md for why."
+        )
+        return REFUSED
+    if provider_name not in spec.providers:
+        print(
+            f"capture refused: {spec.id} is declared for "
+            f"{', '.join(spec.providers)}, not {provider_name!r}."
+        )
+        return REFUSED
+
+    print(_rule(f"capture | {spec.id} | {provider_name}"))
+    print(f"\n  ground truth : {spec.cause_family or '(none - healthy fixture)'}")
+    print(f"  severity     : {spec.severity or '(unstated)'}")
+    print("  set up by    : a human, BEFORE this command (Crucible does not set the")
+    print("                 target up -- that is what keeps the measurement independent)")
+    print(f"  expected     : {', '.join(f'{k}={v}' for k, v in spec.bottleneck_config.items())}")
+    print("\n  If the target is NOT in that state, stop now: this would capture a")
+    print("  snapshot of something else under this fixture's name.\n")
+
+    profile = TargetProfile.named(profile_name or spec.profile)
+    measure = build_measure(profile, sla)
+    scenario = Scenario(
+        name=scenario_name,
+        host=sla.target_base_url,
+        users=users,
+        warmup_s=warmup_s,
+        measure_s=measure_s,
+    )
+
+    try:
+        captured = capture_fixture(
+            spec,
+            measure,
+            scenario=scenario,
+            provider_name=provider_name,
+            warmup_s=warmup_s,
+            measure_s=measure_s,
+        )
+    except FixtureError as exc:
+        print(f"capture refused: {exc}")
+        return REFUSED
+
+    path = captured.write(out_dir)
+    print(f"  written: {path}")
+    print(f"  collector_version: {captured.collector_version}")
+    if not spec.validated_at:
+        print(
+            f"\n  NOTE: {spec.id} has no validated_at date. Confirm the signal is "
+            "actually present in this snapshot, then record the date in "
+            f"{fixture_config_dir}/{spec.id}.yaml."
+        )
+    return OK

@@ -397,6 +397,19 @@ COMMAND_WIRING = [
     ("status", ["status"], "cmd_status"),
     ("approve", ["approve", "r1", "--experiment", "1", "--as", "operator"], "cmd_approve"),
     ("abort", ["abort", "r1"], "cmd_abort"),
+    # Week 3. `score` reads manifests and calls no model; `bench` replays a task
+    # set against captured snapshots and needs no live target.
+    ("score", ["score"], "cmd_score"),
+    ("bench", ["bench", "--tasks", "t.yaml", "--fixtures", "f"], "cmd_bench"),
+    # Week 3, late. Both read manifests off disk and call no model (DESIGN.md
+    # 4.6). `diff` is the only verb that exits non-zero on a SUCCESSFUL run: an
+    # unsafe comparison is a refusal, not a failure, and a script comparing two
+    # campaigns should be able to notice that without parsing prose.
+    ("report", ["report"], "cmd_report"),
+    ("diff", ["diff", "--a", "r1", "--b", "r2"], "cmd_diff"),
+    # Week 3, the capture half. `--plan` touches nothing, which is what makes it
+    # safe to exercise here.
+    ("capture", ["capture", "--plan"], "cmd_capture"),
 ]
 
 
