@@ -861,6 +861,47 @@ class TestOneCampaignPerDeployBranch:
                 pass
 
 
+class TestGatewayWarmUp:
+    """Week 3, deliverable 1. `glc_v5` is hosted on Render's free tier
+    (`DESIGN.md` 18) and spins down when idle, so an uncontrolled first model
+    call pays a cold start inside the timed diagnosis step. The campaign warms
+    the gateway itself, before anything that reaches the model."""
+
+    def test_the_gateway_is_warmed_before_the_first_diagnosis_call(
+        self, profile, sla, workspace
+    ):
+        order = []
+
+        async def fake_warm_up():
+            order.append("warm_up")
+
+        campaign = _campaign(
+            profile, sla, workspace, p99s=[300.0, 58.0], warm_up_gateway=fake_warm_up
+        )
+        real_diagnose = campaign.diagnoser.diagnose
+
+        async def recording_diagnose(*args, **kwargs):
+            order.append("diagnose")
+            return await real_diagnose(*args, **kwargs)
+
+        campaign.diagnoser.diagnose = recording_diagnose
+
+        asyncio.run(campaign.run())
+
+        assert order == ["warm_up", "diagnose"]
+
+    def test_a_campaign_with_no_warm_up_configured_runs_unaffected(
+        self, profile, sla, workspace
+    ):
+        """A scripted test campaign never sets this collaborator; it must not be
+        required, only used when present."""
+        campaign = _campaign(profile, sla, workspace, p99s=[80.0])
+
+        result = asyncio.run(campaign.run())
+
+        assert "already meets the SLA" in result.stopped_reason
+
+
 # ---------------------------------------------------------------------------
 # Harness
 # ---------------------------------------------------------------------------
@@ -879,6 +920,7 @@ def _campaign(
     max_experiments=1,
     models=None,
     wait=True,
+    warm_up_gateway=None,
 ):
     """A campaign whose measurement and diagnosis are scripted.
 
@@ -921,6 +963,7 @@ def _campaign(
         state_dir=state,
         results_dir=state / "results",
         wait_for_manual_steps=wait,
+        warm_up_gateway=warm_up_gateway,
     )
 
 
@@ -931,8 +974,12 @@ class _ScriptedDiagnoser:
         self._proposal = proposal
         self._models = list(models)
         self._n = 0
+        self.prior_findings_seen: list[str] = []
 
-    async def diagnose(self, snapshot, sla, *, ruled_out=()):
+    async def diagnose(self, snapshot, sla, *, ruled_out=(), prior_findings=""):
+        # Captured, not ignored: what history a diagnosis was shown is part of
+        # what produced its answer (DESIGN.md section 14).
+        self.prior_findings_seen.append(prior_findings)
         model = self._models[self._n % len(self._models)]
         self._n += 1
         return Diagnosis(proposal=self._proposal, provider="gemini", model=model)

@@ -107,6 +107,11 @@ class LoadResult:
     metrics_at_measure_end: dict[str, Any] = field(default_factory=dict)
     aborted: bool = False
     abort_reason: str = ""
+    #: The watchdog's record of the seven tripwires across this window, when one
+    #: supervised it (:mod:`crucible.perf.watchdog`). Present on a clean run too:
+    #: the observed CPU steal margin is what tells a later reader how much to
+    #: trust the p99 beside it, and section 6 requires it either way.
+    watchdog: dict[str, Any] | None = None
 
     def as_load_summary(self) -> dict[str, Any]:
         """The subset the snapshot's ``load_summary`` carries."""

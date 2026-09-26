@@ -51,6 +51,7 @@ from .applicator import (
     Change,
     Proposal,
     guard_proposal,
+    novel_cause,
 )
 from .approval import (
     ApprovalGate,
@@ -63,20 +64,23 @@ from .approval import (
 from .collector import COLLECTOR_VERSION
 from .deploy import DeployBlocked, Deployer, DeployLog, DeployResult
 from .diagnosis import Diagnoser, Diagnosis
+from .journal import JournalIndex, render_for_prompt
 from .profile import TargetProfile
 from .runner import LoadResult, Scenario
+
+# Verdicts lived in this module until 26 September 2026, when the journal needed
+# them to interpret a manifest and importing the campaign to get them created a
+# cycle. Re-exported here so every existing `from .campaign import IMPROVED`
+# keeps working. ALL_VERDICTS and DISPROVING_VERDICTS are deliberately not
+# re-exported: they are vocabulary ABOUT the verdicts, and a caller iterating
+# them should read crucible.perf.verdicts for why ABORTED is not 'disproving'.
+from .verdicts import ABORTED, IMPROVED, INCONCLUSIVE, NOT_MEASURED, WORSE
 
 #: Environment kinds a campaign will run against. Anything else is refused, and
 #: the list is a *whitelist* on purpose: a new environment kind nobody has
 #: thought about should stop a campaign, not be waved through.
 RUNNABLE_ENVIRONMENT_KINDS = ("pre-prod", "preprod", "staging", "dev", "test", "lab")
 
-#: Verdicts. Strings rather than an enum so a manifest read years later needs no
-#: import to be legible.
-IMPROVED = "IMPROVED"
-WORSE = "WORSE"
-INCONCLUSIVE = "INCONCLUSIVE"
-NOT_MEASURED = "NOT_MEASURED"
 
 #: How many guard refusals in a row end the campaign (W2-Q4). Refusals do not
 #: consume the experiment budget, so something has to stop a model that keeps
@@ -408,6 +412,13 @@ class ExperimentManifest:
     started_at_epoch_s: float
     collector_version: str = COLLECTOR_VERSION
     cause_family: str = ""
+    #: False when the agent named a cause the profile has not declared
+    #: (``DESIGN.md`` section 5). Permitted, because no list enumerated in
+    #: advance survives contact with real services -- and recorded, because
+    #: invented vocabulary must not accumulate quietly. A signal about the
+    #: agent, in the same family as a guard refusal: worth counting, worth
+    #: showing, never worth acting on by itself.
+    cause_family_declared: bool = True
     proposal: dict[str, Any] | None = None
     diagnosis: dict[str, Any] | None = None
     approval: dict[str, Any] | None = None
@@ -431,6 +442,17 @@ class ExperimentManifest:
     refused_by_guard: bool = False
     deployed_commit: str = ""
     manual_steps: list[str] = field(default_factory=list)
+    #: The watchdog's record for this experiment's measured window, if one
+    #: supervised it (section 6). Carried whether or not anything tripped: the
+    #: observed CPU steal margin is on here, and section 6 requires it on every
+    #: manifest because a run that stayed under the threshold is not the same
+    #: claim as a run where nobody looked.
+    watchdog: dict[str, Any] | None = None
+    #: What the journal RAG (section 14) handed this diagnosis. Recorded because
+    #: which history the agent was shown is part of what produced its answer:
+    #: two campaigns reaching different conclusions from the same snapshot is
+    #: explained by this field more often than by anything else.
+    prior_findings: list[dict[str, Any]] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
@@ -535,16 +557,40 @@ class Campaign:
     wait_for_manual_steps: bool = True
     manual_step_timeout_s: float = 3600.0
     deploy_log: DeployLog = field(default_factory=DeployLog)
+    #: Zero-arg async callable warming the gateway before the first diagnosis
+    #: call, typically ``GatewayClient.warm_up``. Optional so a scripted test
+    #: campaign, which never calls a real gateway, need not supply one.
+    warm_up_gateway: Any = None
+    #: The journal RAG (section 14): what EARLIER campaigns measured on this
+    #: target, fed to diagnosis so the loop does not spend an experiment
+    #: re-learning something already paid for. ``None`` loads it from
+    #: ``results_dir``; pass an empty ``JournalIndex()`` to run without history,
+    #: which is what a test wanting one variable at a time does.
+    #:
+    #: Loaded ONCE, before the baseline. A campaign writes its own manifest at
+    #: the end, so re-reading the directory mid-run would be stable in practice
+    #: and confusing in principle -- history should mean "before this campaign",
+    #: not "whatever is on disk at the moment I looked".
+    journal: JournalIndex | None = None
 
     def __post_init__(self) -> None:
         if not self.run_id:
             self.run_id = time.strftime("run-%Y%m%d-%H%M%S", time.gmtime())
+        if self.journal is None:
+            self.journal = JournalIndex.load(self.results_dir)
 
     # -- the loop ---------------------------------------------------------
 
     async def run(self) -> CampaignResult:
         """Baseline, then up to ``max_experiments`` diagnose/apply/verify cycles."""
         check_environment(self.sla)
+
+        # `glc_v5` runs on Render's free tier and spins down when idle (DESIGN.md
+        # 18); its cold start can take tens of seconds. Paying that cost here,
+        # before the baseline is even measured, means it lands on wall clock
+        # rather than inside the first diagnosis call the operator is timing.
+        if self.warm_up_gateway is not None:
+            await self.warm_up_gateway()
 
         result = CampaignResult(
             run_id=self.run_id,
@@ -570,6 +616,15 @@ class Campaign:
 
     async def _run_locked(self, result: CampaignResult) -> None:
         baseline_load, baseline_snapshot = self.measure(self.scenario, f"{self.run_id}-baseline")
+        if baseline_load.aborted:
+            # A watchdog abort during the baseline leaves a partial window
+            # (section 6). Nothing after this point could be compared against it:
+            # every later verdict is a difference FROM the baseline, so a
+            # truncated one would silently mis-grade every experiment in the run.
+            raise CampaignAborted(
+                f"the baseline measurement was aborted before it completed: "
+                f"{baseline_load.abort_reason}"
+            )
         result.baseline = {
             "load": baseline_load.as_load_summary(),
             "snapshot": baseline_snapshot,
@@ -671,11 +726,43 @@ class Campaign:
         snapshot: dict[str, Any],
     ) -> bool:
         """One diagnose/approve/apply/verify cycle. Returns whether to continue."""
-        diagnosis: Diagnosis = await self.diagnoser.diagnose(
-            snapshot, self.sla.as_dict(), ruled_out=tuple(result.ruled_out)
+        # Section 14. The filter is on exact tokens -- this profile, this
+        # scenario -- because a finding about a FastAPI target says nothing about
+        # a JVM one, and feeding it across would have the agent eliminate a cause
+        # on evidence from a different runtime. That is the 4.3 failure arriving
+        # through the history instead of through the snapshot.
+        prior = (self.journal or JournalIndex()).prior_findings(
+            profile=self.profile.name,
+            scenario=self.scenario.name,
+            exclude_run_id=self.run_id,
         )
+        if prior:
+            manifest.notes.append(
+                f"diagnosis saw {len(prior)} prior finding(s) from earlier campaigns "
+                "on this profile and scenario"
+            )
+        diagnosis: Diagnosis = await self.diagnoser.diagnose(
+            snapshot,
+            self.sla.as_dict(),
+            ruled_out=tuple(result.ruled_out),
+            prior_findings=render_for_prompt(prior),
+        )
+        # Recorded on the manifest, not just used. Which history a diagnosis was
+        # given is part of what produced it, and a later reader comparing two
+        # campaigns needs to know that one of them had been told about the other.
+        manifest.prior_findings = [f.as_dict() for f in prior]
         manifest.diagnosis = diagnosis.as_dict()
         manifest.cause_family = diagnosis.proposal.cause_family
+        invented = novel_cause(self.profile, diagnosis.proposal)
+        manifest.cause_family_declared = not invented
+        if invented:
+            manifest.notes.append(
+                f"the agent named {invented!r}, which profile {self.profile.name!r} "
+                "does not declare. Permitted (DESIGN.md 5) and recorded: the change "
+                "was still bounded by allowed_properties, approved by a human, and "
+                "judged on a re-measurement. Promoting this name into profile.yaml "
+                "is a human's decision."
+            )
         manifest.proposal = diagnosis.proposal.as_dict()
         manifest.predicted_p99_ms = diagnosis.proposal.predicted_p99_ms
         if diagnosis.model:
@@ -800,6 +887,31 @@ class Campaign:
         after_load, after_snapshot = self.measure(
             self.scenario, f"{self.run_id}-exp{manifest.experiment:02d}"
         )
+        if after_load.aborted:
+            # The watchdog stopped this window part-way through (section 6). The
+            # partial statistics are real numbers over a window nobody chose, and
+            # judging a change on them would be the K3 class of error again: a
+            # plausible figure attributed to something it is not about. The
+            # experiment is recorded ABORTED and the campaign stops, which is what
+            # takes section 19.9's redeploy of the last good commit.
+            manifest.after = {
+                "load": after_load.as_load_summary(),
+                "snapshot": after_snapshot,
+                "partial": True,
+                "note": (
+                    "the measured window was cut short by the watchdog; these numbers "
+                    "cover an arbitrary fraction of it and are evidence about the abort, "
+                    "never about the change"
+                ),
+            }
+            manifest.verdict = ABORTED
+            manifest.verdict_reason = after_load.abort_reason
+            if after_load.watchdog:
+                manifest.watchdog = after_load.watchdog
+            raise CampaignAborted(
+                f"experiment {manifest.experiment}: {after_load.abort_reason}"
+            )
+
         manifest.after = {"load": after_load.as_load_summary(), "snapshot": after_snapshot}
         manifest.sla_met_after = self.sla.met_by(after_load.p99_ms, after_load.error_rate_pct)
 

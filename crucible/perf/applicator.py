@@ -173,10 +173,26 @@ def guard_proposal(profile: TargetProfile, proposal: Proposal) -> str | None:
     if not proposal.changes:
         return "proposal contains no changes"
 
-    if proposal.cause_family not in profile.cause_families:
+    # A cause family the profile has not declared is NOT refused here. Operator
+    # decision, 26 September 2026 (``DESIGN.md`` section 5): the declared list is
+    # a vocabulary, not a closed set, and no list enumerated in advance survives
+    # contact with real services. An agent that must abstain or mislabel a cause
+    # nobody wrote down is one that reports a service healthy because its problem
+    # had no name.
+    #
+    # What still holds is everything that was ever doing the work: the property
+    # must be on `allowed_properties` and inside its bounds, a human still
+    # approves the change, and the verdict still comes from a re-measurement.
+    # Naming a cause never granted permission to change anything -- the property
+    # list does that -- so permitting a novel name grants nothing new.
+    #
+    # The novelty is recorded rather than waved through. :func:`novel_cause` is
+    # what the campaign asks, and the manifest, the report and the scorer all
+    # carry the answer, so invented vocabulary cannot accumulate quietly.
+    if not proposal.cause_family:
         return (
-            f"{proposal.cause_family!r} is not a cause family declared by profile "
-            f"{profile.name!r}. Declared: {', '.join(profile.cause_families)}"
+            "the proposal names no cause family. A change with no stated cause "
+            "cannot be reviewed, scored, or found again in the journal."
         )
 
     seen: set[str] = set()
@@ -208,6 +224,23 @@ def guard_proposal(profile: TargetProfile, proposal: Proposal) -> str | None:
 # ---------------------------------------------------------------------------
 # Editing a Java properties file
 # ---------------------------------------------------------------------------
+
+
+def novel_cause(profile: TargetProfile, proposal: Proposal) -> str:
+    """The cause family this proposal names if the profile has not declared it, else ``""``.
+
+    Asked by the campaign after the guard permits a proposal, and recorded on the
+    manifest as ``cause_family_declared``. Separated from :func:`guard_proposal`
+    deliberately: the guard answers "may this be applied", and novelty is not a
+    reason to refuse (``DESIGN.md`` section 5). Conflating the two is how the
+    escape hatch would quietly become a second authority check.
+
+    A novel cause is a signal about the AGENT, in the same family as a guard
+    refusal: worth counting, worth showing, never worth acting on by itself.
+    """
+    if proposal.cause_family and proposal.cause_family not in profile.cause_families:
+        return proposal.cause_family
+    return ""
 
 
 def _format_value(value: Any) -> str:
@@ -590,6 +623,27 @@ class Applicator:
                 "The campaign stops: the target is in a state no manifest describes."
             )
         return result
+
+    def discard_uncommitted(self) -> str:
+        """Put the config file back to the last committed experiment. Nothing else.
+
+        What the watchdog screen calls "working tree reverted to the last
+        committed experiment" on abort. Each experiment commits, so HEAD is
+        already the last experiment that completed; discarding the uncommitted
+        edit is what undoes the one that was in flight (``DESIGN.md`` section 7).
+
+        ONE path, named explicitly, exactly as :meth:`_commit` stages one path.
+        A bare ``git checkout -- .`` would throw away whatever else was in the
+        tree, and the tree is the TARGET's repository (section 19.1b) -- somebody
+        else's working copy, which Crucible has no business discarding on its way
+        out of an abort.
+        """
+        run = self._git or self._git_default
+        rel = str(Path(self.profile.config_file).as_posix())
+        code, output = run(["git", "checkout", "--", rel])
+        if code != 0:
+            raise ApplyError(f"git checkout failed: {output[:300]}")
+        return f"{rel} restored to HEAD"
 
     # -- git --------------------------------------------------------------
 
