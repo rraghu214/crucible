@@ -1,221 +1,158 @@
-# Crucible — a general live-graph agent
+# Crucible — an autonomous performance engineer
 
-Crucible takes S15's durable graph, memory, A2A, UI, budget controller and
-telemetry as its foundation, then replaces the task-shaped planner with a
-general capability-driven agent loop. `glc_v5` connects that loop to every
-enabled gateway channel through one shared envelope.
+Crucible runs controlled load experiments against a target service, diagnoses
+SLA misses from its own telemetry, proposes bounded configuration changes under
+human approval, re-tests, and keeps or reverts each change on measured evidence.
 
-The planner does **not** build the whole DAG up front. It proposes only the next
-runnable frontier, the runtime launches independent nodes together, and every
-outcome causes another planning round. The graph therefore grows from evidence:
+**The loop, in one sentence:** measure a baseline under a fixed load, diagnose
+the miss from converted metrics, propose one change inside the profile's bounds,
+wait for a human to approve that exact change, apply and deploy it, prove the
+target is running it, re-measure under the identical load, and keep it only if
+the improvement clears the measured noise floor. Otherwise revert.
 
-```text
-goal → plan next frontier → run independent work concurrently
-     → observe real outcomes → critique evidence → expand or answer
-```
+Five principles govern it (`DESIGN.md` §1): nothing is claimed that was not
+measured; the agent knows what it cannot see; it never grades itself or edits
+its own goalpost; a human holds every irreversible action; and understanding is
+scored separately from outcome.
 
-There is no prompt classifier, benchmark router, `_work_intent`, or deterministic
-task fallback. A model may propose work, but Python owns the boundary: only
-registered capabilities with valid arguments and valid existing dependencies
-can enter the graph.
+Built on the S17Code harness (`DESIGN.md` §3.1). The target under test is a
+separate repository, [perf-lab](https://github.com/rraghu214/perf-lab). Crucible
+writes only to its `perftest_sandbox` branch (`DESIGN.md` §19).
 
-## What makes it general
-
-- `crucible/capabilities.py` is the complete manifest the planner sees. It
-  describes what the agent can do and strictly validates every argument.
-- `crucible/planner.py` asks for only the next useful frontier. A new task may
-  depend only on evidence that already exists—not on an imagined future task.
-- Independent tasks in one frontier run concurrently. Synthesis is held until
-  active siblings finish, so the agent does not answer while useful evidence is
-  still arriving.
-- Before a terminal answer, a separate evidence-readiness pass checks the
-  original request against accumulated outcomes. Missing facts cause more work,
-  not cosmetic rewriting.
-- Equivalent active work is deduplicated even when the planner invents a new
-  node ID. Run and frontier limits keep an unproductive loop finite.
-- Invalid planner output is repaired through the model and recorded. If repair
-  fails, the run fails visibly; it never switches to a hidden, hardcoded agent.
-
-## Capabilities
-
-The shipped registry includes scoped memory recall and explicit remembering,
-semantic document indexing, web search and URL reading, bounded research,
-retrieval/distillation/validation, sandboxed file access, calendar artifact
-creation, A2A delegation, UI composition and evidence-grounded answers.
-
-Web research uses a multi-backend search client and then reads the returned
-pages. Search snippets and pages are untrusted evidence. Crucially, if search
-finds no usable URL—or no page can be read—the researcher returns
-`insufficient: true` and does **not** ask a model to synthesize facts.
-
-## Unattended operation
-
-Everything above assumes somebody asked. The autonomy layer is what the harness
-adds for the case where nobody did, and where nobody is watching either.
-
-- `crucible/events/` normalises cron ticks, webhooks, Gmail Pub/Sub, channel
-  messages and job callbacks into one `EventEnvelope`, deduplicates on
-  `(source, id)`, and records a relevance decision for every matching
-  subscription — including the decisions that were "no".
-- **Events are facts; subscriptions are intent and authority.** An event can
-  never write the instruction, the allowed side effects or the budget that
-  govern it. That is why writing a subscription is a control-plane action.
-- `crucible/auth.py` gates every write path and **fails closed**. With no
-  `CRUCIBLE_CONTROL_TOKEN` configured, `PUT /v1/agent/subscriptions/{id}`,
-  `POST /v1/agent/events`, `POST /v1/agent/runs` and the resume route all answer
-  `503` rather than serving anonymously. Job callbacks hold a separate token.
-- `crucible/events/governor.py` bounds operation over a **window**, not a
-  request. A per-run ceiling does not bound an agent that starts its own runs;
-  `daily_budget`, `max_runs_per_day` and `daily_triage_budget` do. It also
-  rate-limits per source and refuses events this agent itself caused, so a reply
-  into a watched mailbox cannot become a loop.
-- Every refusal is recorded. A control that prevents work leaves no other trace,
-  and without the record a well-defended night and an idle night look identical.
-- `crucible/events/lease.py` stops a periodic trigger overlapping itself, and
-  reports a skip rather than silently doing nothing.
-- `crucible/events/report.py` publishes a heartbeat (`GET /v1/agent/liveness`,
-  `503` once stale) and the human-readable account of a period nobody watched
-  (`GET /v1/agent/report`), which costs **watching** separately from **doing**.
-
-```bash
-uv run python proofs/p_naive_vs_bounded.py    # naive vs gated vs bounded, same stream
-uv run python proofs/p_autonomy_bounds.py     # seven properties of the ceilings
-```
-
-Both take their event stream and every ceiling as arguments, so they run against
-work they have never seen, and both exit non-zero on failure.
-
-## Inherited production boundaries
-
-- `crucible/core/live_graph/`: event-sourced executor, patches and replay
-- `crucible/core/memory/`: typed, scoped memory and semantic chunking
-- `crucible/core/a2a/`: Agent Cards, JSON-RPC and optional gRPC
-- `crucible/ui/`: catalog validation, A2UI surfaces, AG-UI and HITL
-- `crucible/economics/`: model tiers, hard budget admission and ledger
-- `crucible/telemetry/`: journal-to-OpenTelemetry span export
-- `crucible/evals/`: generic resolution judging
-
-The graph journal remains the source for replay, UI events and telemetry. All
-gateway model calls—including planning and evidence review—pass through S15's
-metered call seam. `glc_v5` remains a separate service and owns provider keys;
-Crucible contains none.
-
-## Run locally
-
-Start `glc_v5` on port `8111`, then:
+## How to run
 
 ```bash
 uv sync
-cp .env.example .env
-uv run pytest -q
-uv run ruff check .
-uv run crucible serve
+uv run crucible plan         # what a campaign would do: authority, bounds, deploy target. Changes nothing.
+uv run crucible preflight    # exercises the target once: reachability, metrics, deploy, commit proof.
+uv run crucible run          # a real campaign; proposals park for `crucible approve <run-id> --experiment N --as <you>`.
 ```
 
-Crucible defaults to `http://127.0.0.1:8113`. Useful environment variables are
-documented in `.env.example`; most importantly:
+- **`plan`** reads `config/slo.yaml` and the target profile and prints the
+  properties the agent may change (with bounds), the paths it can never write,
+  and where a deploy would land. For a tool that restarts a running service,
+  "show me first" is a command.
+- **`preflight`** checks the environment isn't production, the SLA and load
+  profile are protected, metrics are readable, and the target reports its
+  commit. `--apply-probe` adds a real apply/restart/revert rehearsal and is
+  opt-in, because it restarts the target.
+- **`run`** measures, diagnoses, and parks each proposal for approval. Nothing
+  is applied until `crucible approve` answers it with the same values it
+  proposed. Abort with `crucible abort <run-id>`: that discards the in-flight
+  experiment and redeploys the last good commit.
+
+`crucible serve` starts the UI at `http://127.0.0.1:8113/perf`: the nineteen
+screens of `docs/crucible-screens-v2.html`, read from the same files the CLI
+reads. Crucible holds no provider keys. The model gateway (`glc_v5`) does, and
+`GLC_BASE_URL` points at it.
+
+Before every commit: `uv run pytest -q` and `uv run ruff check .`
+
+## What the benchmark measures
+
+Five task classes (`EVALUATION.md`), each a behaviour rather than a fixture:
+
+| Class | In plain English |
+|---|---|
+| **A — diagnose and repair** | Can it find the real cause and fix it with a change it is allowed to make? |
+| **B — discriminate** | When two causes look alike from the outside (a starved pool and GC pressure both give a flat p50 and a long tail), can it tell which one it is? |
+| **C — integrity boundary** | Does it refuse a change that makes the number look better without fixing anything, like raising a timeout so errors turn into slow successes? |
+| **D — absence and refusal** | Can it say "nothing is wrong", or "I know what this is, and it isn't mine to fix"? |
+| **E — ambiguity** | When the evidence doesn't settle it, does it ask instead of assuming? |
+
+Replay feeds saved snapshots to the model and tests diagnosis, refusal and
+confidence cheaply. Live runs the whole loop and is the only way to learn
+whether a fix worked. A fixture is one target state with its true cause written
+down before any run. A test case is one task asked of one fixture.
+
+## The claim
+
+In `EVALUATION.md`'s format. Every number comes from
+[`docs/BENCHMARK_REPLAY_RESULTS.md`](docs/BENCHMARK_REPLAY_RESULTS.md) and
+[`docs/BENCHMARK_LIVE_RESULTS.md`](docs/BENCHMARK_LIVE_RESULTS.md). Anything
+not measured says so.
+
+> Under a subset of task set v1 — 3 of 5 tasks (T1, T3, T4), 3 of 6 fixtures,
+> 3 repeats — with harness `crucible@4b8b8de`, `gemini-3.5-flash-lite` pinned and
+> failover disabled, budget $0.05 per campaign, ceiling 5 experiments (the
+> campaign default; neither binds replay), profile
+> `spring-boot`, fixtures captured on Oracle Box A through Actuator only:
+> **not yet measured** verified fixes, **not yet measured** unverified,
+> **not yet measured** honest failures, **not yet measured** false successes,
+> **not yet measured** unreachable — no live benchmark campaign has run.
+> Diagnosis correct on 12 of 12 replays with a ground-truth cause, and no change
+> proposed on 3 of 3 healthy replays. Protected-path writes: **not yet measured**
+> (replay writes nothing). 0 trap properties proposed. Median experiments:
+> **not yet measured**. $0.0012 per replay case, $0.018 for all 15. Campaign
+> duration: **not yet measured**.
+
+What that claim does **not** support, stated so it can't be read into it:
+
+- **Class C is untested.** The trap was never tempted, and T3's stakeholder
+  prompt is never sent to the model (`docs/ref/DEBT.md`). 6/6 on class C means
+  the plain diagnosis avoided the shortcut, and nothing more.
+- **Classes B and E have no task**, and T2 (GC discrimination) and T5 (outside
+  authority) have no captured fixture.
+- **One metrics provider.** PromQL and Datadog adapters exist but are not wired
+  into measurement, so provider independence is a design, not a result.
+- **Confidence carried no signal.** All 15 replies said 1.0, including the mild
+  fixture.
+
+The one end-to-end live campaign on record (21 September 2026,
+`docs/W2_E2E_RESULT.md`) took p99 from 1200 ms to 60 ms on the pool-starved
+state and kept the change on a 45.7× margin over noise. It predates the task set
+and used short windows, so it is evidence the loop works, not a benchmark
+result.
+
+## Architecture
+
+The nine modules a campaign passes through, in `crucible/perf/`:
 
 ```text
-GLC_BASE_URL=http://127.0.0.1:8111
-CRUCIBLE_GATEWAY_PROVIDER=gemini
-CRUCIBLE_SANDBOX_ROOT=/absolute/path/the-agent-may-read
-CRUCIBLE_CHANNEL_BRIDGE_TOKEN=the-same-private-value-used-by-glc-v5
-CRUCIBLE_CONTROL_TOKEN=required-or-every-write-path-answers-503
-CRUCIBLE_COMPLETION_TOKEN=a-different-token-for-job-callbacks
+                          config/slo.yaml  (Policy memory: the agent can read it, never write it)
+                                  |
+   config/profiles/*.yaml --> profile.py ---- allowed properties + bounds, protected paths,
+   (authority)                    |           cause vocabulary, restart + deploy contract
+                                  v
+ +-------------------------- campaign.py  (the loop; holds the deploy-branch lock) -------------------+
+ |                                |                                                                   |
+ |   runner.py ----------> collector.py --------------------> diagnosis.py <------- journal.py       |
+ |   Locust, warmup         units converted, gauges           pinned model via          prior findings |
+ |   discarded, gauges      sampled at peak, null != 0,       glc_v5; abstains          from results/, |
+ |   sampled mid-run        available_evidence declared       rather than guesses       never re-try a |
+ |     ^                          ^                                 |                   disproven cause|
+ |     |                   providers/ (actuator,                    v                         ^        |
+ |     |                   promql, datadog, jaeger)          applicator.py  guard: property    |        |
+ |     |                                                     allowed? in bounds? path          |        |
+ |     |                                                     protected?  (one file, one line)  |        |
+ |     |                                                             |                         |        |
+ |     |                                                             v                         |        |
+ |     |                                                      approval.py  parks the EXACT     |        |
+ |     |                                                      params; approve must match them  |        |
+ |     |                                                             |                         |        |
+ |     |                                                             v                         |        |
+ |     |                                                      deploy.py  push to perftest_     |        |
+ |     |                                                      sandbox only; no force; target   |        |
+ |     |                                                      must prove the commit (19.6)     |        |
+ |     |                                                             |                         |        |
+ |     +---------------- re-measure under the identical load <-------+                         |        |
+ |                                |                                                            |        |
+ |                                v                                                            |        |
+ |                  verdict: IMPROVED / INCONCLUSIVE (inside noise) / WORSE -> keep or revert   |        |
+ |                                |                                                            |        |
+ +--------------------------------+---> results/<run_id>.json  (manifest, collector_version) --+--------+
 ```
 
-The control plane has no unauthenticated mode. `if expected and not
-compare_digest(...)` reads like a check and behaves like an open door on a fresh
-checkout, so these gates refuse to serve instead.
+The evaluation side reads what that loop writes and never runs inside it:
 
-Do not put provider keys in Crucible. `glc_v5` can rotate among its configured
-Gemini keys behind the one logical `gemini` provider.
+| Module | Role | Calls a model? |
+|---|---|---|
+| `watchdog.py` | seven tripwires every five minutes of a long window, as arithmetic | no (one capped, optional adjudication) |
+| `fixtures.py` | captures one target state as a snapshot, refusing a stale collector | no |
+| `replay.py` | asks the model to diagnose saved snapshots, with no target | yes, that is the point |
+| `scorer.py` | outcomes, the diagnosis 2×2, integrity, cost, and replay grades, from disk | **never** (§4.6) |
+| `report.py` | the report and the diff; refuses to compare unlike setups | never |
+| `commands.py` | the CLI above | only via `run` and `bench` |
 
-## Channel operation and proof
-
-GLC converts provider-specific payloads; Crucible sees only the canonical envelope.
-An inbound message creates a real live-graph run, and its terminal result is
-returned on the originating channel and thread. A same-thread reply can satisfy
-a waiting human-approval node. An external job callback can resume a sleeping
-run and proactively send its completed answer through GLC.
-
-The channel list is discovered from GLC at runtime:
-
-```bash
-curl -s http://127.0.0.1:8111/v1/channels | jq
-```
-
-The 20-prompt stress catalogue spans every shipped channel and checks observable
-capability families, parallel frontiers, and wait/resume events—not prescribed
-node IDs or a prompt-specific graph:
-
-```bash
-# Start this proof Crucible with only local fixture mutations authorised:
-CRUCIBLE_CHANNEL_ALLOWED_SIDE_EFFECTS=remember_explicit_fact,write_file,index_file,create_calendar_events,request_approval \
-  uv run crucible serve
-
-# In another shell, use the installation token printed from glc_v5:
-GLC_INSTALL_TOKEN=<glc-v5-install-token> \
-  uv run python proofs/channel_stress.py \
-  --glc http://127.0.0.1:8111 --crucible http://127.0.0.1:8113
-```
-
-Run the proof with channel authority limited to the local fixture capabilities
-shown in `proofs/channel_stress.py`. It injects canonical envelopes locally and
-fails any scenario that invokes `send_channel_message` or `launch_job`, so it
-cannot silently count an external delivery as proof.
-Native provider payload conversion remains the responsibility of each GLC
-adapter's tests. Its JSON report contains each original prompt, actual graph
-capabilities, reply, event count, parallel/wait/resume evidence, and result.
-
-GLC recomputes sender trust from pairing state before the message reaches Crucible.
-Only a gateway-verified installation owner receives the side-effect authority
-listed in `CRUCIBLE_CHANNEL_ALLOWED_SIDE_EFFECTS`; other allowed senders remain
-read-only.
-
-Example:
-
-```bash
-curl -s http://127.0.0.1:8113/v1/agent/runs \
-  -H 'content-type: application/json' \
-  -d '{
-    "tenant_id":"demo",
-    "project_id":"general-agent",
-    "user_id":"student",
-    "prompt":"Research Rust and Go independently, then compare their concurrency models. Explain one situation where each is the safer choice."
-  }' | jq '{status, answer, graph: .graph.nodes, planner: .trace.planner}'
-```
-
-## Replaceable live proof
-
-`proofs/tasks/general_agent.jsonl` is data, not routing code. Replace its prompts
-with unseen tasks and run the same HTTP harness against a live Crucible process:
-
-```bash
-CRUCIBLE_PORT=8116 uv run crucible serve
-uv run python proofs/general_agent_live.py \
-  --base-url http://127.0.0.1:8116 \
-  --tasks proofs/tasks/general_agent.jsonl
-```
-
-The output at `proofs/out/general_agent_live.json` retains each prompt, final
-answer, every node and edge, every accepted graph patch, planner decisions,
-evidence review and timing. This is the inspectable proof of behavior—not a
-claim that a prompt "worked."
-
-The inherited S15 economics proofs remain available in `proofs/`. They test the
-same runtime's budget ceiling, denial-of-wallet protection, trace export,
-semantic-cache savings and cross-model tier ladder.
-
-## Honest limits
-
-A general agent is bounded by its registered capabilities, source availability
-and models. The evidence critic is an additional model judgment, not a theorem.
-The hard guarantees are narrower and enforced in code: authority validation,
-existing-evidence dependencies, bounded graph/frontier size, deduplication,
-metered provider calls, budget admission, durable outcomes, and no research
-synthesis without readable sources.
-
-Provider adapters vary in how much live external delivery they implement. The
-connection proof establishes that every registered adapter reaches the Crucible seam;
-it is not a claim that unconfigured Gmail, Twilio, or Slack accounts can send.
+`crucible/ui/perf_ui.py` renders the nineteen screens from the same modules,
+through the same injection-wall validator as any agent-built surface.
