@@ -64,6 +64,7 @@ from .approval import (
 from .collector import COLLECTOR_VERSION
 from .deploy import DeployBlocked, Deployer, DeployLog, DeployResult
 from .diagnosis import Diagnoser, Diagnosis
+from .hooks import HookFailed, HookSet
 from .journal import JournalIndex, render_for_prompt
 from .profile import TargetProfile
 from .runner import LoadResult, Scenario
@@ -95,6 +96,19 @@ class CampaignRefused(RuntimeError):
 
 class CampaignAborted(RuntimeError):
     """The campaign stopped early. Everything already verified stands."""
+
+
+class CampaignPaused(RuntimeError):
+    """The campaign is paused at an experiment boundary.
+
+    Everything already verified stands. Call ``Campaign.resume()`` to continue
+    from where the loop stopped. Only the measurement window that was in-flight
+    at the moment of pause is discarded and re-run on resume (section 7).
+    """
+
+    def __init__(self, msg: str, state: "dict[str, Any]") -> None:
+        super().__init__(msg)
+        self.state = state
 
 
 # ---------------------------------------------------------------------------
@@ -392,6 +406,106 @@ def abort_requested(state_dir: Path, run_id: str) -> str | None:
         return "operator abort"
 
 
+def pause_marker_path(state_dir: Path, run_id: str) -> Path:
+    """Where ``crucible pause`` leaves its signal for a running campaign."""
+    return Path(state_dir) / "pauses" / f"{run_id}.pause"
+
+
+def request_pause(state_dir: Path, run_id: str, reason: str = "") -> Path:
+    """Ask a running campaign to pause at its next experiment boundary.
+
+    Unlike abort, pause preserves every verified experiment and allows
+    ``Campaign.resume()`` to continue from where it stopped (section 7).
+    Only the measurement window that was actively in flight when the pause
+    lands is discarded and re-run on resume.
+    """
+    path = pause_marker_path(state_dir, run_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"reason": reason, "requested_at_epoch_s": time.time()}, indent=2),
+        encoding="utf-8",
+    )
+    return path
+
+
+def pause_requested(state_dir: Path, run_id: str) -> str | None:
+    """The pause reason if one has been requested, else ``None``."""
+    path = pause_marker_path(state_dir, run_id)
+    if not path.exists():
+        return None
+    try:
+        return str(json.loads(path.read_text(encoding="utf-8")).get("reason", "")) or "operator pause"
+    except (OSError, ValueError):
+        return "operator pause"
+
+
+def paused_state_path(state_dir: Path, run_id: str) -> Path:
+    """Where the paused loop state lives so ``Campaign.resume()`` can continue."""
+    return Path(state_dir) / "pauses" / f"{run_id}.paused.json"
+
+
+# ---------------------------------------------------------------------------
+# Audit log (§13 — append-only, records guard refusals, approvals, applies, reverts)
+# ---------------------------------------------------------------------------
+
+
+class AuditLog:
+    """Append-only JSONL record of every irreversible or significant action.
+
+    §13 taxonomy: Audit memory captures guard refusals, approvals, applies, and
+    reverts. One line per event, written atomically so a half-written line is
+    never left behind. The log survives across campaigns on the same state_dir;
+    each record carries the run_id and experiment number so lines can be
+    correlated back to the manifest.
+
+    All writes go to ``{state_dir}/audit.jsonl``.  Pass ``state_dir=None`` to
+    create a no-op log (useful when a caller does not need persistence, such as
+    the event-stream-only path in the NiceGUI UI).
+    """
+
+    def __init__(self, state_dir: "Path | None", run_id: str) -> None:
+        self._path = (
+            Path(state_dir) / "audit.jsonl" if state_dir is not None else None
+        )
+        if self._path is not None:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+        self.run_id = run_id
+
+    def _append(self, kind: str, experiment: "int | None", **fields: object) -> None:
+        if self._path is None:
+            return
+        record = {
+            "kind": kind,
+            "run_id": self.run_id,
+            "experiment": experiment,
+            "at_epoch_s": time.time(),
+            **fields,
+        }
+        with self._path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, default=str) + "\n")
+
+    def guard_refusal(self, experiment: int, reason: str) -> None:
+        self._append("guard_refusal", experiment, reason=reason)
+
+    def approval(self, experiment: int, *, approved: bool, reason: str = "") -> None:
+        self._append("approval", experiment, approved=approved, reason=reason)
+
+    def apply(self, experiment: int, *, prop: str, old_value: object, new_value: object) -> None:
+        self._append("apply", experiment, prop=prop, old_value=old_value, new_value=new_value)
+
+    def revert(self, experiment: int, *, reason: str) -> None:
+        self._append("revert", experiment, reason=reason)
+
+    def abort(self, *, reason: str) -> None:
+        self._append("abort", None, reason=reason)
+
+    def pause(self, *, reason: str) -> None:
+        self._append("pause", None, reason=reason)
+
+    def resume(self) -> None:
+        self._append("resume", None)
+
+
 # ---------------------------------------------------------------------------
 # Manifests
 # ---------------------------------------------------------------------------
@@ -471,6 +585,16 @@ class CampaignResult:
     experiments: list[ExperimentManifest] = field(default_factory=list)
     ruled_out: list[str] = field(default_factory=list)
     stopped_reason: str = ""
+    #: True when the campaign was cut short by an abort signal or watchdog trip,
+    #: not by completing its budget or meeting the SLA. Structured so the scorer
+    #: and the report can treat aborted runs differently without parsing the free
+    #: text in stopped_reason.
+    aborted: bool = False
+    abort_reason: str = ""
+    #: True when the campaign was paused at an experiment boundary (§7). A paused
+    #: run is resumable; an aborted one is not.
+    paused: bool = False
+    pause_reason: str = ""
     models_used: list[str] = field(default_factory=list)
     started_at_epoch_s: float = field(default_factory=time.time)
     finished_at_epoch_s: float | None = None
@@ -497,6 +621,10 @@ class CampaignResult:
             "experiments": [e.as_dict() for e in self.experiments],
             "ruled_out": self.ruled_out,
             "stopped_reason": self.stopped_reason,
+            "aborted": self.aborted,
+            "abort_reason": self.abort_reason,
+            "paused": self.paused,
+            "pause_reason": self.pause_reason,
             "models_used": self.models_used,
             "spans_multiple_models": self.spans_multiple_models,
             "comparability_warning": (
@@ -572,18 +700,79 @@ class Campaign:
     #: and confusing in principle -- history should mean "before this campaign",
     #: not "whatever is on disk at the moment I looked".
     journal: JournalIndex | None = None
+    #: The second lock on the SLA (DESIGN.md 4.4, AGENTS.md non-negotiable 4).
+    #: When present the SLA is written here as a POLICY record at campaign start.
+    #: The store refuses any later write from an agent-role principal, making the
+    #: goalpost immovable even if the file guard is somehow bypassed.
+    #: ``None`` skips the write -- acceptable only for tests, never for live runs.
+    memory_store: Any = None
+    #: Free text from whoever raised the investigation (B3 / D1). Framed as
+    #: context, not authority: the model sees it in a "a stakeholder asks:"
+    #: block and knows the SLA and measurements are the authority, not this.
+    #: Never overrides the SLA; never survives into scored output as a fact.
+    stakeholder_request: str = ""
+    #: Per-experiment hooks (§10). before_each and after_each gate each
+    #: experiment; on_abort fires when the campaign is cut short. A failing
+    #: before_each or after_each raises HookFailed, which becomes a
+    #: CampaignAborted — it blocks the experiment rather than silently
+    #: continuing with a corrupt database state.
+    hooks: HookSet = field(default_factory=HookSet)
+    #: §11 manual DB reset. When non-empty the campaign blocks before each
+    #: experiment with these instructions and waits for the operator to confirm
+    #: rather than running an automated reset. Use this when no ``before_each``
+    #: hook is available but experiments need a clean database state.
+    #: The step is recorded on the manifest — a run with human intervention is
+    #: not comparable to a fully autonomous one (§11).
+    manual_db_reset_instructions: str = ""
+    #: §11 manual revert. When True and a change must be undone, the campaign
+    #: blocks with instructions for the operator to perform the revert by hand
+    #: rather than auto-applying the inverse change. Recorded on the manifest.
+    manual_revert: bool = False
+    #: Optional callback fired at key moments in the loop. The NiceGUI live view
+    #: wires an asyncio.Queue.put_nowait here. Each call receives one dict with a
+    #: "kind" key identifying the event. Never relied on for correctness: a dropped
+    #: event changes no behaviour, it only affects what the UI shows.
+    on_event: Any = None
+    #: Append-only audit log (§13). Created automatically in __post_init__ using
+    #: state_dir; pass an explicit AuditLog to redirect or suppress output.
+    audit_log: "AuditLog | None" = None
 
     def __post_init__(self) -> None:
         if not self.run_id:
             self.run_id = time.strftime("run-%Y%m%d-%H%M%S", time.gmtime())
         if self.journal is None:
             self.journal = JournalIndex.load(self.results_dir)
+        if self.audit_log is None:
+            self.audit_log = AuditLog(self.state_dir, self.run_id)
+
+    def _emit(self, kind: str, **fields: object) -> None:
+        """Fire the on_event callback if one is registered. Never raises."""
+        if self.on_event is None:
+            return
+        try:
+            self.on_event({"kind": kind, "run_id": self.run_id, **fields})
+        except Exception:  # noqa: BLE001
+            pass
 
     # -- the loop ---------------------------------------------------------
 
     async def run(self) -> CampaignResult:
         """Baseline, then up to ``max_experiments`` diagnose/apply/verify cycles."""
         check_environment(self.sla)
+
+        # Second lock on the SLA (DESIGN.md 4.4). The file guard is the first.
+        # Writing as POLICY before anything else runs means an agent-role principal
+        # cannot overwrite it during the campaign -- the store refuses the write.
+        if self.memory_store is not None:
+            from ..core.memory.models import MemoryScope, Principal  # noqa: PLC0415
+            from .policy import SlaPolicy, publish_sla  # noqa: PLC0415
+            _policy = SlaPolicy.from_sla(self.sla)
+            _scope = MemoryScope(
+                tenant_id=self.sla.environment_name or "default",
+                run_id=self.run_id,
+            )
+            _principal = Principal(id=f"campaign:{self.run_id}", role="system")
+            publish_sla(self.memory_store, _policy, _scope, _principal)
 
         # `glc_v5` runs on Render's free tier and spins down when idle (DESIGN.md
         # 18); its cold start can take tens of seconds. Paying that cost here,
@@ -603,49 +792,156 @@ class Campaign:
             branch=getattr(self.profile.deploy, "branch", "") or "local",
             run_id=self.run_id,
         )
+        self._emit("started", sla=self.sla.as_dict(), profile=self.profile.name)
         with lock:
             try:
                 await self._run_locked(result)
+                self._emit("done", experiments=len(result.experiments), stopped_reason=result.stopped_reason)
             except CampaignAborted as aborted:
                 result.stopped_reason = str(aborted)
+                result.aborted = True
+                result.abort_reason = str(aborted)
+                self.audit_log.abort(reason=str(aborted))  # type: ignore[union-attr]
+                self._emit("aborted", reason=str(aborted))
+                if self.hooks.has_hooks():
+                    await self.hooks.run_on_abort()
                 self._redeploy_last_good(result)
+            except CampaignPaused as paused:
+                result.stopped_reason = str(paused)
+                result.paused = True
+                result.pause_reason = str(paused)
+                _state_path = paused_state_path(self.state_dir, self.run_id)
+                _state_path.parent.mkdir(parents=True, exist_ok=True)
+                _state_path.write_text(
+                    json.dumps(paused.state, indent=2, default=str), encoding="utf-8"
+                )
+                self.audit_log.pause(reason=str(paused))  # type: ignore[union-attr]
+                self._emit("paused", reason=str(paused))
             finally:
                 result.finished_at_epoch_s = time.time()
                 result.write(self.results_dir)
         return result
 
-    async def _run_locked(self, result: CampaignResult) -> None:
-        baseline_load, baseline_snapshot = self.measure(self.scenario, f"{self.run_id}-baseline")
-        if baseline_load.aborted:
-            # A watchdog abort during the baseline leaves a partial window
-            # (section 6). Nothing after this point could be compared against it:
-            # every later verdict is a difference FROM the baseline, so a
-            # truncated one would silently mis-grade every experiment in the run.
-            raise CampaignAborted(
-                f"the baseline measurement was aborted before it completed: "
-                f"{baseline_load.abort_reason}"
-            )
-        result.baseline = {
-            "load": baseline_load.as_load_summary(),
-            "snapshot": baseline_snapshot,
-            "sla_met": self.sla.met_by(baseline_load.p99_ms, baseline_load.error_rate_pct),
-        }
+    async def resume(self) -> "CampaignResult":
+        """Continue a paused campaign from where it stopped (section 7).
 
-        if result.baseline["sla_met"]:
-            # Nothing to fix. Section 20's ceiling discovery is what answers "how
-            # much headroom is there", and it is gated on an explicit operator
-            # flag because it changes the load profile -- which the agent may
-            # never do on its own (4.4). So this stops here and says so.
-            result.stopped_reason = (
-                f"baseline already meets the SLA (p99 {baseline_load.p99_ms:.0f} ms "
-                f"<= {self.sla.p99_ms:.0f} ms). Nothing to diagnose. To find out what "
-                "headroom exists, run a ceiling probe -- an operator-flagged campaign, "
-                "because it changes the load profile."
+        Reads the pause state written by the paused run, re-acquires the deploy
+        lock, skips the baseline and re-enters the experiment loop from the
+        saved position. The result accumulates new experiments on top of what
+        the paused run already completed on disk.
+        """
+        state_file = paused_state_path(self.state_dir, self.run_id)
+        if not state_file.exists():
+            raise CampaignRefused(
+                f"no paused state found for {self.run_id!r}; "
+                f"expected {state_file}. Has this run been paused?"
             )
-            return
+        resume_state: dict[str, Any] = json.loads(state_file.read_text(encoding="utf-8"))
+        # Remove the pause marker so the loop does not immediately re-pause.
+        _pm = pause_marker_path(self.state_dir, self.run_id)
+        if _pm.exists():
+            _pm.unlink()
 
-        current_load = baseline_load
-        current_snapshot = baseline_snapshot
+        result = CampaignResult(
+            run_id=self.run_id,
+            sla=self.sla.as_dict(),
+            profile=self.profile.name,
+            scenario=self.scenario.name,
+        )
+        lock = BranchLock(
+            state_dir=self.state_dir,
+            branch=getattr(self.profile.deploy, "branch", "") or "local",
+            run_id=self.run_id,
+        )
+        self.audit_log.resume()  # type: ignore[union-attr]
+        self._emit("resumed")
+        with lock:
+            try:
+                await self._run_locked(result, _resume_state=resume_state)
+                state_file.unlink(missing_ok=True)
+                self._emit("done", experiments=len(result.experiments), stopped_reason=result.stopped_reason)
+            except CampaignAborted as aborted:
+                result.stopped_reason = str(aborted)
+                result.aborted = True
+                result.abort_reason = str(aborted)
+                self.audit_log.abort(reason=str(aborted))  # type: ignore[union-attr]
+                self._emit("aborted", reason=str(aborted))
+                if self.hooks.has_hooks():
+                    await self.hooks.run_on_abort()
+                self._redeploy_last_good(result)
+            except CampaignPaused as paused:
+                result.stopped_reason = str(paused)
+                result.paused = True
+                result.pause_reason = str(paused)
+                _state_path = paused_state_path(self.state_dir, self.run_id)
+                _state_path.write_text(
+                    json.dumps(paused.state, indent=2, default=str), encoding="utf-8"
+                )
+                self.audit_log.pause(reason=str(paused))  # type: ignore[union-attr]
+                self._emit("paused", reason=str(paused))
+            finally:
+                result.finished_at_epoch_s = time.time()
+                result.write(self.results_dir)
+        return result
+
+    async def _run_locked(
+        self,
+        result: CampaignResult,
+        _resume_state: "dict[str, Any] | None" = None,
+    ) -> None:
+        if _resume_state:
+            # Resuming from a pause: skip the baseline and restore loop state.
+            # The baseline was already measured and is on disk in the paused run's
+            # result JSON; we carry it on this result for the report to read.
+            result.baseline = _resume_state.get("baseline", {})
+            current_snapshot = _resume_state["current_snapshot"]
+            current_load = _load_from_summary(
+                _resume_state["current_load"],
+                LoadResult(run_id=self.run_id, scenario=self.scenario.name),
+            )
+            number = _resume_state.get("number_prev", 0)
+            charged = _resume_state.get("charged_prev", 0)
+            consecutive_refusals = _resume_state.get("consecutive_refusals", 0)
+        else:
+            baseline_load, baseline_snapshot = self.measure(self.scenario, f"{self.run_id}-baseline")
+            if baseline_load.aborted:
+                # A watchdog abort during the baseline leaves a partial window
+                # (section 6). Nothing after this point could be compared against it:
+                # every later verdict is a difference FROM the baseline, so a
+                # truncated one would silently mis-grade every experiment in the run.
+                raise CampaignAborted(
+                    f"the baseline measurement was aborted before it completed: "
+                    f"{baseline_load.abort_reason}"
+                )
+            result.baseline = {
+                "load": baseline_load.as_load_summary(),
+                "snapshot": baseline_snapshot,
+                "sla_met": self.sla.met_by(baseline_load.p99_ms, baseline_load.error_rate_pct),
+            }
+            self._emit(
+                "baseline_done",
+                p99_ms=baseline_load.p99_ms,
+                sla_met=result.baseline["sla_met"],
+            )
+
+            if result.baseline["sla_met"]:
+                # Nothing to fix. Section 20's ceiling discovery is what answers "how
+                # much headroom is there", and it is gated on an explicit operator
+                # flag because it changes the load profile -- which the agent may
+                # never do on its own (4.4). So this stops here and says so.
+                result.stopped_reason = (
+                    f"baseline already meets the SLA (p99 {baseline_load.p99_ms:.0f} ms "
+                    f"<= {self.sla.p99_ms:.0f} ms). Nothing to diagnose. To find out what "
+                    "headroom exists, run a ceiling probe -- an operator-flagged campaign, "
+                    "because it changes the load profile."
+                )
+                return
+
+            current_load = baseline_load
+            current_snapshot = baseline_snapshot
+            number = 0
+            charged = 0
+            consecutive_refusals = 0
 
         # W2-Q4: a guard refusal is never applied and never measured, so it does
         # not consume one of the N experiments the operator asked for -- they
@@ -659,18 +955,37 @@ class Campaign:
         # there. The consecutive cap is what stops a model looping on forbidden
         # proposals, and it fails with the real reason rather than disguising it
         # as an exhausted budget.
-        number = 0
-        charged = 0
-        consecutive_refusals = 0
         while charged < self.max_experiments:
             number += 1
             charged += 1
             # Checked at the boundary, never mid-experiment. Aborting between
             # experiments leaves HEAD at the last verified one and the target
-            # running it; aborting mid-apply would not (section 7).
+            # running it; aborting mid-apply would not (section 7). The same
+            # boundary applies to pause: we hold both at the experiment seam so
+            # the loop state is always self-consistent when we write it.
             reason = abort_requested(self.state_dir, self.run_id)
             if reason:
                 raise CampaignAborted(f"aborted by operator before experiment {number}: {reason}")
+            pause_reason = pause_requested(self.state_dir, self.run_id)
+            if pause_reason:
+                # Undo the pre-increment so that resume re-enters the loop at
+                # the same experiment boundary. The budget and experiment counter
+                # reflect only completed experiments, not the one we're about to run.
+                raise CampaignPaused(
+                    f"paused by operator before experiment {number}: {pause_reason}",
+                    {
+                        "run_id": self.run_id,
+                        "paused_at_epoch_s": time.time(),
+                        "paused_reason": pause_reason,
+                        "number_prev": number - 1,
+                        "charged_prev": charged - 1,
+                        "consecutive_refusals": consecutive_refusals,
+                        "current_snapshot": current_snapshot,
+                        "current_load": current_load.as_load_summary(),
+                        "baseline": result.baseline,
+                        "experiments_count": len(result.experiments),
+                    },
+                )
 
             manifest = ExperimentManifest(
                 run_id=self.run_id,
@@ -681,8 +996,51 @@ class Campaign:
                 sla_met_before=self.sla.met_by(current_load.p99_ms, current_load.error_rate_pct),
             )
             result.experiments.append(manifest)
+            self._emit("experiment_started", experiment=number, p99_before=current_load.p99_ms)
+
+            if self.hooks.has_hooks():
+                try:
+                    hook_result = await self.hooks.run_before_each(number)
+                    manifest.notes.append(
+                        f"before_each ({hook_result.duration_s:.2f}s): ok"
+                    )
+                except HookFailed as hf:
+                    manifest.notes.append(f"before_each failed: {hf}")
+                    raise CampaignAborted(f"before_each hook failed at experiment {number}: {hf}") from hf
+
+            if self.manual_db_reset_instructions:
+                step = ManualStep(
+                    run_id=self.run_id,
+                    experiment=number,
+                    instructions=self.manual_db_reset_instructions,
+                    state_dir=self.state_dir,
+                    timeout_s=self.manual_step_timeout_s,
+                )
+                try:
+                    confirmation = step.wait()
+                    manifest.manual_steps.append(
+                        "DB reset confirmed by " + str(confirmation.get("responder", "unknown"))
+                    )
+                    manifest.notes.append(
+                        "DESIGN.md §11: manual DB reset step recorded on this manifest; "
+                        "this run is not comparable to a fully autonomous one"
+                    )
+                except ManualStepTimeout as timeout:
+                    manifest.verdict = NOT_MEASURED
+                    manifest.verdict_reason = str(timeout)
+                    raise CampaignAborted(str(timeout)) from timeout
 
             keep_going = await self._one_experiment(result, manifest, current_snapshot)
+
+            if self.hooks.has_hooks() and not manifest.refused_by_guard:
+                try:
+                    hook_result = await self.hooks.run_after_each(number)
+                    manifest.notes.append(
+                        f"after_each ({hook_result.duration_s:.2f}s): ok"
+                    )
+                except HookFailed as hf:
+                    manifest.notes.append(f"after_each failed: {hf}")
+                    raise CampaignAborted(f"after_each hook failed at experiment {number}: {hf}") from hf
 
             # W2-Q4. A guard refusal is not an experiment: nothing was applied
             # and nothing measured, so it is given the slot back. The cap below
@@ -746,6 +1104,7 @@ class Campaign:
             self.sla.as_dict(),
             ruled_out=tuple(result.ruled_out),
             prior_findings=render_for_prompt(prior),
+            stakeholder_request=self.stakeholder_request,
         )
         # Recorded on the manifest, not just used. Which history a diagnosis was
         # given is part of what produced it, and a later reader comparing two
@@ -785,6 +1144,8 @@ class Campaign:
             manifest.verdict_reason = f"guard refused: {refusal}"
             manifest.notes.append(f"refused before approval: {refusal}")
             result.ruled_out.append(f"{proposal.summary()} (refused by guard: {refusal})")
+            self.audit_log.guard_refusal(manifest.experiment, reason=refusal)  # type: ignore[union-attr]
+            self._emit("guard_refusal", experiment=manifest.experiment, reason=refusal)
             return True
 
         # Fill in what each property is currently set to, so the card can say
@@ -806,6 +1167,8 @@ class Campaign:
         except ApprovalTimeout as timeout:
             raise CampaignAborted(str(timeout)) from timeout
         manifest.approval = decision.as_dict()
+        self.audit_log.approval(manifest.experiment, approved=decision.approved, reason=decision.reason)  # type: ignore[union-attr]
+        self._emit("approval", experiment=manifest.experiment, approved=decision.approved, reason=decision.reason)
         if not decision.approved:
             manifest.verdict_reason = f"operator declined: {decision.reason}"
             result.stopped_reason = f"operator declined experiment {manifest.experiment}"
@@ -819,6 +1182,14 @@ class Campaign:
             commit_message=f"experiment {manifest.experiment} [{self.run_id}] {proposal.cause_family}",
         )
         manifest.apply_result = apply_result.as_dict()
+        for _ch in (apply_result.as_dict().get("changes") or []):
+            self.audit_log.apply(  # type: ignore[union-attr]
+                manifest.experiment,
+                prop=_ch.get("prop", ""),
+                old_value=_ch.get("previous"),
+                new_value=_ch.get("value"),
+            )
+        self._emit("applying", experiment=manifest.experiment, cause=proposal.cause_family)
         if apply_result.manual_step:
             # A manual restart means the change is written but NOT YET IN FORCE.
             # Carrying on would measure the previous configuration and attribute
@@ -927,6 +1298,13 @@ class Campaign:
         )
 
         self._keep_or_revert(manifest, proposal, result)
+        self._emit(
+            "verdict",
+            experiment=manifest.experiment,
+            verdict=manifest.verdict,
+            kept=manifest.kept,
+            p99_after=after_load.p99_ms,
+        )
         return True
 
     def _with_current_values(self, proposal: Proposal) -> Proposal:
@@ -962,11 +1340,48 @@ class Campaign:
         try:
             deploy_result: DeployResult = self.deployer.deploy(apply_result.commit)
         except DeployBlocked as blocked:
+            # Section 11: "the campaign blocks with instructions rather than
+            # failing". A manual deploy is not a failure condition; it is the
+            # declared mode for an environment where automation is not wired up.
+            # Aborting here would discard the applied change and all prior
+            # measured experiments -- exactly what section 7 says pause avoids.
             manifest.manual_steps.append(str(blocked))
             manifest.deploy = {"manual": True, "reason": str(blocked)}
-            raise CampaignAborted(
-                f"experiment {manifest.experiment} needs a manual deploy: {blocked}"
-            ) from blocked
+            if not self.wait_for_manual_steps:
+                # Unattended run: nobody is present to perform the step.
+                manifest.verdict = NOT_MEASURED
+                manifest.verdict_reason = (
+                    "a manual deploy is required before measurement can begin; "
+                    "re-run with wait_for_manual_steps=True to pause here"
+                )
+                raise CampaignAborted(
+                    f"experiment {manifest.experiment} needs a manual deploy: {blocked}"
+                ) from blocked
+            step = ManualStep(
+                run_id=self.run_id,
+                experiment=manifest.experiment,
+                instructions=str(blocked),
+                state_dir=self.state_dir,
+                timeout_s=self.manual_step_timeout_s,
+            )
+            try:
+                confirmation = step.wait()
+            except ManualStepTimeout as timeout:
+                manifest.verdict = NOT_MEASURED
+                manifest.verdict_reason = str(timeout)
+                raise CampaignAborted(str(timeout)) from timeout
+            manifest.manual_steps.append(
+                "deploy confirmed by " + str(confirmation.get("responder", "unknown"))
+            )
+            manifest.notes.append(
+                "DESIGN.md §11: manual deploy step recorded on this manifest; "
+                "this run is not comparable to a fully autonomous one"
+            )
+            # There is no DeployResult here — the operator carried out the
+            # deploy, so we have no verified commit sha. Record what we know
+            # and continue; the verify-in-force check below still runs.
+            manifest.deployed_commit = apply_result.commit
+            return None
 
         self.deploy_log.record(deploy_result)
         manifest.deploy = deploy_result.as_dict()
@@ -979,6 +1394,23 @@ class Campaign:
             manifest.verdict_reason = deploy_result.reason
             raise CampaignAborted(
                 f"experiment {manifest.experiment}: {deploy_result.reason}"
+            )
+        # Rung-2 check (§19.6 ladder): read the changed property back from
+        # /actuator/env to prove *this specific change* is in force, not just
+        # that the right commit is running. Stronger than a sha; the sha only
+        # proves the artifact. A read error falls through to rung 3 (sha), which
+        # already passed above — we record the attempt but do not abort.
+        if apply_result.changes and self.sla.target_base_url:
+            from .deploy import verify_properties_via_env
+            prop_ok, prop_detail = verify_properties_via_env(
+                apply_result.changes,
+                self.sla.target_base_url,
+            )
+            deploy_result.property_verified = prop_ok
+            deploy_result.property_reason = prop_detail
+            manifest.deploy = deploy_result.as_dict()
+            manifest.notes.append(
+                f"property read-back (§19.6 rung 2): {prop_detail}"
             )
         return True
 
@@ -1009,12 +1441,46 @@ class Campaign:
         if not reverting.changes:
             manifest.notes.append("nothing recorded to revert")
             return
-        revert_result = self.applicator.apply(
-            reverting,
-            commit_message=f"revert experiment {manifest.experiment}: {manifest.verdict}",
-        )
-        manifest.notes.append(f"reverted: {revert_result.reason}")
+
+        if self.manual_revert:
+            # §11: operator performs the revert; campaign blocks until confirmed.
+            changes_desc = ", ".join(
+                f"{c.prop}: {c.value} -> {c.previous}" for c in reverting.changes if c.previous is not None
+            )
+            instructions = (
+                f"Experiment {manifest.experiment} verdict is {manifest.verdict}. "
+                f"Please manually revert the following change(s): {changes_desc}. "
+                "Then confirm."
+            )
+            step = ManualStep(
+                run_id=self.run_id,
+                experiment=manifest.experiment,
+                instructions=instructions,
+                state_dir=self.state_dir,
+                timeout_s=self.manual_step_timeout_s,
+            )
+            try:
+                confirmation = step.wait()
+                manifest.manual_steps.append(
+                    "manual revert confirmed by " + str(confirmation.get("responder", "unknown"))
+                )
+                manifest.notes.append(
+                    "DESIGN.md §11: manual revert recorded on this manifest; "
+                    "this run is not comparable to a fully autonomous one"
+                )
+            except ManualStepTimeout as timeout:
+                manifest.verdict_reason = str(timeout)
+                raise CampaignAborted(str(timeout)) from timeout
+        else:
+            revert_result = self.applicator.apply(
+                reverting,
+                commit_message=f"revert experiment {manifest.experiment}: {manifest.verdict}",
+            )
+            manifest.notes.append(f"reverted: {revert_result.reason}")
+
         manifest.kept = False
+        self.audit_log.revert(manifest.experiment, reason=manifest.verdict_reason)  # type: ignore[union-attr]
+        self._emit("reverted", experiment=manifest.experiment, reason=manifest.verdict_reason)
         result.ruled_out.append(
             f"{proposal.summary()} -> {manifest.verdict} ({manifest.verdict_reason})"
         )

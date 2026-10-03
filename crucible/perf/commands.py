@@ -45,7 +45,10 @@ from .campaign import (
     Sla,
     abort_marker_path,
     check_environment,
+    pause_marker_path,
+    paused_state_path,
     request_abort,
+    request_pause,
 )
 from .deploy import GitPushDeployer, ManualDeployer, read_running_commit
 from .profile import TargetProfile
@@ -594,16 +597,80 @@ def cmd_clear_abort(run_id: str, state_dir: str | None = None) -> int:
     return OK
 
 
+def cmd_pause(run_id: str, *, reason: str = "", state_dir: str | None = None) -> int:
+    """Ask a running campaign to pause at its next experiment boundary.
+
+    Unlike abort, pause preserves all verified experiments and leaves the
+    campaign resumable. Only the measurement window in-flight at the moment of
+    pause is discarded; the campaign continues from the next experiment boundary
+    when ``crucible resume`` is called (DESIGN.md section 7).
+    """
+    root = _state_dir(state_dir)
+    path = request_pause(root, run_id, reason)
+    print(f"pause requested for run {run_id} ({path})")
+    print("  - the in-flight experiment will be discarded and re-run on resume")
+    print("  - all experiments already verified are kept")
+    print("  - the campaign stops at its next experiment boundary, not mid-apply")
+    print(f"  - resume with: crucible resume {run_id}")
+    return OK
+
+
+def cmd_clear_pause(run_id: str, state_dir: str | None = None) -> int:
+    """Remove a pause marker without resuming the campaign."""
+    root = _state_dir(state_dir)
+    pm = pause_marker_path(root, run_id)
+    ps = paused_state_path(root, run_id)
+    removed = []
+    for p in (pm, ps):
+        if p.exists():
+            p.unlink()
+            removed.append(p.name)
+    if removed:
+        print(f"cleared pause state for {run_id}: {', '.join(removed)}")
+        return OK
+    print(f"no pause state for {run_id}")
+    return OK
+
+
+def cmd_resume(run_id: str, state_dir: str | None = None, **kwargs: Any) -> int:
+    """Resume a paused campaign from where it stopped (DESIGN.md section 7)."""
+    import asyncio
+
+    root = _state_dir(state_dir)
+    ps = paused_state_path(root, run_id)
+    if not ps.exists():
+        print(f"no paused state for {run_id!r} — expected {ps}")
+        return REFUSED
+
+    try:
+        campaign = build_campaign(run_id=run_id, state_dir=str(root), **kwargs)
+    except (CampaignRefused, FileNotFoundError, ValueError) as exc:
+        print(f"campaign refused: {exc}")
+        return REFUSED
+
+    print(f"resuming run {campaign.run_id}: {campaign.sla.name}")
+    print(f"  abort:  crucible abort {campaign.run_id}")
+    print(f"  pause:  crucible pause {campaign.run_id}")
+
+    try:
+        result = asyncio.run(campaign.resume())
+    except CampaignRefused as refused:
+        print(f"campaign refused: {refused}")
+        return REFUSED
+
+    print(f"\nresume finished: {result.stopped_reason or 'complete'}")
+    return OK
+
+
 # ---------------------------------------------------------------------------
 # run
 # ---------------------------------------------------------------------------
 
 
-#: The metrics providers :func:`build_measure` can actually read through. It
-#: constructs an ``ActuatorMetricsProvider`` and nothing else, so this is the
-#: whole list until that changes -- and it lives beside the function so that
-#: whoever teaches it a second provider sees the list they must extend.
-MEASURABLE_PROVIDERS: tuple[str, ...] = ("actuator",)
+#: The metrics providers :func:`build_measure` / :func:`build_multi_measure`
+#: can actually read through. Lives beside the functions so whoever adds a
+#: provider sees the list they must extend.
+MEASURABLE_PROVIDERS: tuple[str, ...] = ("actuator", "promql", "datadog")
 
 
 def build_measure(
@@ -614,6 +681,7 @@ def build_measure(
     jaeger_url: str = "",
     jaeger_service: str = "",
     trace_sampling_rate_pct: float | None = None,
+    state_dir: Path | None = None,
 ) -> Any:
     """``(scenario, run_id) -> (LoadResult, snapshot)``, the one used everywhere.
 
@@ -625,10 +693,17 @@ def build_measure(
     allowlist, a window computed another way -- then replay and live would be
     measuring different things under one name, and nothing downstream could
     detect it. One function, one snapshot shape.
+
+    ``state_dir`` wires the watchdog: a watchdog is created per measured window
+    (§6) and supervises the seven tripwires during the run. Without it the run
+    still works -- the watchdog is simply absent, ``manifest.watchdog`` stays
+    ``None``, and CPU steal is never recorded (a real limitation for campaigns
+    running on shared free-tier infrastructure).
     """
     from .collector import AvailableEvidence, build_snapshot
     from .providers import ActuatorMetricsProvider, JaegerTraceProvider, trace_evidence
     from .runner import LocustRunner, Scenario, measurement_window
+    from .watchdog import for_scenario
 
     provider_client = ActuatorMetricsProvider(sla.target_base_url)
     runner = LocustRunner(
@@ -652,12 +727,17 @@ def build_measure(
 
     def measure(scn: Scenario, rid: str) -> Any:
         """Run load, then build the snapshot the model is allowed to see."""
+        # Create a fresh watchdog per window so run_id and scenario_name are
+        # correct (§6: seven tripwires, including CPU steal on every manifest).
+        if state_dir is not None:
+            runner.watchdog = for_scenario(scn, sla, rid, state_dir=state_dir)
         load = runner.run(scn, rid)
         raw = {
             name: provider_client.fetch(name)
             for name in profile.snapshot_metrics.values()
         }
         breakdown = provider_client.endpoint_breakdown()
+        runtime_config = provider_client.fetch_all_env()
         traces = trace_evidence(trace_provider)
         snapshot = build_snapshot(
             {k: v for k, v in raw.items() if v},
@@ -669,6 +749,7 @@ def build_measure(
             endpoint_breakdown=breakdown,
             metric_keys=profile.snapshot_metrics,
             window=measurement_window(load),
+            runtime_config=runtime_config,
             redaction_allowlist=profile.redaction_allowlist,
             evidence=AvailableEvidence(
                 metrics=any(raw.values()),
@@ -682,6 +763,156 @@ def build_measure(
         return load, snapshot
 
     return measure
+
+
+def build_multi_measure(
+    profile: TargetProfile,
+    sla: Any,
+    *,
+    results_dir: str | Path = "results",
+    jaeger_url: str = "",
+    jaeger_service: str = "",
+    trace_sampling_rate_pct: float | None = None,
+    promql_url: str = "",
+    promql_selector: dict[str, str] | None = None,
+    datadog_base_url: str = "",
+    datadog_api_key: str = "",
+    datadog_application_key: str = "",
+    datadog_scope: dict[str, str] | None = None,
+) -> Any:
+    """``(scenario, run_id) -> (LoadResult, dict[provider_name, snapshot])``.
+
+    Runs ONE load and queries every configured provider from the same window,
+    so the provider-agreement comparison in the benchmark uses identical load
+    and timing rather than three independent runs. The Actuator provider also
+    drives gauge sampling during the measured window; PromQL and Datadog read
+    after the run from their stored series.
+
+    Only providers whose URL (and credentials for Datadog) are supplied are
+    included in the returned dict. "actuator" is always present. "promql" and
+    "datadog" appear when their URLs are non-empty. A provider that errors at
+    construction is reported in the notes of the Actuator snapshot and omitted
+    from the dict rather than aborting the run -- the Actuator snapshot is the
+    primary, and a missing secondary is declared, not a campaign stopper.
+
+    The campaign always calls the simpler :func:`build_measure`; this function
+    exists for fixture capture, where one run per fixture state is the affordability
+    constraint (DESIGN.md section 7 / plan B1).
+    """
+    from .collector import AvailableEvidence, build_snapshot
+    from .providers import ActuatorMetricsProvider, JaegerTraceProvider, trace_evidence
+    from .runner import LocustRunner, Scenario, measurement_window
+
+    actuator = ActuatorMetricsProvider(sla.target_base_url)
+    runner = LocustRunner(
+        results_dir=Path(results_dir), metrics_provider=actuator, profile=profile
+    )
+    trace_provider = (
+        JaegerTraceProvider(
+            base_url=jaeger_url,
+            service=jaeger_service or profile.name,
+            sampling_rate_pct=trace_sampling_rate_pct,
+        )
+        if jaeger_url
+        else None
+    )
+
+    # Build optional secondary providers. Construction errors are caught so a
+    # misconfigured Prometheus URL does not abort a capture that is primarily
+    # about Actuator numbers.
+    secondary: dict[str, Any] = {}
+    secondary_notes: list[str] = []
+    if promql_url:
+        try:
+            from .providers.promql import PromQLMetricsProvider  # noqa: PLC0415
+
+            secondary["promql"] = PromQLMetricsProvider.from_profile(
+                promql_url, profile, selector=promql_selector
+            )
+        except Exception as exc:  # noqa: BLE001
+            secondary_notes.append(f"promql provider skipped: {exc}")
+    if datadog_base_url and datadog_api_key and datadog_application_key:
+        try:
+            from .providers.datadog import DatadogMetricsProvider  # noqa: PLC0415
+
+            secondary["datadog"] = DatadogMetricsProvider.from_profile(
+                datadog_base_url,
+                profile,
+                api_key=datadog_api_key,
+                application_key=datadog_application_key,
+                scope=datadog_scope,
+            )
+        except Exception as exc:  # noqa: BLE001
+            secondary_notes.append(f"datadog provider skipped: {exc}")
+
+    def _snapshot_from(
+        provider: Any,
+        provider_name: str,
+        load: Any,
+        rid: str,
+        traces: dict[str, Any],
+        runtime_config: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Build one snapshot from ``provider`` using a completed load's window."""
+        raw = {name: provider.fetch(name) for name in profile.snapshot_metrics.values()}
+        breakdown = (
+            provider.endpoint_breakdown() if hasattr(provider, "endpoint_breakdown") else None
+        )
+        notes = list(secondary_notes)
+        auth_err = getattr(provider, "auth_error", "")
+        if auth_err:
+            notes.append(auth_err)
+        unreadable = getattr(provider, "unreadable", {})
+        if unreadable:
+            notes.append(
+                f"provider {provider_name!r} has unreadable metrics: "
+                + ", ".join(f"{k} ({v.get('reason', '?')})" for k, v in unreadable.items())
+            )
+        ev = AvailableEvidence(
+            metrics=any(raw.values()),
+            traces=traces["traces"],
+            trace_reason=traces["trace_reason"],
+            trace_sampling_rate_pct=traces["trace_sampling_rate_pct"],
+            endpoint_breakdown=bool(breakdown),
+            # Gauge sampling is Actuator-only during the run. Secondary providers
+            # read post-run from stored series; they have no per-sample list.
+            gauge_sampling=(provider_name == "actuator" and bool(load.gauge_samples)),
+            notes=notes,
+        )
+        if provider_name != "actuator":
+            ev.notes.append(
+                f"gauge peaks for {provider_name!r} are post-run point reads, "
+                "not mid-run samples; peaks may understate pressure during the window"
+            )
+        return build_snapshot(
+            {k: v for k, v in raw.items() if v},
+            run_id=rid,
+            profile_name=profile.name,
+            target=sla.target_base_url,
+            gauge_samples=load.gauge_samples if provider_name == "actuator" else {},
+            load_summary=load.as_load_summary(),
+            endpoint_breakdown=breakdown,
+            metric_keys=profile.snapshot_metrics,
+            window=measurement_window(load),
+            runtime_config=runtime_config,
+            redaction_allowlist=profile.redaction_allowlist,
+            evidence=ev,
+        )
+
+    def multi_measure(scn: Scenario, rid: str) -> Any:
+        """Run load once, then build one snapshot per configured provider."""
+        load = runner.run(scn, rid)
+        traces = trace_evidence(trace_provider)
+        runtime_cfg = actuator.fetch_all_env()
+        snapshots: dict[str, Any] = {}
+        snapshots["actuator"] = _snapshot_from(
+            actuator, "actuator", load, rid, traces, runtime_config=runtime_cfg
+        )
+        for pname, prov in secondary.items():
+            snapshots[pname] = _snapshot_from(prov, pname, load, rid, traces)
+        return load, snapshots
+
+    return multi_measure
 
 
 def build_campaign(
@@ -703,6 +934,7 @@ def build_campaign(
     jaeger_url: str = "",
     jaeger_service: str = "",
     trace_sampling_rate_pct: float | None = None,
+    stakeholder_request: str = "",
 ) -> Any:
     """Assemble a real campaign from configuration. Kept apart from ``cmd_run``
     so a test can build one without going through argparse."""
@@ -730,6 +962,7 @@ def build_campaign(
         jaeger_url=jaeger_url,
         jaeger_service=jaeger_service,
         trace_sampling_rate_pct=trace_sampling_rate_pct,
+        state_dir=state_dir,
     )
 
     gate = (
@@ -752,6 +985,8 @@ def build_campaign(
 
     gateway_client = GatewayClient()
 
+    from ..core.memory.store import MemoryStore  # noqa: PLC0415
+
     return Campaign(
         profile=profile,
         sla=sla,
@@ -766,9 +1001,12 @@ def build_campaign(
         max_experiments=max_experiments,
         run_id=run_id,
         state_dir=state_dir,
+        # Policy memory enforces the SLA can't be overwritten by the agent (DESIGN.md 4.4).
+        memory_store=MemoryStore(state_dir / "memory.db"),
         # Real campaigns hit a hosted, free-tier gateway that can be cold; a
         # scripted test campaign never sets this and skips the wait entirely.
         warm_up_gateway=gateway_client.warm_up,
+        stakeholder_request=stakeholder_request,
     )
 
 
@@ -786,7 +1024,8 @@ def cmd_run(**kwargs: Any) -> int:
 
     print(f"run {campaign.run_id}: {campaign.sla.name} against {campaign.sla.environment_name}")
     print(f"  approve from another terminal: crucible approve {campaign.run_id} --experiment 1")
-    print(f"  abort:                         crucible abort {campaign.run_id}")
+    print(f"  pause (resumable):             crucible pause {campaign.run_id}")
+    print(f"  abort (discard in-flight):     crucible abort {campaign.run_id}")
 
     try:
         result = asyncio.run(campaign.run())
@@ -808,6 +1047,95 @@ def cmd_run(**kwargs: Any) -> int:
     print(f"\n  manifest: {Path('results') / (result.run_id + '.json')}")
     return OK
 
+
+
+# ---------------------------------------------------------------------------
+# ceiling
+# ---------------------------------------------------------------------------
+
+
+def cmd_ceiling(
+    *,
+    profile_name: str | None = None,
+    sla_path: str | None = None,
+    scenario_name: str | None = None,
+    users: int = 50,
+    warmup_s: float = 120.0,
+    measure_s: float = 300.0,
+    min_users: int = 0,
+    max_users: int = 500,
+    step_size: int = 50,
+    run_id: str = "",
+    state_dir: str | None = None,
+    jaeger_url: str = "",
+    jaeger_service: str = "",
+) -> int:
+    """Characterise a service's capacity ceiling with a stepped load ramp.
+
+    Operator must declare the intent and bounds (§20.1) — never inferred.
+    Each step is a full measured run (warmup discarded, gauges sampled).
+    The result is the knee as a pair: last level that met the SLA and first
+    that did not (§20.4). Never compare this against experiment manifests.
+    """
+    from .ceiling import CeilingProbe
+    from .runner import Scenario
+
+    root = _state_dir(state_dir)
+    if not profile_name:
+        print("--profile is required")
+        return REFUSED
+    if not sla_path:
+        print("--sla is required")
+        return REFUSED
+
+    try:
+        profile = TargetProfile.named(profile_name)
+        sla = Sla.load(sla_path)
+    except (CampaignRefused, FileNotFoundError, ValueError) as exc:
+        print(f"configuration error: {exc}")
+        return REFUSED
+
+    scenario = Scenario(
+        name=scenario_name or "ceiling",
+        host=sla.target_base_url,
+        users=users,
+        warmup_s=warmup_s,
+        measure_s=measure_s,
+    )
+    measure = build_measure(profile, sla, jaeger_url=jaeger_url, jaeger_service=jaeger_service)
+
+    probe = CeilingProbe(
+        sla=sla,
+        base_scenario=scenario,
+        measure=measure,
+        min_users=min_users or scenario.users,
+        max_users=max_users,
+        step_size=step_size,
+        run_id=run_id or "",
+        results_dir=root / "results",
+    )
+
+    print(f"ceiling probe: {sla.name} — {probe.min_users}..{probe.max_users} users, step {probe.step_size}")
+    print(f"  SLA: {sla.p99_ms:.0f} ms p99, errors <= {sla.error_rate_pct:.1f}%")
+    print("  (this deliberately drives the service until it breaks — pre-prod only)")
+
+    try:
+        result = probe.run()
+    except CampaignRefused as refused:
+        print(f"probe refused: {refused}")
+        return REFUSED
+
+    print(_rule("ceiling result"))
+    for step in result.steps:
+        marker = "PASS" if step.sla_met else ("ABORT" if step.aborted else "FAIL")
+        p99_str = f"{step.load.get('p99_ms'):.0f} ms" if step.load.get("p99_ms") else "N/A"
+        print(f"  {step.users:4d} users  [{marker}]  p99 {p99_str}")
+    print()
+    print(f"  last passing : {result.last_passing_users} users")
+    print(f"  first failing: {result.first_failing_users} users")
+    print(f"  stopped      : {result.stopped_reason}")
+    print(f"  written to   : {result.run_id}.ceiling.json")
+    return OK
 
 
 # ---------------------------------------------------------------------------
@@ -1177,6 +1505,12 @@ def cmd_capture(
     tag: str = "",
     revalidate: int = 0,
     show_plan: bool = False,
+    all_providers: bool = False,
+    promql_url: str = "",
+    promql_instance: str = "",
+    datadog_base_url: str = "",
+    datadog_api_key: str = "",
+    datadog_application_key: str = "",
 ) -> int:
     """Capture one fixture, or show the plan, or re-validate the box first.
 
@@ -1312,16 +1646,9 @@ def cmd_capture(
         )
         return REFUSED
     if provider_name not in MEASURABLE_PROVIDERS:
-        # Without this, `--provider promql` measured through Actuator and wrote
-        # the result as <id>.promql.json. The numbers would agree with the
-        # actuator sibling perfectly -- because they ARE the actuator sibling --
-        # so the multi-provider comparison these fixtures exist for would pass
-        # while comparing one backend with itself.
         print(
-            f"capture refused: the measurement reads {', '.join(MEASURABLE_PROVIDERS)} "
-            f"only, so a {provider_name!r} capture would be Actuator numbers written "
-            f"under the name {spec.id}.{provider_name}.json. Teach build_measure "
-            f"to read {provider_name!r} first."
+            f"capture refused: {provider_name!r} is not in MEASURABLE_PROVIDERS "
+            f"({', '.join(MEASURABLE_PROVIDERS)}). Add support in build_multi_measure first."
         )
         return REFUSED
 
@@ -1337,7 +1664,8 @@ def cmd_capture(
         )
         return REFUSED
 
-    print(_rule(f"capture | {spec.id} | {provider_name} | tag {spec.scenario_tag}"))
+    run_mode = "all-providers" if all_providers else provider_name
+    print(_rule(f"capture | {spec.id} | {run_mode} | tag {spec.scenario_tag}"))
     print(f"\n  ground truth : {spec.cause_family or '(none - healthy fixture)'}")
     print(f"  severity     : {spec.severity or '(unstated)'}")
     print("  set up by    : a human, BEFORE this command (Crucible does not set the")
@@ -1347,7 +1675,6 @@ def cmd_capture(
     print("  snapshot of something else under this fixture's name.\n")
 
     profile = TargetProfile.named(profile_name or spec.profile)
-    measure = build_measure(profile, sla)
     scenario = Scenario(
         name=scenario_name,
         host=sla.target_base_url,
@@ -1357,6 +1684,56 @@ def cmd_capture(
         tags=(spec.scenario_tag,),
     )
 
+    if all_providers:
+        # B1: one run, every configured provider. The same load window yields
+        # three snapshots and the provider-agreement comparison uses identical
+        # traffic rather than three independent runs. Only providers whose URL
+        # (and credentials for Datadog) are supplied are actually queried.
+        multi = build_multi_measure(
+            profile,
+            sla,
+            promql_url=promql_url,
+            promql_selector={"instance": promql_instance} if promql_instance else None,
+            datadog_base_url=datadog_base_url,
+            datadog_api_key=datadog_api_key,
+            datadog_application_key=datadog_application_key,
+        )
+        try:
+            _load, snapshots = multi(scenario, f"fixture-{spec.id}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"capture refused: {exc}")
+            return REFUSED
+        import time as _time  # noqa: PLC0415
+
+        from .collector import COLLECTOR_VERSION  # noqa: PLC0415
+        from .fixtures import CapturedFixture  # noqa: PLC0415
+
+        for pname, snap in snapshots.items():
+            if snap.get("collector_version") != COLLECTOR_VERSION:
+                print(
+                    f"  SKIPPED {pname}: collector version mismatch "
+                    f"({snap.get('collector_version')!r} vs {COLLECTOR_VERSION!r})"
+                )
+                continue
+            captured_all = CapturedFixture(
+                spec=spec,
+                snapshot=snap,
+                provider=pname,
+                captured_at_epoch_s=float(snap.get("captured_at_epoch_s") or _time.time()),
+                warmup_s=warmup_s or 0.0,
+                measure_s=measure_s or 0.0,
+            )
+            path = captured_all.write(out_dir)
+            print(f"  written: {path}  [{pname}]")
+        if not spec.validated_at:
+            print(
+                f"\n  NOTE: {spec.id} has no validated_at date. Confirm the signal is "
+                "actually present in the snapshot, then record the date in "
+                f"{fixture_config_dir}/{spec.id}.yaml."
+            )
+        return OK
+
+    measure = build_measure(profile, sla)
     try:
         captured = capture_fixture(
             spec,
@@ -1379,4 +1756,65 @@ def cmd_capture(
             "actually present in this snapshot, then record the date in "
             f"{fixture_config_dir}/{spec.id}.yaml."
         )
+    return OK
+
+
+def cmd_export(
+    *,
+    sla_path: str = "config/slo.yaml",
+    profile_name: str = "spring-boot",
+    out: str = "",
+) -> int:
+    """Export the collection (SLA + profile name) as a shareable YAML.
+
+    Credentials are never included (§8): target URL, environment kind and
+    profile name travel; datasource passwords and API keys do not. A teammate
+    imports the YAML and supplies their own environment.
+
+    The output is a human-readable snapshot of what the investigation is
+    configured to do, not a live config-file copy. It does not round-trip
+    back into ``crucible init`` without review — that is deliberate, because
+    importing silently overwrites an existing config is the kind of thing
+    that should require a human decision.
+    """
+    import yaml  # noqa: PLC0415
+
+    profile = TargetProfile.named(profile_name)
+    sla = Sla.load(sla_path)
+
+    # Strip anything that looks like a credential from the deploy config.
+    deploy_export: dict[str, Any] = {}
+    deploy = profile.deploy
+    if deploy:
+        deploy_export["remote"] = getattr(deploy, "remote", "") or ""
+        deploy_export["branch"] = getattr(deploy, "branch", "") or ""
+        deploy_export["base_branch"] = getattr(deploy, "base_branch", "") or ""
+        # Never export the key path: the path is machine-specific and the
+        # key itself must never leave the machine it lives on.
+
+    doc = {
+        "crucible_export": True,
+        "collection": {
+            "name": sla.name,
+            "description": getattr(sla, "description", "") or "",
+        },
+        "target": {
+            "base_url": sla.target_base_url,
+            "endpoint": sla.endpoint,
+            "environment_kind": sla.environment_kind,
+        },
+        "objective": {
+            "latency_p99_ms": sla.latency_p99_ms,
+            "error_rate_pct": sla.error_rate_pct,
+        },
+        "profile": profile_name,
+        "deploy": deploy_export,
+    }
+
+    dumped = yaml.dump(doc, default_flow_style=False, sort_keys=False)
+    if out:
+        Path(out).write_text(dumped, encoding="utf-8")
+        print(f"exported to {out}")
+    else:
+        print(dumped)
     return OK

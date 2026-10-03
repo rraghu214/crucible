@@ -34,9 +34,12 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from .collector import MetricsProvider
+
+if TYPE_CHECKING:
+    from .watchdog import Watchdog, WatchdogRun
 
 # NO METRIC NAMES LIVE IN THIS FILE. Which gauges to sample and which timers to
 # bracket are declared by the TargetProfile (`gauges:` and `window_timers:` in
@@ -251,6 +254,8 @@ class LocustRunner:
         gauges: dict[str, str] | None = None,
         window_timers: tuple[str, ...] = (),
         profile: Any = None,
+        watchdog: Watchdog | None = None,
+        health_url: str = "",
     ) -> None:
         self.results_dir = Path(results_dir)
         self.metrics_provider = metrics_provider
@@ -259,6 +264,8 @@ class LocustRunner:
         self.gauges = dict(gauges) if gauges else (dict(profile.gauges) if profile else {})
         self.window_timers = tuple(window_timers) if window_timers else (
             tuple(profile.window_timers) if profile else ())
+        self.watchdog: Watchdog | None = watchdog
+        self.health_url = health_url
         if metrics_provider is not None and not self.gauges:
             raise ValueError(
                 "LocustRunner has a metrics provider but no gauges to sample. Pass "
@@ -304,6 +311,20 @@ class LocustRunner:
             raise LoadRunnerError(
                 f"load generator overran its wall-clock budget of {budget_s:.0f}s"
             ) from exc
+
+    def _launch_popen(self, command: list[str]) -> subprocess.Popen[str]:
+        """Start the load generator non-blocking, so a watchdog thread can signal it."""
+        if shutil.which(self.locust_binary) is None:
+            raise LoadRunnerError(
+                f"{self.locust_binary!r} is not on PATH. Install the load extra: "
+                "uv sync --group load"
+            )
+        return subprocess.Popen(  # noqa: S603 - argv list, no shell, config-built
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
 
     def _read_timers(self) -> dict[str, Any]:
         if self.metrics_provider is None:
@@ -353,22 +374,80 @@ class LocustRunner:
             sampler.start()
 
         measure_prefix = self.results_dir / run_id
-        try:
-            completed = self._launch(
-                self._command(scenario, scenario.measure_s, measure_prefix),
-                budget_s=scenario.measure_s + 120.0,
+        watchdog_result: WatchdogRun | None = None
+
+        if self.watchdog is not None:
+            # Non-blocking start so the watchdog thread can signal the process.
+            proc = self._launch_popen(
+                self._command(scenario, scenario.measure_s, measure_prefix)
             )
-        finally:
-            if sampler is not None:
-                result.gauge_samples = sampler.stop()
+
+            def _stop_load() -> None:
+                try:
+                    proc.terminate()
+                except Exception:
+                    pass
+
+            # Lazy import avoids the runner → watchdog → campaign → runner cycle.
+            from .watchdog import LiveReadings  # noqa: PLC0415
+
+            live = LiveReadings(
+                health_url=self.health_url,
+                stats_history_csv=f"{measure_prefix}_stats_history.csv",
+            )
+
+            _wd_result: list[WatchdogRun] = []
+
+            def _supervise() -> None:
+                _wd_result.append(
+                    self.watchdog.supervise(  # type: ignore[union-attr]
+                        live,
+                        duration_s=scenario.measure_s,
+                        stop_load=_stop_load,
+                    )
+                )
+
+            wd_thread = threading.Thread(target=_supervise, name="crucible-watchdog", daemon=True)
+            wd_thread.start()
+
+            try:
+                _stdout, _stderr = proc.communicate(timeout=scenario.measure_s + 120.0)
+                returncode = proc.returncode
+            except subprocess.TimeoutExpired:
+                proc.terminate()
+                proc.wait()
+                returncode = -1
+                _stderr = ""
+            finally:
+                if sampler is not None:
+                    result.gauge_samples = sampler.stop()
+
+            wd_thread.join(timeout=30.0)
+            if _wd_result:
+                watchdog_result = _wd_result[0]
+                result.watchdog = watchdog_result.as_dict()
+                if watchdog_result.abort is not None:
+                    result.aborted = True
+                    result.abort_reason = watchdog_result.abort.reason
+        else:
+            try:
+                completed = self._launch(
+                    self._command(scenario, scenario.measure_s, measure_prefix),
+                    budget_s=scenario.measure_s + 120.0,
+                )
+            finally:
+                if sampler is not None:
+                    result.gauge_samples = sampler.stop()
+            returncode = completed.returncode
+            _stderr = completed.stderr
 
         # The gauges must be read before the pool drains, so timers are read only
         # after the sampler has stopped -- they are cumulative and do not drain.
         result.metrics_at_measure_end = self._read_timers()
 
-        if completed.returncode != 0 and not scenario.expect_possible_failure:
+        if returncode != 0 and not scenario.expect_possible_failure and not result.aborted:
             raise LoadRunnerError(
-                f"locust exited {completed.returncode}: {completed.stderr.strip()[:500]}"
+                f"locust exited {returncode}: {_stderr.strip()[:500]}"
             )
 
         row = _read_locust_aggregated(Path(f"{measure_prefix}_stats.csv"))

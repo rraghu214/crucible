@@ -84,6 +84,10 @@ class ReplayTask:
     #: assertions doc. Omit it and nothing is checked; state it and it must be
     #: right.
     asserts_fixture: dict[str, Any] = field(default_factory=dict)
+    #: Optional stakeholder framing delivered with the snapshot (B3). Wired
+    #: into the diagnosis prompt as a "A stakeholder asks:" block. Context
+    #: only -- never authority. An empty string means no framing.
+    stakeholder_request: str = ""
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> ReplayTask:
@@ -102,6 +106,7 @@ class ReplayTask:
             expectation=str(data.get("expected_behaviour") or data.get("expectation") or ""),
             name=str(data.get("name", "")),
             asserts_fixture=dict(data.get("asserts_fixture") or {}),
+            stakeholder_request=str(data.get("stakeholder_request") or ""),
         )
 
     def applies_to(self, fixture: CapturedFixture) -> bool:
@@ -190,7 +195,14 @@ def check_task_fixture_agreement(
             continue
         expected_cause = task.asserts_fixture.get("cause_family")
         expected_traps = task.asserts_fixture.get("trap_properties")
+        # A `fixture` key scopes the assertion to one fixture in the pair.
+        # Class B tasks (discrimination) have different correct answers per
+        # fixture; without scoping, the assertion would fire on every fixture
+        # in the task, not just the one it was written for.
+        scoped_fixture = task.asserts_fixture.get("fixture")
         for fixture_id in task.fixtures:
+            if scoped_fixture and fixture_id != scoped_fixture:
+                continue
             spec = by_id.get(fixture_id)
             if spec is None:
                 continue
@@ -387,7 +399,11 @@ class ReplayRunner:
             ground_truth_cause_family=fixture.spec.cause_family,
         )
         try:
-            diagnosis = await self.diagnoser.diagnose(fixture.snapshot, self.sla)
+            diagnosis = await self.diagnoser.diagnose(
+                fixture.snapshot,
+                self.sla,
+                stakeholder_request=task.stakeholder_request,
+            )
         except Exception as exc:  # noqa: BLE001 - recorded, never fatal to the run
             case.error = f"{type(exc).__name__}: {exc}"
             return case
