@@ -465,15 +465,15 @@ def page_benchmark() -> None:
             ui.label("Replay results").classes("font-semibold text-sm text-[var(--ink3)]")
             if not replay_runs:
                 ui.label("No replay results yet.").classes("text-sm text-[var(--ink3)]")
-                ui.code("crucible bench replay --tasks config/tasks/ --fixtures config/fixtures/",
+                ui.code("crucible bench --tasks config/tasks/ --fixtures results/",
                         language="bash").classes("text-xs")
             else:
                 latest_replay = replay_runs[-1]
                 cases = latest_replay.get("cases") or []
-                n_pass = sum(1 for c in cases if c.get("passed"))
+                n_pass = sum(1 for c in cases if c.get("diagnosis_correct"))
                 n_total = len(cases)
                 with ui.row().classes("gap-4 items-center"):
-                    ui.label(f"{n_pass}/{n_total} passed").classes(
+                    ui.label(f"{n_pass}/{n_total} correct").classes(
                         "text-lg font-bold " + ("text-[var(--ok)]" if n_pass == n_total else "text-[var(--warn)]"))
                     ui.label(f"File: {latest_replay.get('_file', '?')}").classes(
                         "text-xs text-[var(--ink3)]")
@@ -487,7 +487,7 @@ def page_benchmark() -> None:
                 with ui.grid(columns=5).classes("gap-2 mt-2"):
                     for cls in sorted(by_class):
                         group = by_class[cls]
-                        gpass = sum(1 for c in group if c.get("passed"))
+                        gpass = sum(1 for c in group if c.get("diagnosis_correct"))
                         with ui.card().classes("text-center p-3"):
                             ui.label(f"Class {cls}").classes("font-bold text-sm")
                             ok = gpass == len(group)
@@ -599,7 +599,7 @@ def page_settings() -> None:
                 ("crucible status", "Current campaign status"),
                 ("crucible report <results/*.json>", "View a campaign report"),
                 ("crucible capture …", "Capture a fixture snapshot"),
-                ("crucible bench replay …", "Run replay benchmark"),
+                ("crucible bench --tasks config/tasks/ --fixtures results/", "Run replay benchmark"),
                 ("crucible score <results/*.json>", "Score a campaign"),
             ]:
                 with ui.row().classes("items-baseline gap-2 text-xs"):

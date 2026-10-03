@@ -231,6 +231,20 @@ class TestListReplayRuns:
         ctx = _ctx(tmp_path)
         assert list_replay_runs(ctx) == []
 
+    def test_cmd_bench_default_path_in_results_dir_is_found(self, tmp_path):
+        """cmd_bench writes to results/replay.json by default — the UI must
+        find it there, not just in the legacy docs/bench/ location."""
+        results = tmp_path / "results"
+        results.mkdir(parents=True)
+        data = {"cases": [{"task_id": "T4", "diagnosis_correct": True}], "provider": "actuator"}
+        _write(results / "replay.json", data)
+        ctx = _ctx(tmp_path)
+
+        runs = list_replay_runs(ctx)
+
+        assert len(runs) == 1
+        assert runs[0]["_file"] == "replay.json"
+
 
 # ---------------------------------------------------------------------------
 # list_fixtures

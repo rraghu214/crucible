@@ -122,14 +122,22 @@ def latest_campaign(ctx: PerfContext) -> dict[str, Any] | None:
 
 def list_replay_runs(ctx: PerfContext) -> list[dict[str, Any]]:
     runs = []
-    for path in sorted(ctx.path(ctx.bench_dir).glob("replay-*.json")):
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        if isinstance(data, dict) and "cases" in data:
-            data["_file"] = path.name
-            runs.append(data)
+    # cmd_bench writes to results/replay.json (or results/replay-*.json).
+    # Legacy location: docs/bench/replay-*.json. Check both.
+    search_dirs = [ctx.path(ctx.results_dir), ctx.path(ctx.bench_dir)]
+    seen: set[Path] = set()
+    for directory in search_dirs:
+        for path in sorted(directory.glob("replay*.json")):
+            if path in seen:
+                continue
+            seen.add(path)
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if isinstance(data, dict) and "cases" in data:
+                data["_file"] = path.name
+                runs.append(data)
     return runs
 
 
