@@ -184,8 +184,14 @@ def _set_boxa_java_opts(flags: str, boxa_ip: str, key_path: str, dry_run: bool) 
 
     The post-receive hook sources this file before starting the JVM.  Returns
     True on success or dry_run; False on SSH failure.
+
+    When flags is empty the function returns True immediately without SSH —
+    the hook defaults to no extra JVM args, and the deploy key is git-shell
+    restricted so shell commands over it will always fail.
     """
-    content = f'PERFLAB_JAVA_OPTS="{flags}"\n' if flags else ""
+    if not flags:
+        return True
+    content = f'PERFLAB_JAVA_OPTS="{flags}"\n'
     command = f"printf '%s' {repr(content)} > ~/perflab.env"
     ssh_cmd = [
         "ssh",
@@ -234,6 +240,21 @@ def _commit_and_push(
     dry_run: bool = False,
 ) -> tuple[bool, str]:
     """Stage application.properties, commit, push. Returns (ok, sha_or_error)."""
+    # Sync local branch with remote before committing.  A previous push
+    # rejection leaves local commits the remote doesn't have; resetting to
+    # remote HEAD (with a stash/pop to preserve the current working-tree
+    # edits) makes the next push a simple fast-forward.
+    if not dry_run:
+        code_f, _ = _git(["fetch", remote], workspace, dry_run=False)
+        if code_f == 0:
+            code_rv, remote_sha = _git(["rev-parse", f"{remote}/{branch}"], workspace)
+            code_lv, local_sha = _git(["rev-parse", "HEAD"], workspace)
+            if code_rv == 0 and code_lv == 0 and remote_sha.strip() != local_sha.strip():
+                log.info("Diverged from %s/%s — stash, reset, pop", remote, branch)
+                _git(["stash"], workspace, dry_run=False)
+                _git(["reset", "--hard", f"{remote}/{branch}"], workspace, dry_run=False)
+                _git(["stash", "pop"], workspace, dry_run=False)
+
     code, out = _git(["add", "--", str(app_props.relative_to(workspace))], workspace, dry_run=False)
     if code != 0:
         return False, f"git add failed: {out[:300]}"
