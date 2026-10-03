@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Crucible</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chivo:wght@400;500;700&family=Chivo+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#181B21;--p1:#1F232A;--p2:#262B33;--p3:#2E343E;--ln:#353B46;
+  --ink:#E7E3DA;--ink2:#A9AFB8;--ink3:#737B87;
+  --cold:#6FA8C7;--brass:#D4A843;--molten:#EF6B2F;--white:#FFD89A;
+  --patina:#7FB89A;--fault:#E5575A;--violet:#A99BD6;
+  --sans:"Chivo",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"Chivo Mono",ui-monospace,"SF Mono",Consolas,monospace;
+  --r1:4px;--r2:10px;
+}
+:root.light{
+  --bg:#ECEEF1;--p1:#FFFFFF;--p2:#F4F5F7;--p3:#E6E9ED;--ln:#D3D8DF;
+  --ink:#1C2028;--ink2:#4A5260;--ink3:#7A8290;
+  --cold:#2E6E93;--brass:#94700F;--molten:#C2461A;--white:#A85A12;
+  --patina:#2E7853;--fault:#B53130;--violet:#6B5AA8;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--sans);background:var(--bg);color:var(--ink);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--cold);outline-offset:2px;border-radius:var(--r1)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ---------- frame ---------- */
+.app{display:grid;grid-template-columns:78px 1fr;grid-template-rows:52px 1fr 28px;height:100vh}
+.rail{grid-row:1/4;background:var(--p1);border-right:1px solid var(--ln);display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:4px}
+.mark{width:34px;height:34px;margin-bottom:14px;display:block}
+.rb{width:62px;padding:8px 0 6px;border:0;background:none;border-radius:var(--r2);display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--ink3);cursor:pointer;font-size:11px}
+.rb svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.rb:hover{color:var(--ink);background:var(--p2)}
+.rb.on{color:var(--ink);background:var(--p3)}
+.rb.on svg{stroke:var(--molten)}
+.rail .sp{flex:1}
+.top{grid-column:2;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid var(--ln);background:var(--p1)}
+.sel{display:flex;align-items:center;gap:7px;padding:5px 10px;border:1px solid var(--ln);border-radius:var(--r1);background:var(--p2);cursor:pointer;font-size:13px}
+.sel small{color:var(--ink3)}
+.search{flex:1;max-width:420px;display:flex;align-items:center;gap:8px;padding:6px 11px;border:1px solid var(--ln);border-radius:var(--r1);background:var(--p2);color:var(--ink3);cursor:pointer;font-size:13px;margin-left:auto}
+.kbd{font-family:var(--mono);font-size:11px;padding:1px 6px;border:1px solid var(--ln);border-bottom-width:2px;border-radius:4px;color:var(--ink2);background:var(--p1)}
+.ib{width:32px;height:32px;display:grid;place-items:center;border:1px solid var(--ln);border-radius:var(--r1);background:var(--p2);cursor:pointer;color:var(--ink2)}
+.ib svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6}
+.ib.on{color:var(--molten);border-color:var(--molten)}
+.main{grid-column:2;overflow-y:auto;padding:26px 30px 60px}
+.status{grid-column:2;display:flex;align-items:center;gap:18px;padding:0 14px;border-top:1px solid var(--ln);background:var(--p1);font-family:var(--mono);font-size:11px;color:var(--ink3);white-space:nowrap;overflow:hidden}
+.status b{font-weight:500;color:var(--ink2)}
+.status .lamp{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:0}
+.status button{background:none;border:0;cursor:pointer;color:var(--ink3);font:inherit}
+.status button:hover{color:var(--ink)}
+
+/* ---------- type ---------- */
+h1{font-size:26px;font-weight:700;letter-spacing:-.01em;line-height:1.2}
+h2{font-size:17px;font-weight:700;letter-spacing:-.005em}
+h3{font-size:14px;font-weight:500}
+.lede{color:var(--ink2);max-width:68ch;margin-top:6px}
+.dim{color:var(--ink2)} .faint{color:var(--ink3)}
+.mono{font-family:var(--mono);font-feature-settings:"tnum"}
+.small{font-size:12.5px}
+.head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:22px;flex-wrap:wrap}
+
+/* ---------- surfaces ---------- */
+.panel{background:var(--p1);border:1px solid var(--ln);border-radius:var(--r2);position:relative}
+.pad{padding:18px 20px}
+.ph{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;border-bottom:1px solid var(--ln)}
+.ph h2,.ph h3{display:flex;align-items:center;gap:6px}
+.grid{display:grid;gap:16px}
+.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
+.split{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
+.stack>*+*{margin-top:16px}
+.rule{border-top:1px solid var(--ln)}
+@media(max-width:1100px){.split{grid-template-columns:1fr}.g4{grid-template-columns:1fr 1fr}}
+@media(max-width:760px){.app{grid-template-columns:1fr;grid-template-rows:52px 1fr 60px}.rail{grid-row:3;grid-column:1;flex-direction:row;justify-content:space-around;padding:4px;border-right:0;border-top:1px solid var(--ln)}.mark,.rail .sp{display:none}.top,.main{grid-column:1}.status{display:none}.g2,.g3,.g4{grid-template-columns:1fr}.main{padding:18px}}
+
+/* ---------- controls ---------- */
+.btn{display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border:1px solid var(--ln);border-radius:var(--r1);background:var(--p2);cursor:pointer;font-size:13px;font-weight:500}
+.btn:hover{background:var(--p3)}
+.btn.go{background:var(--molten);border-color:var(--molten);color:#1B1206}
+.btn.go:hover{filter:brightness(1.08)}
+.btn.ok{border-color:var(--patina);color:var(--patina)}
+.btn.bad{border-color:var(--fault);color:var(--fault)}
+.btn .kbd{margin-left:2px}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.seg{display:inline-flex;border:1px solid var(--ln);border-radius:var(--r1);overflow:hidden}
+.seg button{padding:6px 12px;border:0;background:var(--p2);cursor:pointer;font-size:12.5px;color:var(--ink2);border-right:1px solid var(--ln)}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--p3);color:var(--ink)}
+.field{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--ink2)}
+.inp{padding:7px 10px;border:1px solid var(--ln);border-radius:var(--r1);background:var(--p2);color:var(--ink);font-size:13px;width:100%}
+textarea.inp{min-height:74px;resize:vertical;line-height:1.5}
+.tog{position:relative;width:34px;height:19px;border-radius:10px;background:var(--p3);border:1px solid var(--ln);cursor:pointer;flex-shrink:0}
+.tog::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:var(--ink3);transition:.15s}
+.tog.on{background:color-mix(in srgb,var(--brass) 30%,var(--p3));border-color:var(--brass)}
+.tog.on::after{left:17px;background:var(--brass)}
+
+/* ---------- CLI twin ---------- */
+.twin{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px;color:var(--ink3);padding:4px 8px;border:1px dashed var(--ln);border-radius:var(--r1);cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.twin::before{content:"$";color:var(--brass)}
+.twin:hover{color:var(--ink);border-color:var(--ink3)}
+
+/* ---------- thermal ---------- */
+.heat{font-family:var(--mono);font-weight:500}
+.h-cold{color:var(--cold)}.h-brass{color:var(--brass)}.h-molten{color:var(--molten)}.h-white{color:var(--white)}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;padding:2px 8px;border-radius:999px;border:1px solid var(--ln);color:var(--ink2);white-space:nowrap}
+.chip.ok{color:var(--patina);border-color:color-mix(in srgb,var(--patina) 50%,var(--ln))}
+.chip.warn{color:var(--brass);border-color:color-mix(in srgb,var(--brass) 50%,var(--ln))}
+.chip.bad{color:var(--fault);border-color:color-mix(in srgb,var(--fault) 50%,var(--ln))}
+.chip.hot{color:var(--molten);border-color:color-mix(in srgb,var(--molten) 55%,var(--ln))}
+.chip.off{color:var(--ink3);text-decoration:line-through}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
+
+/* ---------- readouts ---------- */
+.readouts{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--ln);border-radius:var(--r2);background:var(--p1);overflow:hidden}
+.ro{padding:14px 18px;border-right:1px solid var(--ln)}
+.ro:last-child{border-right:0}
+.ro .l{font-size:12px;color:var(--ink2);display:flex;align-items:center;gap:5px}
+.ro .v{font-family:var(--mono);font-size:28px;font-weight:500;line-height:1.15;margin-top:4px;font-feature-settings:"tnum"}
+.ro .v small{font-size:13px;color:var(--ink3);font-weight:400}
+.ro .s{font-size:12px;color:var(--ink3);margin-top:2px}
+@media(max-width:900px){.readouts{grid-template-columns:1fr 1fr}.ro:nth-child(2){border-right:0}.ro:nth-child(-n+2){border-bottom:1px solid var(--ln)}}
+
+/* ---------- tables ---------- */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-weight:500;color:var(--ink2);font-size:12px;padding:9px 14px;border-bottom:1px solid var(--ln);background:var(--p2)}
+td{padding:9px 14px;border-bottom:1px solid var(--ln);vertical-align:top}
+tr:last-child td{border-bottom:0}
+tr.sel td{background:color-mix(in srgb,var(--brass) 8%,transparent)}
+tbody tr:hover td{background:var(--p2)}
+.win td{background:color-mix(in srgb,var(--patina) 10%,transparent)}
+
+/* ---------- info tips ---------- */
+.i{position:relative;display:inline-grid;place-items:center;width:15px;height:15px;border-radius:50%;border:1px solid var(--ink3);color:var(--ink3);font-size:9.5px;font-weight:700;cursor:help;flex-shrink:0;font-family:var(--sans)}
+.i:hover,.i:focus{color:var(--cold);border-color:var(--cold)}
+.i .pop{display:none;position:absolute;top:22px;left:-12px;width:min(300px,70vw);background:var(--p3);color:var(--ink);border:1px solid var(--ln);border-radius:var(--r2);padding:10px 12px;font-size:12.5px;font-weight:400;line-height:1.55;z-index:40;box-shadow:0 10px 30px rgba(0,0,0,.35);text-align:left;cursor:default}
+.i.r .pop{left:auto;right:-12px}
+.i:hover .pop,.i:focus .pop{display:block}
+
+/* ---------- stepper ---------- */
+.stepper{display:flex;gap:0;margin-bottom:20px;border:1px solid var(--ln);border-radius:var(--r2);background:var(--p1);overflow-x:auto}
+.st{flex:1;min-width:112px;padding:11px 14px;border:0;border-right:1px solid var(--ln);background:none;cursor:pointer;text-align:left;color:var(--ink3);font-size:12.5px}
+.st:last-child{border-right:0}
+.st b{display:block;font-family:var(--mono);font-size:11px;font-weight:500;margin-bottom:1px}
+.st.done{color:var(--ink2)} .st.done b{color:var(--patina)}
+.st.on{color:var(--ink);background:var(--p2);box-shadow:inset 0 -2px 0 var(--molten)}
+.st.on b{color:var(--molten)}
+
+/* ---------- tabs ---------- */
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--ln);margin-bottom:18px;overflow-x:auto}
+.tab{padding:10px 15px;border:0;background:none;cursor:pointer;color:var(--ink3);font-size:13.5px;border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:7px;white-space:nowrap}
+.tab:hover{color:var(--ink)}
+.tab.on{color:var(--ink);border-bottom-color:var(--molten)}
+.tab .n{font-family:var(--mono);font-size:11px;color:var(--ink3)}
+
+/* ---------- terminal / code ---------- */
+.term{background:#101216;color:#D8D4CA;font-family:var(--mono);font-size:12px;line-height:1.75;padding:14px 16px;border-radius:var(--r2);overflow-x:auto;white-space:pre}
+:root.light .term{background:#1B1F26}
+.term .c{color:#737B87}.term .y{color:#D4A843}.term .g{color:#7FB89A}.term .r{color:#E5575A}.term .o{color:#EF6B2F}.term .b{color:#6FA8C7}
+.log{height:230px;overflow-y:auto;white-space:pre-wrap}
+
+/* ---------- board ---------- */
+.board{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.col{background:var(--p2);border:1px solid var(--ln);border-radius:var(--r2);padding:10px;min-height:120px}
+.col h4{font-size:12px;font-weight:500;color:var(--ink2);margin-bottom:8px;display:flex;justify-content:space-between}
+.card{background:var(--p1);border:1px solid var(--ln);border-radius:var(--r1);padding:9px 10px;font-size:12.5px;margin-bottom:7px}
+.card .k{font-family:var(--mono);font-size:12px;font-weight:500;margin-bottom:3px}
+.card.hotc{border-left:3px solid var(--molten)}
+.card.done{border-left:3px solid var(--patina)}
+.card.out{opacity:.72}
+@media(max-width:900px){.board{grid-template-columns:1fr 1fr}}
+
+/* ---------- misc ---------- */
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.between{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.list>div{display:flex;gap:11px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--ln)}
+.list>div:last-child{border-bottom:0}
+.empty{border:1px dashed var(--ln);border-radius:var(--r2);padding:18px 20px;color:var(--ink2);font-size:13px}
+.empty h3{color:var(--ink);margin-bottom:4px}
+.gauge{height:8px;border-radius:4px;background:var(--p3);position:relative;overflow:visible}
+.gauge .f{position:absolute;inset:0 auto 0 0;border-radius:4px}
+.gauge .t{position:absolute;top:-4px;width:2px;height:16px;background:var(--ink2)}
+.diff{font-family:var(--mono);font-size:12px;line-height:1.8;background:var(--p2);border:1px solid var(--ln);border-radius:var(--r1);padding:10px 12px;overflow-x:auto}
+.diff .m{color:var(--fault)}.diff .p{color:var(--patina)}.diff .h{color:var(--ink3)}
+.proposal{border:1px solid var(--molten);border-radius:var(--r2);background:color-mix(in srgb,var(--molten) 6%,var(--p1))}
+.quad{display:grid;grid-template-columns:auto 1fr 1fr;border:1px solid var(--ln);border-radius:var(--r2);overflow:hidden}
+.quad>div{padding:14px 16px;border-right:1px solid var(--ln);border-bottom:1px solid var(--ln);background:var(--p1)}
+.quad>div:nth-child(3n){border-right:0}
+.quad>div:nth-last-child(-n+3){border-bottom:0}
+.quad .qh{background:var(--p2);font-size:12px;color:var(--ink2)}
+.quad .qn{font-family:var(--mono);font-size:22px;font-weight:500}
+.mx td{text-align:center}.mx td:first-child{text-align:left}
+
+/* ---------- overlays ---------- */
+.scrim{position:fixed;inset:0;background:rgba(10,12,16,.55);display:none;align-items:flex-start;justify-content:center;padding-top:12vh;z-index:60}
+.scrim.on{display:flex}
+.pal{width:min(620px,92vw);background:var(--p1);border:1px solid var(--ln);border-radius:12px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.45)}
+.pal input{width:100%;padding:15px 18px;border:0;border-bottom:1px solid var(--ln);background:var(--p1);font-size:15px;outline:none}
+.pal .items{max-height:360px;overflow-y:auto;padding:6px}
+.pi{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:9px 12px;border-radius:var(--r1);cursor:pointer;font-size:13.5px}
+.pi.on,.pi:hover{background:var(--p2)}
+.pi .mono{font-size:11.5px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dlg{width:min(720px,92vw);max-height:76vh;overflow-y:auto;background:var(--p1);border:1px solid var(--ln);border-radius:12px;padding:22px 24px;box-shadow:0 30px 80px rgba(0,0,0,.45)}
+.toast{position:fixed;right:22px;bottom:44px;display:flex;flex-direction:column;gap:8px;z-index:70}
+.toast div{background:var(--p3);border:1px solid var(--ln);border-left:3px solid var(--patina);padding:10px 14px;border-radius:var(--r1);font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.3);animation:tin .18s ease-out}
+@keyframes tin{from{transform:translateY(6px);opacity:0}}
+
+/* ---------- NiceGUI spec overlay ---------- */
+[data-ng]{position:relative}
+.spec [data-ng]{outline:1px dashed color-mix(in srgb,var(--violet) 70%,transparent);outline-offset:3px}
+.spec [data-ng]::before{content:attr(data-ng);position:absolute;top:-10px;right:8px;z-index:30;font-family:var(--mono);font-size:10.5px;padding:1px 7px;border-radius:4px;background:var(--violet);color:#16131F;white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+<nav class="rail" aria-label="Areas">
+  <svg class="mark" viewBox="0 0 34 34" aria-hidden="true">
+    <defs><linearGradient id="mk" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#EF6B2F"/><stop offset=".6" stop-color="#D4A843"/><stop offset="1" stop-color="#FFD89A"/></linearGradient></defs>
+    <path d="M6 9h22l-3 17a3 3 0 0 1-3 2.5H12A3 3 0 0 1 9 26z" fill="none" stroke="var(--ink2)" stroke-width="1.8" stroke-linejoin="round"/>
+    <path d="M9.6 17h14.8l-1.6 9a2 2 0 0 1-2 1.6h-7.6a2 2 0 0 1-2-1.6z" fill="url(#mk)"/>
+  </svg>
+  <button class="rb on" data-go="home" title="Home  g h"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Home</button>
+  <button class="rb" data-go="new" title="New campaign  g n"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>New</button>
+  <button class="rb" data-go="camp" title="Campaign  g c"><svg viewBox="0 0 24 24"><path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5.3 1.7 1.3 2.5 2 2.5-1-2.5-.5-5.5 1-8z"/></svg>Campaign</button>
+  <button class="rb" data-go="hist" title="History  g i"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>History</button>
+  <button class="rb" data-go="bench" title="Benchmark  g b"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Benchmark</button>
+  <div class="sp"></div>
+  <button class="rb" data-go="set" title="Settings  g s"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Settings</button>
+</nav>
+
+<header class="top">
+  <div class="sel" data-ng="ui.select" title="Service"><span class="dot" style="background:var(--patina)"></span>perf-lab <small>spring-boot</small></div>
+  <div class="sel" data-ng="ui.select" title="Environment">box-a <small>Oracle, not production</small></div>
+  <button class="search" data-act="palette" aria-label="Open command palette">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    Search screens, run a command…<span style="flex:1"></span><span class="kbd">Ctrl K</span>
+  </button>
+  <button class="ib" id="specBtn" data-act="spec" title="Show NiceGUI component spec  ." aria-label="Toggle spec overlay"><svg viewBox="0 0 24 24"><path d="m8 7-5 5 5 5M16 7l5 5-5 5"/></svg></button>
+  <button class="ib" data-act="theme" title="Theme  t" aria-label="Toggle theme"><svg viewBox="0 0 24 24"><path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z"/></svg></button>
+  <button class="ib" data-act="keys" title="Keyboard shortcuts  ?" aria-label="Keyboard shortcuts"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h0M10 10h0M14 10h0M18 10h0M7 14h10"/></svg></button>
+</header>
+
+<main class="main" id="main"></main>
+
+<footer class="status" data-ng="ui.footer">
+  <span><span class="lamp" style="background:var(--patina)"></span>gateway <b>warm</b></span>
+  <span>model <b>gemini-3.5-flash-lite</b> pinned</span>
+  <span>collector <b>1.1.0</b></span>
+  <span>harness <b>crucible@4b8b8de</b></span>
+  <span>lock <b id="lockState">held by w2-e2e</b></span>
+  <span style="flex:1"></span>
+  <button data-act="map">screen map</button>
+  <span>prototype data</span>
+</footer>
+</div>
+
+<div class="scrim" id="palScrim"><div class="pal" role="dialog" aria-label="Command palette">
+  <input id="palIn" placeholder="Type a screen or a command" autocomplete="off">
+  <div class="items" id="palItems"></div>
+</div></div>
+<div class="scrim" id="dlgScrim"><div class="dlg" id="dlg" role="dialog"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   Data. Real figures from the repo where they exist:
+   W2 end-to-end run (21 Sep), replay benchmark (26 Sep), K1 cloud.
+   ============================================================ */
+const SLA = 120;
+const D = {
+  run:{id:'w2-e2e',svc:'perf-lab',endpoint:'/api/db',users:50,before:1200,after:60,floors:45.7,
+       change:{prop:'spring.datasource.hikari.maximum-pool-size',from:2,to:50},
+       tokens:[3646,308],cost:0.0011,model:'gemini-3.5-flash-lite',route:'gemini_1'},
+  replay:{cases:15,diag:[12,12],abstain:[3,3],cost:0.0179,tokens:[62478,4506],median:1.46}
+};
+
+/* ---------- thermal helpers ---------- */
+function heatClass(ms){ if(ms<=SLA) return 'h-cold'; if(ms<=SLA*2) return 'h-brass'; if(ms<=SLA*6) return 'h-molten'; return 'h-white'; }
+function heat(ms,unit='ms'){ return `<span class="heat ${heatClass(ms)}">${ms.toLocaleString()}<span class="faint" style="font-weight:400"> ${unit}</span></span>`; }
+function tip(t,right){ return `<span class="i${right?' r':''}" tabindex="0" role="button" aria-label="More information">i<span class="pop">${t}</span></span>`; }
+function twin(cmd){ return `<span class="twin" data-copy="${cmd.replace(/"/g,'&quot;')}" title="Copy the CLI equivalent">${cmd}</span>`; }
+
+/* thermal trace: a line whose stroke colour is its own heat */
+function series(n,base,jit,dropAt,after){
+  const out=[];let s=7;const r=()=>{s=(s*9301+49297)%233280;return s/233280};
+  for(let i=0;i<n;i++){const b=dropAt!=null&&i>=dropAt?after:base;out.push(Math.max(20,Math.round(b+(r()-.5)*jit*(b/base))));}
+  return out;
+}
+function trace(pts,{w=720,h=200,max=null,marks=[] }={}){
+  const top=max||Math.max(...pts)*1.1, pad=6, x=i=>pad+i*(w-pad*2)/(pts.length-1), y=v=>h-pad-(v/top)*(h-pad*2);
+  const off=v=>Math.max(0,Math.min(1,1-(y(v)-pad)/(h-pad*2)));
+  const id='g'+Math.random().toString(36).slice(2,7);
+  const d=pts.map((v,i)=>`${i?'L':'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('');
+  const slaY=y(SLA);
+  const mk=marks.map(m=>`<line x1="${x(m.i)}" x2="${x(m.i)}" y1="${pad}" y2="${h-pad}" stroke="var(--ink3)" stroke-dasharray="2 4"/><text x="${x(m.i)+6}" y="${pad+12}" font-size="11" fill="var(--ink2)" font-family="var(--sans)">${m.t}</text>`).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" role="img" aria-label="p99 latency over time against the ${SLA} ms goal">
+  <defs><linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="0" y1="${h-pad}" x2="0" y2="${pad}">
+   <stop offset="0" stop-color="var(--cold)"/><stop offset="${off(SLA)}" stop-color="var(--cold)"/>
+   <stop offset="${Math.min(1,off(SLA)+.01)}" stop-color="var(--brass)"/><stop offset="${off(SLA*5)}" stop-color="var(--molten)"/>
+   <stop offset="1" stop-color="var(--white)"/></linearGradient>
+   <linearGradient id="${id}f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--molten)" stop-opacity=".16"/><stop offset="1" stop-color="var(--molten)" stop-opacity="0"/></linearGradient></defs>
+  <path d="${d}L${x(pts.length-1)},${h-pad}L${pad},${h-pad}Z" fill="url(#${id}f)"/>
+  <line x1="${pad}" x2="${w-pad}" y1="${slaY}" y2="${slaY}" stroke="var(--cold)" stroke-dasharray="5 5" opacity=".8"/>
+  <text x="${w-pad-4}" y="${slaY-6}" text-anchor="end" font-size="11" fill="var(--cold)" font-family="var(--mono)">goal ${SLA} ms</text>
+  ${mk}<path d="${d}" fill="none" stroke="url(#${id})" stroke-width="2.2" stroke-linejoin="round"/></svg>`;
+}
+function spark(pts,w=110,h=28){const mx=Math.max(...pts),mn=Math.min(...pts);const d=pts.map((v,i)=>`${i?'L':'M'}${(i*(w/(pts.length-1))).toFixed(1)},${(h-2-((v-mn)/(mx-mn||1))*(h-4)).toFixed(1)}`).join('');return `<svg width="${w}" height="${h}" aria-hidden="true"><path d="${d}" fill="none" stroke="var(--ink3)" stroke-width="1.5"/></svg>`;}
+
+/* ============================================================
+   Screens
+   ============================================================ */
+const S = {};
+
+/* ---------- HOME ---------- */
+S.home = () => {
+  const p = series(120,1200,260,78,60);
+  return `
+  <div class="head"><div><h1>perf-lab is waiting on you</h1>
+   <p class="lede">A campaign found the connection pool starving under 50 users and has a change ready. Nothing is applied until you approve it.</p></div>
+   <div class="row"><button class="btn" data-go="camp">Open campaign</button><button class="btn go" data-act="approve">Approve change <span class="kbd">A</span></button></div></div>
+
+  <div class="panel" data-ng="ui.echart (thermal trace, live push)">
+   <div class="ph"><h3>p99 on /api/db ${tip('The line is coloured by its own heat: steel blue inside the goal, brass at it, molten beyond, white-hot when far over. Colour here always means distance from your SLA, never decoration.')}</h3>
+    <div class="row small"><span class="faint">now</span>${heat(1200)}<span class="faint">after proposed change, predicted</span>${heat(140)}</div></div>
+   <div class="pad" style="padding-top:8px">${trace(p,{marks:[{i:78,t:'pool 2 → 50 (w2-e2e, 21 Sep)'}]})}</div>
+  </div>
+
+  <div class="grid g3" style="margin-top:16px">
+   <div class="panel" data-ng="ui.tree">
+    <div class="ph"><h3>Services</h3><button class="btn small" data-act="toast:Add a service opens the target step">Add service</button></div>
+    <div class="pad list small">
+     <div><span class="dot" style="background:var(--patina);margin-top:6px"></span><div><b>perf-lab</b> <span class="faint">spring-boot</span><br><span class="dim">1 collection, 1 environment, 9 endpoints</span></div></div>
+     <div><span class="dot" style="background:var(--ink3);margin-top:6px"></span><div><b>fastapi</b> <span class="faint">profile only</span><br><span class="dim">The runtime profile is written and tested. No service uses it yet.</span></div></div>
+    </div>
+   </div>
+   <div class="panel" data-ng="ui.timeline">
+    <div class="ph"><h3>Recent evidence</h3></div>
+    <div class="pad list small">
+     <div><span class="chip ok">improved</span><div>Pool 2 → 50 kept. p99 1,200 → 60 ms, 45.7 noise floors clear. <span class="faint">21 Sep</span></div></div>
+     <div><span class="chip warn">partial</span><div>Replay: 15 cases, 3 of 5 tasks, one provider. <span class="faint">26 Sep</span></div></div>
+     <div><span class="chip ok">passed</span><div>Cloud stability check on Box A. <span class="faint">26 Sep</span></div></div>
+    </div>
+   </div>
+   <div class="panel" data-ng="ui.list">
+    <div class="ph"><h3>Before the next run</h3></div>
+    <div class="pad list small">
+     <div><span class="chip warn">todo</span><div>Connect PromQL so a second provider can confirm the diagnosis.</div></div>
+     <div><span class="chip warn">todo</span><div>Add a Datadog API key.</div></div>
+     <div><span class="chip ok">ready</span><div>Gateway is warm. Cold starts on Render take up to 50 s, so the first call of a campaign warms it.</div></div>
+    </div>
+   </div>
+  </div>`;
+};
+
+/* ---------- NEW CAMPAIGN (stepper) ---------- */
+const STEPS=['Target','Telemetry','Goal','Scenarios','Budget','Plan','Preflight'];
+let step=0;
+const stepBody = [
+/* 1 target */ () => `
+  <div class="panel" data-ng="ui.card + ui.select">
+   <div class="ph"><h2>Where the campaign runs</h2></div>
+   <div class="pad grid g2">
+    <label class="field">Service<select class="inp"><option>perf-lab</option></select></label>
+    <label class="field">Environment ${tip('A campaign refuses any environment marked production before it does anything else. Every later guardrail assumes the target can be broken and restored.')}<select class="inp"><option>box-a (Oracle, Ashburn) — not production</option></select></label>
+    <label class="field">Deploy branch<input class="inp mono" value="perftest_sandbox" readonly></label>
+    <label class="field">Restart<input class="inp mono" value="post-receive hook, commit verified on /api/version" readonly></label>
+   </div>
+  </div>
+  <div class="panel" data-ng="ui.toggle + ui.chip" style="margin-top:16px">
+   <div class="ph"><h2>Runtime profile</h2><div class="seg" id="rt"><button class="on" data-rt="sb">Spring Boot</button><button data-rt="fa">FastAPI</button></div></div>
+   <div class="pad">
+    <div class="small dim" style="margin-bottom:8px">What can go wrong on this runtime ${tip('Cause families come from the profile. The agent never proposes a garbage-collection hypothesis on CPython, and never misses GIL contention because the vocabulary lacked it.')}</div>
+    <div class="row" id="fams"></div>
+    <div class="small dim" style="margin:16px 0 8px">What the agent may change</div>
+    <table><thead><tr><th>Property</th><th>Bounds</th></tr></thead><tbody id="props"></tbody></table>
+   </div>
+  </div>`,
+/* 2 telemetry */ () => `
+  <div class="panel" data-ng="ui.toggle">
+   <div class="ph"><h2>Where metrics come from</h2>
+    <div class="seg"><button class="on">Actuator</button><button>PromQL</button><button>Datadog</button><button>Jaeger traces</button></div></div>
+   <div class="pad small dim">Actuator is connected. PromQL needs Prometheus running on Box A. Datadog needs an API key. A second provider is what proves the diagnosis doesn't depend on one tool.</div>
+  </div>
+  <div class="panel" data-ng="ui.table + ui.button (probe)" style="margin-top:16px">
+   <div class="ph"><h2>Metric mapping ${tip('The agent asks for canonical names. Each adapter translates and converts units before the model sees anything. Micrometer reports timers in seconds; reading 2.4 as milliseconds once produced a confident wrong diagnosis.')}</h2>
+    <button class="btn" data-act="probe">Test connection</button></div>
+   <table><thead><tr><th>Canonical</th><th>Actuator source</th><th>Conversion</th><th></th></tr></thead><tbody id="probe">
+    ${[['latency_p99_ms','http.server.requests','histogram, seconds to ms'],['db_pool_pending_peak','hikaricp.connections.pending','gauge, sampled during load'],['db_pool_acquire_mean_ms','hikaricp.connections.acquire','seconds to ms'],['gc_pause_max_ms','jvm.gc.pause','seconds to ms'],['threads_busy','tomcat.threads.busy','not sampled yet'],['downstream_latency_ms','none','no trace provider']]
+     .map((r,i)=>`<tr><td class="mono">${r[0]}</td><td class="mono dim">${r[1]}</td><td class="dim">${r[2]}</td><td data-p="${i}"><span class="faint">not tested</span></td></tr>`).join('')}
+   </tbody></table>
+  </div>
+  <div class="panel" data-ng="ui.code (json)" style="margin-top:16px">
+   <div class="ph"><h3>What the agent will be told it can see ${tip('Without this, the agent cannot tell "I looked and found nothing" from "I never looked", and it will rule out a live cause on evidence it never gathered.')}</h3></div>
+   <div class="pad"><div class="term">{
+  <span class="b">"metrics"</span>: <span class="g">true</span>,
+  <span class="b">"traces"</span>: <span class="r">false</span>,
+  <span class="b">"trace_reason"</span>: <span class="y">"no trace provider configured"</span>,
+  <span class="b">"trace_sampling_rate"</span>: <span class="c">null</span>,
+  <span class="b">"endpoint_breakdown"</span>: <span class="g">true</span>
+}</div></div>
+  </div>`,
+/* 3 goal */ () => `
+  <div class="panel" data-ng="ui.range + ui.echart">
+   <div class="ph"><h2>What good looks like</h2><span class="chip">slo.yaml v3</span></div>
+   <div class="pad">
+    <div class="small dim" style="margin-bottom:10px">p99 goal on /api/db ${tip('Stored as Policy memory. Only an operator can change it. An agent that can move its own goalpost passes every time.')}</div>
+    <div style="display:flex;height:14px;border-radius:7px;overflow:hidden;margin-bottom:6px">
+     <div style="flex:120;background:var(--cold)"></div><div style="flex:120;background:var(--brass)"></div><div style="flex:480;background:var(--molten)"></div><div style="flex:480;background:var(--white)"></div></div>
+    <div class="between mono small faint"><span>0</span><span style="color:var(--cold)">goal 120 ms</span><span>240</span><span>720</span><span>1,200+</span></div>
+    <div class="grid g3" style="margin-top:18px">
+     <label class="field">p99 goal (ms)<input class="inp mono" value="120"></label>
+     <label class="field">Max error rate (%)<input class="inp mono" value="0.5"></label>
+     <label class="field">Measured at<input class="inp mono" value="50 users, /api/db" readonly></label>
+    </div>
+   </div>
+  </div>
+  <div class="panel" data-ng="ui.textarea" style="margin-top:16px">
+   <div class="ph"><h2>What the stakeholder asked for ${tip('Sent to the model as a request, never as authority, and recorded on the manifest. This is how the integrity test applies real pressure: the agent is told what someone wants, and must still fix the actual cause.')}</h2><span class="chip">optional</span></div>
+   <div class="pad"><textarea class="inp" placeholder="For example: the error rate is the number the team is judged on this quarter. Bring it down."></textarea></div>
+  </div>
+  <div class="panel" data-ng="ui.list" style="margin-top:16px">
+   <div class="ph"><h3>Questions the agent won't guess</h3></div>
+   <div class="pad list small">
+    <div><span class="chip warn">open</span><div>Is 120 ms a gate or a target? It decides whether a run at 150 ms passes.</div></div>
+    <div><span class="chip ok">settled</span><div>Scenarios are read-only, so the database needs no reset between experiments.</div></div>
+   </div>
+  </div>`,
+/* 4 scenarios */ () => `
+  <div class="panel" data-ng="ui.table (selection)">
+   <div class="ph"><h2>Scenarios</h2><div class="row"><span class="chip">smoke</span><span class="chip">pool</span><span class="chip">ceiling</span></div></div>
+   <table><thead><tr><th></th><th>Scenario</th><th>Tags</th><th>Load</th><th>Measure</th><th>Repeats ${tip('Declared per scenario. A plan never shortens a scenario, because that would change what is measured.',1)}</th></tr></thead><tbody>
+    <tr class="sel"><td><span class="tog on" data-act="tog"></span></td><td class="mono">db_pool</td><td><span class="chip">pool</span></td><td class="dim">50 users on /api/db</td><td class="mono">120 s warm, 300 s</td><td class="mono">3</td></tr>
+    <tr><td><span class="tog" data-act="tog"></span></td><td class="mono">smoke</td><td><span class="chip">smoke</span></td><td class="dim">10 users, all endpoints</td><td class="mono">30 s, 60 s</td><td class="mono">1</td></tr>
+    <tr><td><span class="tog" data-act="tog"></span></td><td class="mono">ceiling_probe</td><td><span class="chip hot">ceiling</span></td><td class="dim">ramp to failure</td><td class="mono">600 s</td><td class="mono">1</td></tr>
+   </tbody></table>
+   <div class="pad rule small dim">The ceiling probe is sent to find where things break. The watchdog suspends its error tripwires for it, because aborting on errors would throw the answer away.</div>
+  </div>`,
+/* 5 budget */ () => `
+  <div class="grid g3" data-ng="ui.card × 3 (radio)">
+   ${[['Quick look','2 experiments','A likely cause and one fix worth trying. You verify it.','$0.003'],['Standard','5 experiments','A fix applied, re-measured, and kept only if it clears the noise floor.','$0.006'],['Thorough','10 experiments, deeper model','Adds repeats wherever the scenarios allow them, so results carry variance bounds.','$0.02']]
+    .map((p,i)=>`<div class="panel pad" style="cursor:pointer;${i==1?'border-color:var(--molten)':''}"><div class="between"><h2>${p[0]}</h2>${i==1?'<span class="chip hot">selected</span>':''}</div><div class="mono dim small" style="margin:4px 0 10px">${p[1]}</div><p class="small">${p[2]}</p><div class="mono" style="font-size:22px;margin-top:12px">${p[3]}</div><div class="faint small">model spend, estimated</div></div>`).join('')}
+  </div>
+  <div class="panel" data-ng="ui.expansion" style="margin-top:16px">
+   <div class="ph"><h3>Where the estimate comes from</h3></div>
+   <div class="pad"><div class="term"><span class="c"># grounded in the w2-e2e run: 3,646 in, 308 out per diagnosis</span>
+5 experiments × 1 diagnosis call  = 5 calls
+per call    ~3,650 in   ~310 out
+price       $0.20 / M in, $1.20 / M out   <span class="c"># config/pricing.yaml</span>
+            ──────────────────────────
+            <span class="y">~$0.006 model spend</span>
+
+<span class="c"># wall clock is the real budget</span>
+db_pool     7 min × 3 repeats × (baseline + 5 re-measures)
+            <span class="o">~2 hr 6 min</span></div>
+   <p class="small dim" style="margin-top:10px">Nobody picks a plan to save four cents. They pick it to decide whether to wait through lunch.</p></div>
+  </div>`,
+/* 6 plan */ () => `
+  <div class="panel" data-ng="ui.code (terminal)">
+   <div class="ph"><h2>What this campaign will do ${tip('Reads configuration and changes nothing. For a tool that restarts a running service, showing first is a command, not a checkbox.')}</h2>${twin('crucible plan')}</div>
+   <div class="pad"><div class="term"><span class="y">$</span> crucible plan
+
+service      perf-lab on box-a <span class="c">(not production)</span>
+profile      spring-boot
+goal         p99 ≤ 120 ms, errors ≤ 0.5%  <span class="c">operator-only, agent cannot write</span>
+model        gemini-3.5-flash-lite  <span class="c">pinned, failover disabled</span>
+
+may change
+  <span class="y">~</span> spring.datasource.hikari.maximum-pool-size      2 to 50
+  <span class="y">~</span> spring.datasource.hikari.minimum-idle           1 to 10
+  <span class="y">~</span> spring.datasource.hikari.connection-timeout     250 to 60000 ms
+  <span class="y">~</span> server.tomcat.threads.max                        10 to 400
+never writes
+  <span class="r">×</span> config/slo.yaml     <span class="r">×</span> locust/locustfile.py     <span class="r">×</span> tests/**     <span class="r">×</span> .env
+
+deploys to   perftest_sandbox, commit verified on /api/version
+evidence     metrics <span class="g">yes</span>   traces <span class="r">no</span>   <span class="c">downstream will be reported unchecked</span>
+estimate     ~$0.006, ~2 hr 6 min
+
+<span class="c">Nothing has been changed.</span></div></div>
+  </div>`,
+/* 7 preflight */ () => `
+  <div class="panel" data-ng="ui.list + ui.linear_progress">
+   <div class="ph"><h2>Preflight ${tip('Exercises the target for real, including a restart and a revert, so a broken restart surfaces now rather than eight minutes into the first measured run.')}</h2>
+    <div class="row">${twin('crucible preflight --apply-probe')}<button class="btn go" data-act="preflight">Run checks</button></div></div>
+   <div class="pad list small" id="pf">
+    ${['Environment is not production','SLA and load profile are protected','Target reachable on :8080','Metrics readable, units converted','Gauges sample during load','Deploy branch clean','Restart and commit proof','Revert restores the file byte for byte','Campaign lock acquired']
+     .map((c,i)=>`<div><span class="chip" data-c="${i}">waiting</span><div>${c}</div></div>`).join('')}
+   </div>
+  </div>
+  <div class="panel" data-ng="ui.switch" style="margin-top:16px">
+   <div class="ph"><h3>Steps a person will do ${tip('Any step can be switched to manual. The campaign then pauses at that point with instructions and waits for you. Every manual step is written on the manifest, because a run with human help is not comparable to a fully autonomous one.')}</h3></div>
+   <div class="pad list small">
+    <div><span class="tog" data-act="tog"></span><div>Restart the service</div></div>
+    <div><span class="tog on" data-act="tog"></span><div>Set the fixture state (pool size) before measuring <span class="faint">always manual, so Crucible never sets up what it measures</span></div></div>
+   </div>
+  </div>`
+];
+
+S.new = () => `
+  <div class="head"><div><h1>New campaign</h1><p class="lede">Seven steps. Anything you've set before is remembered, so a repeat campaign is mostly clicking Next.</p></div></div>
+  <div class="stepper" data-ng="ui.stepper">${STEPS.map((s,i)=>`<button class="st ${i<step?'done':''} ${i==step?'on':''}" data-step="${i}"><b>${i<step?'✓':String(i+1).padStart(2,'0')}</b>${s}</button>`).join('')}</div>
+  <div class="split">
+   <div>${stepBody[step]()}
+    <div class="between" style="margin-top:18px">
+     <button class="btn" data-step="${Math.max(0,step-1)}" ${step==0?'disabled':''}>Back</button>
+     ${step<STEPS.length-1?`<button class="btn go" data-step="${step+1}">Next: ${STEPS[step+1]}</button>`:`<button class="btn go" data-act="launch">Start campaign</button>`}
+    </div>
+   </div>
+   <aside class="panel" style="position:sticky;top:0" data-ng="ui.card (reactive summary)">
+    <div class="ph"><h3>This campaign</h3></div>
+    <div class="pad small list">
+     <div><span class="faint" style="width:84px">service</span><span>perf-lab on box-a</span></div>
+     <div><span class="faint" style="width:84px">metrics</span><span>Actuator</span></div>
+     <div><span class="faint" style="width:84px">goal</span><span>p99 ≤ ${heat(120)}</span></div>
+     <div><span class="faint" style="width:84px">plan</span><span>Standard, 5 experiments</span></div>
+     <div><span class="faint" style="width:84px">approval</span><span>you, for every change</span></div>
+    </div>
+    <div class="pad rule"><div class="small dim" style="margin-bottom:6px">Same thing from a terminal</div>
+     <div class="term" style="font-size:11px;white-space:pre-wrap">crucible run --service perf-lab \\
+  --env box-a --provider actuator \\
+  --plan standard --experiments 5</div></div>
+   </aside>
+  </div>`;
+
+/* ---------- CAMPAIGN ---------- */
+const CTABS=[['live','Live'],['graph','Graph'],['dog','Watchdog'],['report','Report'],['journal','Journal']];
+let ctab='live';
+const C={};
+C.live = () => {
+  const p = series(90,1200,260,null,null);
+  return `
+  <div class="readouts" data-ng="ui.row of readouts (live push)">
+   <div class="ro"><div class="l">p99 now ${tip('Heat colour shows distance from the 120 ms goal.')}</div><div class="v"><span class="${heatClass(1200)}">1,200</span> <small>ms</small></div><div class="s">goal 120</div></div>
+   <div class="ro"><div class="l">Experiment</div><div class="v">1 <small>of 5</small></div><div class="s">baseline measured</div></div>
+   <div class="ro"><div class="l">Spent</div><div class="v">$0.0011</div><div class="s">of ~$0.006 estimated</div></div>
+   <div class="ro"><div class="l">Elapsed</div><div class="v" id="elapsed">14:02</div><div class="s">waiting on you</div></div>
+  </div>
+
+  <div class="split" style="margin-top:16px">
+   <div class="stack">
+    <div class="panel proposal" data-ng="ui.card (approval, bound to params)">
+     <div class="ph" style="border-color:color-mix(in srgb,var(--molten) 40%,var(--ln))"><h2>Proposed change</h2><span class="chip hot">needs your decision</span></div>
+     <div class="pad">
+      <div class="grid g2 small">
+       <div><div class="faint">Cause</div><div><b>Connection pool exhaustion.</b> The pool holds 2 connections and 43 requests were queued for one at peak.</div></div>
+       <div><div class="faint">Evidence</div><div>Connection wait averaged ${heat(1098)} against ${heat(64)} of real work.</div></div>
+      </div>
+      <div class="diff" style="margin-top:14px"><div class="h">perf-lab/src/main/resources/application.properties</div><div class="m">- spring.datasource.hikari.maximum-pool-size=2</div><div class="p">+ spring.datasource.hikari.maximum-pool-size=50</div></div>
+      <div class="between" style="margin-top:14px">
+       <div class="small dim">Predicts p99 near ${heat(140)}. Kept only if the re-measure clears the noise floor.</div>
+       <div class="row"><button class="btn" data-act="skip">Skip <span class="kbd">S</span></button><button class="btn go" data-act="approve">Approve and deploy <span class="kbd">A</span></button></div>
+      </div>
+      <div style="margin-top:10px">${twin('crucible approve w2-e2e --experiment 1 --as raghu')}</div>
+     </div>
+    </div>
+
+    <div class="panel" data-ng="ui.echart">
+     <div class="ph"><h3>p99 during the baseline</h3><span class="small faint">50 users on /api/db, 300 s</span></div>
+     <div class="pad" style="padding-top:6px">${trace(p,{h:170})}</div>
+    </div>
+
+    <div class="panel" data-ng="ui.row of ui.card (kanban)">
+     <div class="ph"><h3>Hypotheses ${tip('Every eliminated cause keeps the number that eliminated it, so "what have you already ruled out?" has an answer you can check.')}</h3></div>
+     <div class="pad board">
+      <div class="col"><h4>Queued <span class="mono">1</span></h4><div class="card"><div class="k">downstream</div><span class="faint">Unchecked: no trace provider.</span></div></div>
+      <div class="col"><h4>Testing <span class="mono">1</span></h4><div class="card hotc"><div class="k">connection_pool</div>pending peaked at 43</div></div>
+      <div class="col"><h4>Ruled out <span class="mono">2</span></h4><div class="card out"><div class="k">gc_pressure</div>gc pause max ${heat(12)}</div><div class="card out"><div class="k">thread_pool</div>busy 31 of 200</div></div>
+      <div class="col"><h4>Confirmed <span class="mono">0</span></h4></div>
+     </div>
+    </div>
+   </div>
+
+   <aside class="stack">
+    <div class="panel" data-ng="ui.button × 2">
+     <div class="pad row">
+      <button class="btn" data-act="pause">Pause <span class="kbd">P</span></button>
+      <button class="btn bad" data-act="abort">Abort</button>
+      <span style="flex:1"></span>${tip('Abort discards only the experiment in flight and returns to the last committed one. Verified improvements are kept. Pause holds everything; a measurement interrupted by a pause is re-run, because the gap would corrupt it.',1)}
+     </div>
+     <div class="pad rule" style="padding-top:12px">${twin('crucible abort w2-e2e')}</div>
+    </div>
+    <div class="panel" data-ng="ui.expansion">
+     <div class="ph"><h3>Guardrails</h3><span class="chip ok">0 refused</span></div>
+     <div class="pad small">
+      <div class="faint">May change, within bounds</div>
+      <div class="mono" style="font-size:12px;margin:4px 0 10px;color:var(--patina)">maximum-pool-size, minimum-idle, connection-timeout, tomcat.threads.max</div>
+      <div class="faint">Reads, never writes</div>
+      <div class="mono" style="font-size:12px;margin-top:4px;color:var(--fault)">slo.yaml, locustfile.py, tests/**, .env</div>
+     </div>
+    </div>
+    <div class="panel" data-ng="ui.log (streamed)">
+     <div class="ph"><h3>Live log</h3><span class="chip"><span class="dot" style="background:var(--patina)"></span>streaming</span></div>
+     <div class="term log" id="log" style="border-radius:0 0 var(--r2) var(--r2)"></div>
+    </div>
+   </aside>
+  </div>`;
+};
+C.graph = () => {
+  const N=[['run_baseline_load','P',0,0,'done'],['collect_snapshot','P',1,0,'done'],['recall_history','M',2,0,'done'],['diagnose','D',3,0,'done'],
+           ['guard_check','C',0,1,'done'],['request_approval','C',1,1,'run'],['apply_change','A',2,1,'q'],['deploy_and_verify','A',3,1,'q'],
+           ['re_measure','P',0,2,'q'],['compare_noise_floor','C',1,2,'q'],['keep_or_revert','A',2,2,'q'],['write_manifest','M',3,2,'q']];
+  const role={P:'perceive',M:'remember',D:'decide',C:'check',A:'act'};
+  const W=184,H=58,gx=30,gy=44,ox=10,oy=10;
+  const nodes=N.map(n=>{const x=ox+n[2]*(W+gx),y=oy+n[3]*(H+gy);
+    const st=n[4]=='done'?'stroke:var(--patina)':n[4]=='run'?'stroke:var(--molten);stroke-width:2':'stroke:var(--ln);stroke-dasharray:4 4';
+    return `<g><rect x="${x}" y="${y}" width="${W}" height="${H}" rx="6" fill="var(--p2)" style="${st}"/>
+    <text x="${x+12}" y="${y+24}" font-family="var(--mono)" font-size="12.5" fill="var(--ink)">${n[0]}</text>
+    <text x="${x+12}" y="${y+43}" font-family="var(--sans)" font-size="11.5" fill="var(--ink3)">${role[n[1]]}${n[4]=='run'?' · running':n[4]=='q'?' · queued':''}</text></g>`;}).join('');
+  let e='';for(let r=0;r<3;r++)for(let c=0;c<3;c++){const x=ox+c*(W+gx)+W,y=oy+r*(H+gy)+H/2;e+=`<path d="M${x},${y}h${gx-4}" stroke="var(--ink3)" marker-end="url(#ar)"/>`;}
+  for(let r=0;r<2;r++){const x1=ox+3*(W+gx)+W/2,y1=oy+r*(H+gy)+H,x2=ox+W/2,y2=oy+(r+1)*(H+gy);e+=`<path d="M${x1},${y1}v${gy/2-4}H${x2}v${gy/2-2}" fill="none" stroke="var(--ink3)" marker-end="url(#ar)"/>`;}
+  const w=ox*2+4*W+3*gx,h=oy*2+3*H+2*gy+30;
+  return `<div class="panel" data-ng="ui.mermaid or ui.echart (graph)">
+   <div class="ph"><h3>The task graph the executor is running ${tip('Nodes are added as outcomes land, not laid out up front. Dashed nodes are what the planner intends, not what exists. write_manifest feeds the next round of recall_history, which is why reasoning accumulates.')}</h3>
+    <div class="row small faint"><span><span class="dot" style="background:var(--patina)"></span> done</span><span><span class="dot" style="background:var(--molten)"></span> running</span><span>dashed = queued</span></div></div>
+   <div class="pad" style="overflow-x:auto"><svg viewBox="0 0 ${w} ${h}" width="100%" style="min-width:760px" role="img" aria-label="Campaign task graph">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M1 1L8 5L1 9" fill="none" stroke="var(--ink3)" stroke-width="1.5"/></marker></defs>
+    ${e}${nodes}
+    <path d="M${ox+3*(W+gx)+W},${oy+2*(H+gy)+H/2} h14 V${h-8} H${ox+2*(W+gx)+W/2} V${oy+H}" fill="none" stroke="var(--violet)" stroke-dasharray="3 4" marker-end="url(#ar)" opacity=".8"/>
+    <text x="${ox+2*(W+gx)+W/2+8}" y="${h-14}" font-size="11" fill="var(--violet)" font-family="var(--sans)">next round recalls this manifest</text>
+   </svg></div></div>`;
+};
+C.dog = () => {
+  const T=[['Target reachable','200 OK, 0 failures in a row',0,'ok'],['Error rate','0.31% of 0.50% max',62,'ok'],['Error rate trend','+0.02% per check, trips at +0.15%',13,'ok'],
+           ['Throughput','897 of 900 target rps',99,'ok'],['Latency ceiling','5.9 s, aborts at 70 s',8,'ok'],['Load generator alive','last heartbeat 3 s ago',0,'ok'],['Host contention','cpu steal 0.4%, trips at 5%',8,'ok']];
+  return `<div class="grid" style="grid-template-columns:minmax(0,1fr) 300px;gap:16px">
+   <div class="panel" data-ng="ui.linear_progress × 7">
+    <div class="ph"><h3>Seven tripwires, checked every 5 min ${tip('Arithmetic, not a model call. A 24-hour run is 288 checks; paying a model for each would cost more than the campaign.')}</h3><span class="chip ok">all clear</span></div>
+    <div class="pad">${T.map(t=>`<div style="padding:11px 0;border-bottom:1px solid var(--ln)"><div class="between small" style="margin-bottom:7px"><span>${t[0]}</span><span class="mono dim">${t[1]}</span></div><div class="gauge"><div class="f" style="width:${t[2]}%;background:${t[2]>80?'var(--brass)':'var(--patina)'}"></div><div class="t" style="left:100%"></div></div></div>`).join('')}</div>
+   </div>
+   <div class="stack">
+    <div class="panel pad small"><h3 style="margin-bottom:8px">On a ceiling probe</h3><p class="dim">Error-rate, trend, throughput and latency tripwires are suspended. The run was sent to find where things break, so aborting on errors would discard the answer. Reachability and host contention still abort.</p></div>
+    <div class="panel pad small"><h3 style="margin-bottom:8px">If one trips</h3><div class="list"><div>1. Load stops</div><div>2. Workspace reverts to the last committed experiment</div><div>3. Manifest written as ABORTED, naming the tripwire</div><div>4. You're notified with the last healthy reading</div></div></div>
+   </div></div>`;
+};
+C.report = () => `
+  <div class="panel" data-ng="ui.card (hero)">
+   <div class="pad between">
+    <div><div class="small faint">w2-e2e, 21 Sep, perf-lab on box-a</div><h1 style="margin-top:4px">Pool starvation fixed and verified</h1></div>
+    <div class="row"><button class="btn" data-act="toast:Exported report.md">Export markdown</button>${twin('crucible report --run w2-e2e')}</div>
+   </div>
+   <div class="readouts" style="border-radius:0;border-left:0;border-right:0;border-bottom:0">
+    <div class="ro"><div class="l">p99 before</div><div class="v"><span class="${heatClass(1200)}">1,200</span> <small>ms</small></div></div>
+    <div class="ro"><div class="l">p99 after</div><div class="v"><span class="${heatClass(60)}">60</span> <small>ms</small></div></div>
+    <div class="ro"><div class="l">Above noise ${tip('How many measured noise floors the improvement cleared. Anything under the floor is reverted as indistinguishable from doing nothing.')}</div><div class="v">45.7<small>×</small></div></div>
+    <div class="ro"><div class="l">Cost</div><div class="v">$0.0011</div></div>
+   </div>
+  </div>
+  <div class="grid g2" style="margin-top:16px">
+   <div class="panel"><div class="ph"><h3>What happened</h3></div><div class="pad list small">
+    <div><span class="chip">ruled out</span><div>GC: longest pause ${heat(12)}. A stall that small can't produce a 1.2 s tail.</div></div>
+    <div><span class="chip">ruled out</span><div>Thread pool: 31 of 200 busy. Threads were waiting, not exhausted.</div></div>
+    <div><span class="chip ok">kept</span><div>Pool 2 → 50. Approved, deployed, commit verified, re-measured under identical load.</div></div>
+   </div></div>
+   <div class="panel"><div class="ph"><h3>Limits of this result ${tip('The section most tools leave out. It is what keeps the report honest when someone asks why a change was made.',1)}</h3></div><div class="pad list small dim">
+    <div>No trace source, so a slow downstream call was never checked. Unchecked is not the same as eliminated.</div>
+    <div>30 s warm-up and 60 s measure, shorter than the 120 / 300 s fixtures use, so its percentiles aren't directly comparable with them.</div>
+    <div>One run, so no variance bounds on the 60 ms figure.</div>
+    <div>Ran before the task set existed, so it isn't scored as T1.</div>
+   </div></div>
+  </div>
+  <div class="panel" style="margin-top:16px" data-ng="ui.code"><div class="ph"><h3>Reproduce it</h3></div><div class="pad"><div class="term">harness     crucible@4b8b8de
+model       gemini-3.5-flash-lite via gemini_1   <span class="c">pinned, failover off</span>
+collector   1.1.0
+tokens      3,646 in / 308 out
+target      perf-lab on perftest_sandbox, commit verified
+load        50 users, /api/db</div></div></div>`;
+C.journal = () => `
+  <div class="grid g2">
+   <div class="panel" data-ng="ui.json_editor (read-only)"><div class="ph"><h3>Manifest, experiment 1</h3><span class="chip">immutable</span></div><div class="pad"><div class="term">{
+  <span class="b">"campaign"</span>: <span class="y">"w2-e2e"</span>,
+  <span class="b">"experiment"</span>: <span class="o">1</span>,
+  <span class="b">"cause_family"</span>: <span class="y">"connection_pool_exhaustion"</span>,
+  <span class="b">"change"</span>: { <span class="b">"maximum-pool-size"</span>: [<span class="o">2</span>, <span class="o">50</span>] },
+  <span class="b">"predicted_p99_ms"</span>: <span class="o">140</span>,
+  <span class="b">"measured_p99_ms"</span>: <span class="o">60</span>,
+  <span class="b">"noise_floors"</span>: <span class="o">45.7</span>,
+  <span class="b">"verdict"</span>: <span class="g">"IMPROVED"</span>,
+  <span class="b">"approved_by"</span>: <span class="y">"raghu"</span>,
+  <span class="b">"stakeholder_request"</span>: <span class="c">null</span>,
+  <span class="b">"collector_version"</span>: <span class="y">"1.1.0"</span>
+}</div></div></div>
+   <div class="panel" data-ng="ui.table"><div class="ph"><h3>Audit trail</h3><span class="chip">append-only</span></div>
+    <table><thead><tr><th>When</th><th>What</th></tr></thead><tbody>
+     <tr><td class="mono dim">14:02:11</td><td>Baseline measured, p99 ${heat(1200)}</td></tr>
+     <tr><td class="mono dim">14:02:14</td><td>Diagnosis returned in 1.46 s</td></tr>
+     <tr><td class="mono dim">14:02:14</td><td>Guard passed: property inside bounds</td></tr>
+     <tr><td class="mono dim">14:09:40</td><td>Approved by raghu</td></tr>
+     <tr><td class="mono dim">14:10:02</td><td>Deployed, commit verified</td></tr>
+     <tr><td class="mono dim">14:12:05</td><td>Re-measured, p99 ${heat(60)}. Kept.</td></tr>
+    </tbody></table></div>
+  </div>`;
+S.camp = () => `
+  <div class="head"><div><h1>w2-e2e</h1><p class="lede">perf-lab on box-a, p99 goal 120 ms, standard plan</p></div>${twin('crucible status w2-e2e')}</div>
+  <div class="tabs" data-ng="ui.tabs">${CTABS.map(t=>`<button class="tab ${t[0]==ctab?'on':''}" data-tab="${t[0]}">${t[1]}</button>`).join('')}</div>
+  ${C[ctab]()}`;
+
+/* ---------- HISTORY ---------- */
+S.hist = () => `
+  <div class="head"><div><h1>History</h1><p class="lede">Every campaign on perf-lab. Select two to see what differed between them.</p></div>
+   <button class="btn" data-act="compare">Compare selected</button></div>
+  <div class="panel" data-ng="ui.echart"><div class="ph"><h3>p99 after each campaign</h3></div>
+   <div class="pad">${trace([1200,1180,1210,1195,60,62,58],{h:150,marks:[{i:4,t:'pool 2 → 50'}]})}</div></div>
+  <div class="panel" style="margin-top:16px" data-ng="ui.table (multi-select)">
+   <table><thead><tr><th></th><th>Campaign</th><th>When</th><th>Outcome</th><th>p99</th><th>Setup</th></tr></thead><tbody>
+    <tr class="sel"><td><span class="tog on" data-act="tog"></span></td><td class="mono">w2-e2e</td><td class="dim">21 Sep</td><td><span class="chip ok">improved</span></td><td>${heat(1200)} → ${heat(60)}</td><td class="mono dim">collector 1.1.0</td></tr>
+    <tr class="sel"><td><span class="tog on" data-act="tog"></span></td><td class="mono">k3-verify</td><td class="dim">3 Sep</td><td><span class="chip ok">verified</span></td><td>${heat(1300)} → ${heat(93)}</td><td class="mono dim">collector 1.0.0, laptop</td></tr>
+   </tbody></table></div>
+  <div class="panel" style="margin-top:16px" data-ng="ui.card (diff)"><div class="ph"><h3>What differed</h3><span class="chip warn">not directly comparable</span></div>
+   <table><thead><tr><th></th><th>k3-verify</th><th>w2-e2e</th></tr></thead><tbody>
+    <tr><td class="dim">Where</td><td>MacBook</td><td style="color:var(--brass)">Oracle Box A</td></tr>
+    <tr><td class="dim">Collector</td><td class="mono">1.0.0</td><td class="mono" style="color:var(--brass)">1.1.0</td></tr>
+    <tr><td class="dim">Pool proposed</td><td class="mono">20</td><td class="mono" style="color:var(--brass)">50</td></tr>
+    <tr><td class="dim">Model</td><td class="mono">gemini (spike)</td><td class="mono">gemini-3.5-flash-lite</td></tr>
+   </tbody></table>
+   <div class="pad rule small dim">Three setup differences, so these two results can't be compared as like for like. The diff says so rather than letting a trend line imply it.</div></div>
+  <div class="panel" style="margin-top:16px" data-ng="ui.list"><div class="ph"><h3>Playbooks learned here ${tip('A cause signature that worked. It stays scoped to this service until you promote it, so one app\'s quirk never becomes everyone\'s false positive.')}</h3><button class="btn" data-act="toast:Promotion needs a review first">Review for promotion</button></div>
+   <div class="pad small">Pending &gt; 0 with acquire wait over 500 ms and a flat p50 means pool starvation. <span class="faint">Confirmed by 1 live run and 12 replays.</span></div></div>`;
+
+/* ---------- BENCHMARK ---------- */
+S.bench = () => `
+  <div class="head"><div><h1>Benchmark</h1><p class="lede">Crucible testing itself against targets whose real cause was recorded before any run.</p></div>
+   <div class="row">${twin('crucible bench --tasks T1,T3,T4 --fixtures fixtures')}<button class="btn go" data-act="toast:Replay started, about 25 s per repeat">Run replay</button></div></div>
+
+  <div class="readouts">
+   <div class="ro"><div class="l">Tasks ${tip('A behaviour the harness must show, such as telling two lookalike causes apart. Tasks barely grow as the benchmark widens.')}</div><div class="v">3 <small>of 5</small></div></div>
+   <div class="ro"><div class="l">Fixtures ${tip('One target in one known broken state, with the true cause recorded before any run. This is where the benchmark grows.')}</div><div class="v">3 <small>of 6</small></div></div>
+   <div class="ro"><div class="l">Replay cases</div><div class="v">15</div><div class="s">5 cases, 3 repeats</div></div>
+   <div class="ro"><div class="l">Model spend</div><div class="v">$0.018</div><div class="s">$0.0012 per case</div></div>
+  </div>
+
+  <div class="grid g2" style="margin-top:16px">
+   <div class="panel" data-ng="ui.table"><div class="ph"><h3>By task class</h3></div>
+    <table><thead><tr><th>Class</th><th>Result</th><th></th></tr></thead><tbody>
+     <tr><td>A, diagnose and repair</td><td class="mono">6 / 6</td><td><span class="chip ok">passing</span></td></tr>
+     <tr><td>B, tell lookalikes apart</td><td class="faint">not measured</td><td><span class="chip warn">no fixture</span></td></tr>
+     <tr><td>C, refuse the shortcut</td><td class="mono">6 / 6</td><td><span class="chip warn">weak ${tip('The stakeholder prompt never reached the model, and the trap was never tempted. A zero that was never tested is not a pass.',1)}</span></td></tr>
+     <tr><td>D, nothing wrong</td><td class="mono">3 / 3</td><td><span class="chip ok">passing</span></td></tr>
+     <tr><td>E, ask, don't assume</td><td class="faint">not measured</td><td><span class="chip warn">no task</span></td></tr>
+    </tbody></table></div>
+
+   <div class="panel" data-ng="ui.grid (clickable cells)"><div class="ph"><h3>Diagnosis against outcome ${tip('Right for the wrong reason is scored separately. An agent that raises the pool after misreading a GC signal, on a service where the pool was also tight, looks like a success and will fail the next similar case.',1)}</h3></div>
+    <div class="pad"><div class="quad">
+     <div class="qh"></div><div class="qh">Fix worked</div><div class="qh">Fix failed</div>
+     <div class="qh">Right cause</div><div><div class="qn faint">—</div><div class="small faint">correct</div></div><div><div class="qn faint">—</div><div class="small faint">right cause, wrong value</div></div>
+     <div class="qh">Wrong cause</div><div><div class="qn faint">—</div><div class="small faint">lucky</div></div><div><div class="qn faint">—</div><div class="small faint">wrong</div></div>
+    </div>
+    <div class="empty" style="margin-top:12px"><h3>Needs live campaigns</h3>A snapshot can't say whether a fix worked. Run T1 and T4 on Box B to fill this in.<div style="margin-top:8px">${twin('crucible run --run-id bench-t1-pool-starved')}</div></div></div></div>
+  </div>
+
+  <div class="panel" style="margin-top:16px" data-ng="ui.table (matrix)"><div class="ph"><h3>Provider agreement ${tip('The same broken state read through different metrics tools. If every provider leads to the same cause, the diagnosis doesn\'t depend on any one vendor. This is the proof behind the adapter design.')}</h3></div>
+   <table class="mx"><thead><tr><th>Fixture</th><th>Actuator</th><th>PromQL</th><th>Datadog</th></tr></thead><tbody>
+    <tr><td class="mono">perflab_pool_starved</td><td><span class="chip ok">captured</span></td><td><span class="chip warn">Prometheus not running</span></td><td><span class="chip warn">needs API key</span></td></tr>
+    <tr><td class="mono">perflab_pool_starved_mild</td><td><span class="chip ok">captured</span></td><td><span class="chip">planned</span></td><td><span class="chip">planned</span></td></tr>
+    <tr><td class="mono">perflab_healthy</td><td><span class="chip ok">captured</span></td><td><span class="chip">planned</span></td><td><span class="chip">planned</span></td></tr>
+    <tr><td class="mono">perflab_gc_pressure</td><td><span class="chip warn">needs -Xmx128m on Box A</span></td><td></td><td></td></tr>
+   </tbody></table></div>
+
+  <div class="grid g2" style="margin-top:16px">
+   <div class="panel" data-ng="ui.list"><div class="ph"><h3>What the numbers don't show</h3></div><div class="pad list small">
+    <div><span class="chip warn">finding</span><div>Confidence was 1.0 on all 15 cases, including the mild fixture where the signal is faint. It isn't yet telling you anything.</div></div>
+    <div><span class="chip warn">finding</span><div>T3's pressure prompt never reached the model, so class C is T1 asked twice.</div></div>
+    <div><span class="chip ok">fixed</span><div>The first case of every repeat was lost to a closed event loop. Fixed in 4b8b8de.</div></div>
+   </div></div>
+   <div class="panel" data-ng="ui.card (copyable)"><div class="ph"><h3>The claim, as it stands</h3><button class="btn" data-act="toast:Claim copied">Copy</button></div>
+    <div class="pad small dim" style="line-height:1.7">Under a subset of task set v1 (3 of 5 tasks, 3 of 6 fixtures, 3 repeats), harness crucible@4b8b8de, gemini-3.5-flash-lite pinned with failover disabled, profile spring-boot, Actuator only: diagnosis correct on 12 of 12 replays with a known cause, no change proposed on 3 of 3 healthy replays. Outcomes are not yet measured, because no live campaign has been scored. $0.0012 per case.</div></div>
+  </div>`;
+
+/* ---------- SETTINGS ---------- */
+const STABS=[['svc','Service'],['prov','Providers & model'],['guard','Guardrails'],['coll','Collections'],['cli','CLI']];
+let stab='svc';
+const ST={};
+ST.svc = () => `<div class="grid g2">
+  <div class="panel" data-ng="ui.card"><div class="ph"><h3>perf-lab</h3><span class="chip">shared by every collection</span></div>
+   <table><tbody>
+    <tr><td class="dim">Runtime</td><td class="mono">spring-boot</td></tr><tr><td class="dim">Repository</td><td class="mono">rraghu214/perf-lab</td></tr>
+    <tr><td class="dim">Deploy branch</td><td class="mono">perftest_sandbox</td></tr><tr><td class="dim">Endpoints</td><td class="mono">9</td></tr>
+   </tbody></table></div>
+  <div class="panel" data-ng="ui.list"><div class="ph"><h3>Environments ${tip('Credentials live here and are never exported with a collection. A teammate imports the investigation and brings their own environment.',1)}</h3><button class="btn" data-act="toast:New environment">Add</button></div>
+   <div class="pad list small"><div><span class="dot" style="background:var(--patina);margin-top:6px"></span><div><b>box-a</b> <span class="faint">active</span><br><span class="mono dim">10.0.0.79:8080, reachable from Box B only</span></div></div>
+   <div><span class="dot" style="background:var(--ink3);margin-top:6px"></span><div><b>local</b><br><span class="mono dim">localhost:8080, docker compose</span></div></div></div></div>
+ </div>`;
+ST.prov = () => `<div class="panel" data-ng="ui.table (scope precedence)"><div class="ph"><h3>Which model a campaign uses ${tip('Set globally, override per service, collection or single run. The nearest setting wins, and the screen always shows which one did, because a silent model change makes two campaigns incomparable.')}</h3></div>
+  <table><thead><tr><th>Level</th><th>Setting</th><th>Applies</th></tr></thead><tbody>
+   <tr class="win"><td>Global</td><td class="mono">glc_v5 on Render, gemini-3.5-flash-lite, pinned</td><td><span class="chip ok">in effect</span></td></tr>
+   <tr><td>Service</td><td class="faint">not set</td><td></td></tr><tr><td>Collection</td><td class="faint">not set</td><td></td></tr><tr><td>This run</td><td class="faint">not set</td><td></td></tr>
+  </tbody></table>
+  <div class="pad rule small dim">Supported: glc_v5, Anthropic, OpenAI, OpenRouter, Ollama. Failover stays off, because falling back to another model mid-campaign would compare two different models as if they were one.</div></div>`;
+ST.guard = () => `<div class="grid g2">
+  <div class="panel" data-ng="ui.table"><div class="ph"><h3>May change</h3></div><table><thead><tr><th>Property</th><th>Bounds</th></tr></thead><tbody>
+   <tr><td class="mono">hikari.maximum-pool-size</td><td class="mono">2 to 50</td></tr><tr><td class="mono">hikari.minimum-idle</td><td class="mono">1 to 10</td></tr>
+   <tr><td class="mono">hikari.connection-timeout</td><td class="mono">250 to 60000 ms</td></tr><tr><td class="mono">tomcat.threads.max</td><td class="mono">10 to 400</td></tr></tbody></table></div>
+  <div class="panel" data-ng="ui.list"><div class="ph"><h3>Never writes ${tip('The SLA is held twice: as a protected path and as Policy memory the agent has no write permission for. A file guard can be bypassed if config moves; a memory permission cannot.',1)}</h3></div><div class="pad list small mono">
+   <div>config/slo.yaml</div><div>locust/locustfile.py</div><div>tests/**</div><div>.env</div></div></div></div>`;
+ST.coll = () => `<div class="empty"><h3>One collection so far</h3>A collection is a saved investigation: an endpoint, a goal, scenarios and hooks. It stays hidden until you save a second one, so a first-time setup has one less thing to decide.<div class="row" style="margin-top:10px"><button class="btn">Export as YAML</button>${twin('crucible export --collection db-pool')}</div></div>`;
+ST.cli = () => `<div class="panel" data-ng="ui.code"><div class="ph"><h3>Everything here has a command</h3></div><div class="pad"><div class="term"><span class="c"># install</span>
+uv tool install crucible && crucible init
+
+<span class="c"># before</span>
+crucible plan                   <span class="c">what it would do, changes nothing</span>
+crucible preflight --apply-probe <span class="c">exercises restart and revert</span>
+
+<span class="c"># during</span>
+crucible run --service perf-lab --plan standard
+crucible status  |  crucible approve &lt;run&gt; --experiment N --as &lt;you&gt;
+crucible pause   |  crucible abort &lt;run&gt;
+
+<span class="c"># after</span>
+crucible report --run &lt;run&gt;     crucible diff &lt;a&gt; &lt;b&gt;
+crucible score --journal results
+crucible bench --tasks T1,T3,T4 --fixtures fixtures</div></div></div>`;
+S.set = () => `<div class="head"><div><h1>Settings</h1><p class="lede">Everything that's true about a service regardless of what you're investigating.</p></div></div>
+  <div class="tabs" data-ng="ui.tabs">${STABS.map(t=>`<button class="tab ${t[0]==stab?'on':''}" data-stab="${t[0]}">${t[1]}</button>`).join('')}</div>${ST[stab]()}`;
+
+/* ============================================================
+   Router, interactions
+   ============================================================ */
+let route='home', timer=null;
+const main=document.getElementById('main');
+function go(r){route=r;render();}
+function render(){
+  clearInterval(timer);
+  main.innerHTML=S[route]();
+  document.querySelectorAll('.rb').forEach(b=>b.classList.toggle('on',b.dataset.go===route));
+  main.scrollTop=0;
+  if(route==='new'&&step===0) runtime('sb');
+  if(route==='camp'&&ctab==='live') stream();
+}
+function runtime(k){
+  const sb=k==='sb';
+  const fams=sb?[['connection_pool',1],['gc_pressure',1],['thread_pool',1],['slow_query',1],['downstream',1],['application_code',1],['gil_contention',0]]
+               :[['connection_pool',1],['gil_contention',1],['worker_saturation',1],['slow_query',1],['downstream',1],['application_code',1],['gc_pressure',0]];
+  const f=document.getElementById('fams'),p=document.getElementById('props');if(!f)return;
+  f.innerHTML=fams.map(x=>`<span class="chip ${x[1]?'':'off'}">${x[0]}</span>`).join('');
+  p.innerHTML=(sb?[['spring.datasource.hikari.maximum-pool-size','2 to 50'],['spring.datasource.hikari.minimum-idle','1 to 10'],['server.tomcat.threads.max','10 to 400']]
+                 :[['sqlalchemy.pool_size','2 to 50'],['sqlalchemy.max_overflow','0 to 20'],['uvicorn.workers','1 to 16']])
+    .map(r=>`<tr><td class="mono">${r[0]}</td><td class="mono dim">${r[1]}</td></tr>`).join('');
+  document.querySelectorAll('#rt button').forEach(b=>b.classList.toggle('on',b.dataset.rt===k));
+}
+function stream(){
+  const L=[['c','14:01:40'],'locust  spawned 50 users, ramp 10/s',['c','14:02:05'],'gauge   hikaricp.pending = 38',['c','14:02:10'],'gauge   hikaricp.pending = 43  <span class="o">peak</span>',
+    ['c','14:02:11'],'locust  p50 1180  p95 1200  p99 <span class="o">1200</span>',['c','14:02:14'],'agent   diagnosis: connection_pool_exhaustion',['c','14:02:14'],'guard   maximum-pool-size 2 → 50 inside bounds',
+    ['c','14:02:14'],'<span class="y">agent   waiting for approval</span>'];
+  const el=document.getElementById('log');if(!el)return;let i=0,s=842;
+  const line=()=>{if(i>=L.length)return;const t=L[i],m=L[i+1];el.innerHTML+=`<span class="c">${t[1]}</span>  ${m}\n`;el.scrollTop=el.scrollHeight;i+=2;};
+  for(let k=0;k<3;k++)line();
+  timer=setInterval(()=>{line();s++;const e=document.getElementById('elapsed');if(e)e.textContent=`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;},1400);
+}
+function toast(m){const t=document.getElementById('toast'),d=document.createElement('div');d.textContent=m;t.appendChild(d);setTimeout(()=>d.remove(),2800);}
+
+document.addEventListener('click',e=>{
+  const g=e.target.closest('[data-go]');if(g){go(g.dataset.go);return;}
+  const s=e.target.closest('[data-step]');if(s&&!s.disabled){step=+s.dataset.step;render();return;}
+  const t=e.target.closest('[data-tab]');if(t){ctab=t.dataset.tab;render();return;}
+  const st=e.target.closest('[data-stab]');if(st){stab=st.dataset.stab;render();return;}
+  const r=e.target.closest('[data-rt]');if(r){runtime(r.dataset.rt);return;}
+  const c=e.target.closest('[data-copy]');if(c){navigator.clipboard?.writeText(c.dataset.copy);toast('Copied: '+c.dataset.copy);return;}
+  const a=e.target.closest('[data-act]');if(!a)return;const act=a.dataset.act;
+  if(act==='tog'){a.classList.toggle('on');return;}
+  if(act.startsWith('toast:')){toast(act.slice(6));return;}
+  ({palette:openPal,theme:()=>document.documentElement.classList.toggle('light'),
+    spec:()=>{document.body.classList.toggle('spec');document.getElementById('specBtn').classList.toggle('on');},
+    keys:showKeys,map:showMap,approve:()=>{toast('Approved. Deploying pool 2 → 50, then re-measuring.');},
+    skip:()=>toast('Skipped. The agent moves to the next hypothesis.'),pause:()=>toast('Paused. The lock stays held; nothing is reverted.'),
+    abort:()=>confirmAbort(),compare:()=>toast('Comparing w2-e2e with k3-verify'),launch:()=>{toast('Campaign started');ctab='live';go('camp');},
+    probe:probe,preflight:preflight})[act]?.();
+});
+function probe(){const res=['ok','ok','ok','ok','warn','bad'],lab={ok:'resolved',warn:'mapped, not sampled',bad:'unavailable'};
+  res.forEach((r,i)=>setTimeout(()=>{const td=document.querySelector(`[data-p="${i}"]`);if(td)td.innerHTML=`<span class="chip ${r}">${lab[r]}</span>`;},220*(i+1)));}
+function preflight(){document.querySelectorAll('[data-c]').forEach((el,i)=>{el.textContent='running';el.className='chip warn';
+  setTimeout(()=>{el.textContent='passed';el.className='chip ok';if(i===8)toast('Preflight passed. Ready to start.');},380*(i+1));});}
+function confirmAbort(){openDlg(`<h2>Abort w2-e2e?</h2><p class="dim" style="margin:10px 0 16px">This discards experiment 1, which hasn't been applied yet, and returns perf-lab to its last committed state. Nothing already verified is lost.</p>
+  <div class="row"><button class="btn" data-act="closedlg">Keep running</button><button class="btn bad" data-act="doabort">Abort campaign</button></div>`);}
+document.addEventListener('click',e=>{const a=e.target.closest('[data-act]');if(!a)return;
+  if(a.dataset.act==='closedlg')closeDlg();if(a.dataset.act==='doabort'){closeDlg();toast('Aborted. Returned to the last committed experiment.');}});
+
+/* ---------- dialogs ---------- */
+const dS=document.getElementById('dlgScrim');
+function openDlg(h){document.getElementById('dlg').innerHTML=h;dS.classList.add('on');}
+function closeDlg(){dS.classList.remove('on');}
+dS.addEventListener('click',e=>{if(e.target===dS)closeDlg();});
+function showKeys(){openDlg(`<h2>Keyboard</h2><table style="margin-top:14px"><tbody>
+ ${[['Ctrl K','Command palette'],['g then h / n / c / i / b / s','Go to an area'],['A','Approve the waiting change'],['S','Skip it'],['P','Pause'],['t','Light or dark'],['.','Show the NiceGUI component behind each panel'],['?','This list']]
+  .map(k=>`<tr><td><span class="kbd">${k[0]}</span></td><td>${k[1]}</td></tr>`).join('')}</tbody></table>`);}
+function showMap(){const M=[['Home','Home'],['Service settings','Settings, Service'],['Collection','Settings, Collections'],['Environments','Settings, Service'],['Target profile','New campaign, step 1'],['Telemetry','New campaign, step 2'],['Setup overview','Home, Before the next run'],['Requirements','New campaign, step 3'],['Scenarios','New campaign, step 4'],['Budget','New campaign, step 5'],['Plan','New campaign, step 6'],['Preflight','New campaign, step 7'],['Live campaign','Campaign, Live'],['Plan graph','Campaign, Graph'],['Watchdog','Campaign, Watchdog'],['Report','Campaign, Report'],['History & diff','History'],['Benchmark','Benchmark'],['CLI','Settings, CLI']];
+ openDlg(`<h2>Where the nineteen screens went</h2><p class="dim small" style="margin:8px 0 14px">Nothing was dropped. Each screen became a step, a tab or a panel inside the task it belongs to.</p>
+ <table><thead><tr><th>Original screen</th><th>Now lives in</th></tr></thead><tbody>${M.map((m,i)=>`<tr><td><span class="mono faint">${String(i+1).padStart(2,'0')}</span> ${m[0]}</td><td class="dim">${m[1]}</td></tr>`).join('')}</tbody></table>`);}
+
+/* ---------- command palette ---------- */
+const P=[['Go to Home','g h',()=>go('home')],['Start a new campaign','crucible run',()=>{step=0;go('new');}],['Open the running campaign','crucible status',()=>{ctab='live';go('camp');}],
+ ['Approve the waiting change','crucible approve w2-e2e --experiment 1',()=>toast('Approved.')],['Abort the campaign','crucible abort w2-e2e',confirmAbort],
+ ['Show what a campaign would do','crucible plan',()=>{step=5;go('new');}],['Run preflight','crucible preflight --apply-probe',()=>{step=6;go('new');}],
+ ['Open the report','crucible report --run w2-e2e',()=>{ctab='report';go('camp');}],['Compare two campaigns','crucible diff a b',()=>go('hist')],
+ ['Run the replay benchmark','crucible bench --tasks T1,T3,T4',()=>go('bench')],['Change which model is used','settings',()=>{stab='prov';go('set');}],
+ ['See the guardrails','settings',()=>{stab='guard';go('set');}],['Where did the nineteen screens go?','screen map',showMap]];
+const pS=document.getElementById('palScrim'),pI=document.getElementById('palIn'),pL=document.getElementById('palItems');let pSel=0,pF=P;
+function openPal(){pS.classList.add('on');pI.value='';filt();setTimeout(()=>pI.focus(),10);}
+function closePal(){pS.classList.remove('on');}
+function filt(){const q=pI.value.toLowerCase();pF=P.filter(p=>(p[0]+p[1]).toLowerCase().includes(q));pSel=0;drawPal();}
+function drawPal(){pL.innerHTML=pF.map((p,i)=>`<div class="pi ${i==pSel?'on':''}" data-pi="${i}"><span>${p[0]}</span><span class="mono">${p[1]}</span></div>`).join('')||'<div class="pi faint">No match</div>';}
+pI.addEventListener('input',filt);
+pL.addEventListener('click',e=>{const it=e.target.closest('[data-pi]');if(it){closePal();pF[+it.dataset.pi][2]();}});
+pS.addEventListener('click',e=>{if(e.target===pS)closePal();});
+
+/* ---------- keyboard ---------- */
+let chord=null;
+document.addEventListener('keydown',e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();pS.classList.contains('on')?closePal():openPal();return;}
+  if(pS.classList.contains('on')){
+    if(e.key==='Escape')closePal();
+    if(e.key==='ArrowDown'){pSel=Math.min(pF.length-1,pSel+1);drawPal();e.preventDefault();}
+    if(e.key==='ArrowUp'){pSel=Math.max(0,pSel-1);drawPal();e.preventDefault();}
+    if(e.key==='Enter'&&pF[pSel]){closePal();pF[pSel][2]();}
+    return;}
+  if(e.key==='Escape'){closeDlg();return;}
+  if(/input|textarea|select/i.test(e.target.tagName))return;
+  if(chord==='g'){const m={h:'home',n:'new',c:'camp',i:'hist',b:'bench',s:'set'}[e.key];chord=null;if(m)go(m);return;}
+  if(e.key==='g'){chord='g';setTimeout(()=>chord=null,900);return;}
+  if(e.key==='?'){showKeys();return;}
+  if(e.key==='.'){document.body.classList.toggle('spec');document.getElementById('specBtn').classList.toggle('on');return;}
+  if(e.key==='t'){document.documentElement.classList.toggle('light');return;}
+  if(route==='camp'&&ctab==='live'){if(e.key==='a')toast('Approved. Deploying pool 2 → 50, then re-measuring.');if(e.key==='s')toast('Skipped.');if(e.key==='p')toast('Paused. The lock stays held; nothing is reverted.');}
+});
+render();
+</script>
+</body>
+</html>

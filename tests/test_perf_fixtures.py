@@ -275,15 +275,17 @@ def _write_spec(directory, *, providers):
 
 
 class TestCaptureRefusesAProviderTheMeasurementDoesNotRead:
-    """`build_measure` constructs an Actuator client and nothing else. Before
-    this refusal, `--provider promql` measured through Actuator and wrote the
-    result as `<id>.promql.json` -- and the cross-provider comparison those
-    fixtures exist for would then pass, comparing one backend with itself."""
+    """MEASURABLE_PROVIDERS is the allowlist of providers build_multi_measure
+    can actually read from. An unsupported provider (e.g. 'dynatrace') must be
+    refused before anything is measured -- without this a capture would run
+    through Actuator and write the result under the unsupported provider's
+    name, and a cross-provider comparison would then compare one backend with
+    itself. promql and datadog are now supported; dynatrace is not yet."""
 
-    def test_a_promql_capture_is_refused_before_anything_is_measured(self, tmp_path, monkeypatch):
+    def test_an_unsupported_provider_is_refused_before_anything_is_measured(self, tmp_path, monkeypatch):
         from crucible.perf import commands
 
-        _write_spec(tmp_path / "specs", providers=["actuator", "promql"])
+        _write_spec(tmp_path / "specs", providers=["actuator", "dynatrace"])
         reached = []
         monkeypatch.setattr(commands, "build_measure", lambda *a, **k: reached.append(1))
 
@@ -291,7 +293,7 @@ class TestCaptureRefusesAProviderTheMeasurementDoesNotRead:
             fixture_id="perflab_pool_starved",
             fixture_config_dir=str(tmp_path / "specs"),
             out_dir=str(tmp_path / "out"),
-            provider_name="promql",
+            provider_name="dynatrace",
         )
 
         assert code == commands.REFUSED

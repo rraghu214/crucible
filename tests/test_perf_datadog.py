@@ -211,21 +211,27 @@ class TestTheQueryItSends:
     def test_credentials_and_a_time_window_are_sent_on_every_query(self):
         """Datadog's v1 query API has no instant form: a query without from/to
         is a 400, and a query without both keys is a 403 that reads exactly
-        like an empty metric."""
-        captured: dict[str, str] = {}
+        like an empty metric. Keys are in headers (never URL params) so they
+        do not appear in proxy logs or the journal (DESIGN.md 19.8)."""
+        params_captured: dict[str, str] = {}
+        headers_captured: dict[str, str] = {}
         paths: list[str] = []
 
         def handler(request: httpx.Request) -> httpx.Response:
-            captured.update(dict(request.url.params))
+            params_captured.update(dict(request.url.params))
+            headers_captured.update(dict(request.headers))
             paths.append(request.url.path)
             return httpx.Response(200, json=_one_series(1.0))
 
         _provider(handler).fetch("hikaricp.connections.acquire")
 
         assert paths and set(paths) == {"/api/v1/query"}
-        assert captured["api_key"] == "dd-api"
-        assert captured["application_key"] == "dd-app"
-        assert int(captured["to"]) - int(captured["from"]) == 300
+        # Keys must be in headers, never in URL params.
+        assert "api_key" not in params_captured
+        assert "application_key" not in params_captured
+        assert headers_captured.get("dd-api-key") == "dd-api"
+        assert headers_captured.get("dd-application-key") == "dd-app"
+        assert int(params_captured["to"]) - int(params_captured["from"]) == 300
 
     def test_the_scope_pins_the_query_to_one_host(self):
         """The free tier has one host, but a query without a scope starts

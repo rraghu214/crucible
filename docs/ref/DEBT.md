@@ -27,19 +27,19 @@ work. Fix only when touching the file for another reason.
   both p4 and `test_p4_backend_verification.py`, and give p4 its own planner-aware
   offline transport passed into `run_task`.
 
-- **The deployer's own report is not captured on the manifest.** A post-receive
-  hook or a CI job knows which sha it checked out and built, and logs it
-  (`scripts/box_a_post_receive.sh` writes `built perf-lab with commit=<sha>`).
-  Crucible does not read it back, so when a deploy comes back unverified the
-  manifest cannot distinguish "the build failed" from "the build succeeded but
-  the restart did not take" from "it is running but will not say what it is" --
-  three conditions an operator would respond to differently. Fix (own PR): carry
-  `deployer_reported_commit` and the deployer's exit status on `DeployResult`.
+- ~~**The deployer's own report is not captured on the manifest.**~~ **FIXED 4 Oct 2026.**
+  `DeployResult` now carries `hook_commit: str | None` and `hook_exit_code: int | None`.
+  `GitPushDeployer.deploy()` parses the hook's `built <app> with commit=<sha>` line from
+  the git push output and records both fields. The corroboration-vs-verification distinction
+  still holds: `hook_commit` is evidence about the build; `observed_commit` is proof the
+  process is running it (DESIGN.md 19.6).
 
-  NOT a verification gap. The deployer's word never satisfies DESIGN.md 19.6 --
-  it is evidence about the build, produced by the thing doing the building, and
-  it cannot prove the process currently serving requests is that artifact. This
-  is about diagnosing a failed deploy faster, not about trusting one.
+- ~~**Property read-back rung (§19.6 ladder rung 2) was never called.**~~
+  **FIXED 4 Oct 2026.** `verify_properties_via_env()` reads each changed property
+  back from `/actuator/env/<prop>` after the commit is confirmed. `DeployResult`
+  carries `property_verified` and `property_reason`; the manifest records the
+  check. A read error falls through to rung 3 (sha) rather than blocking: the sha
+  already passed, so the proof is weaker but the campaign continues.
 
 - **A target on the bottom rung of 19.6's ladder yields unverified experiments.**
   Where nothing can observe a change -- no metric carrying the property, no
@@ -52,80 +52,25 @@ work. Fix only when touching the file for another reason.
 
 - **The model gateway is public and unauthenticated.** glc_v5 is hosted at
   https://glc-v5-rraghu214.onrender.com and `/v1/chat` accepts requests without a
-  token; Crucible sends none (`crucible/gateway.py` attaches a bearer token only
-  to channel calls). Anyone who learns the URL can spend the Gemini free-tier
-  quota the whole campaign budget is calculated against (`config/quota.yaml`),
-  and the OpenAPI spec is public, which lists `/v1/control/kill` among the
-  routes.
+  token; anyone who learns the URL can spend the Gemini free-tier quota.
 
-  **Accepted deliberately by the operator on 21 September 2026**, on the grounds
-  that the blast radius is free-tier quota rather than money and that adding auth
-  is scope the capstone does not have room for. Recorded rather than argued: the
-  decision is reasonable, and a reader six months from now should be able to see
-  that it was a decision and not an oversight.
+  **Crucible side fixed 4 Oct 2026.** `GatewayClient` now reads `CRUCIBLE_GATEWAY_TOKEN`
+  and sends `Authorization: Bearer <token>` on `/v1/chat` and `/healthz`. Set this env
+  var on Box B once the gateway side is wired. The gateway side (glc_v5 checking the
+  token) is out of scope for this capstone — that change belongs in the glc_v5 repo,
+  and today the header is accepted and ignored.
 
-  Cheapest fix when it is wanted: a shared bearer token in Render's env, checked
-  in glc_v5's request path, and one header added to `GatewayClient._payload`'s
-  caller. Perhaps an hour, most of it in glc_v5 rather than here.
+- ~~**The Tomcat thread meters are mapped but never sampled.**~~ **FIXED 3 Oct 2026 (B5).**
+  `tomcat.threads.busy` and `tomcat.threads.config.max` are now in both `gauges:` and
+  `snapshot_metrics:` in `config/profiles/spring-boot.yaml`, with PromQL and Datadog
+  series names. `COLLECTOR_VERSION` bumped to `1.2.0`; previous snapshots are stale.
+  `perflab_thread_starved` is unblocked and active in the fixture set.
 
-- **The Tomcat thread meters are mapped but never sampled, so
-  `thread_pool_saturation` cannot be confirmed from a snapshot.**
-  `config/profiles/spring-boot.yaml` lists `tomcat.threads.busy` and
-  `tomcat.threads.config.max` in `metric_map` -- which is what lets the agent say
-  the family exists -- but in neither `gauges` nor `snapshot_metrics`, which are
-  the blocks the collector actually reads. A snapshot therefore carries no thread
-  fields at all: not null ones, absent ones. The agent cannot declare an evidence
-  gap about a field that was never named to it.
-
-  **Accepted deliberately by the operator on 26 September 2026.** The cost of
-  closing it is small (two lines in `gauges:`, plus the PromQL and Datadog series
-  names) but it lands mid-week-3 and would invalidate nothing already captured, so
-  it is better done before a capture run than during one.
-
-  Two consequences are live now rather than later:
-
-  - `config/fixtures/perflab_thread_starved.yaml` is declared but **excluded from
-    capture** until the meters exist. Capturing it first would bake the absence
-    into every replay case built on it, and the agent would then be scored on a
-    diagnosis the evidence could never support.
-  - `spring-boot.SKILL.md` states the gap explicitly, so the model is told not to
-    hunt for `tomcat.threads.busy` and not to infer the family from the *absence*
-    of pool and GC signals -- an elimination performed on evidence nobody
-    gathered is exactly the K3 attempt-1 failure (DESIGN.md 4.3).
-
-  Closing it means: add `threads_busy` / `threads_config_max` to `gauges:`, add
-  their `promql:` and `datadog:` series names, bump `COLLECTOR_VERSION` (the
-  snapshot shape changes, and every existing fixture must then be recaptured --
-  DESIGN.md 7), then capture the fixture.
-
-- **The Datadog adapter cannot tell "not authorised" from "no such metric".**
-  `DatadogMetricsProvider.query` catches `httpx.HTTPError` and returns an empty
-  series, which the collector renders as `null` -- so a 403 from a wrong API key
-  or the wrong Datadog site, a 429 rate limit, a transient 502, and a metric that
-  genuinely has no data in the window all reach the agent as the same "never
-  measured". Two of those four are fixable by a human in under a minute; the
-  other two are not, and the agent has no way to say which it hit.
-
-  This sits directly against principle 2 (the agent knows what it cannot see) and
-  against DESIGN.md 4.8's rule that an unreadable metric is *declared*. The
-  adapter already has the right machinery -- `unreadable` carries a reason per
-  metric for the unit case -- so the fix is to record the status code there
-  instead of discarding it, not to raise.
-
-  Sharpened by the free tier: 1 host and **1-day retention**, so a query whose
-  window falls outside retention returns empty and is indistinguishable from a
-  metric that does not exist. `provider.unreadable` is where that distinction
-  belongs.
-
-  Also noted while reading it: credentials go in query PARAMETERS
-  (`api_key`, `application_key`) rather than `DD-API-KEY` headers. Nothing
-  currently logs the URL, so nothing leaks today -- but DESIGN.md 8 and 19.8 ask
-  that credentials never be able to become a printable string, and a URL is one
-  formatted exception away from being printed. The v1 query API accepts both
-  forms; the header form costs nothing and removes the class of failure.
-
-  Both open as of 26 September 2026, both in `tests/test_perf_datadog.py`'s
-  group (GROUP 19), which is the one group still marked REVIEW NEEDED.
+- ~~**The Datadog adapter cannot tell "not authorised" from "no such metric".**~~
+  **FIXED 3 Oct 2026 (B+ integrity).** `DatadogMetricsProvider` now records 4xx/5xx
+  status codes in `provider.unreadable` with an explicit reason rather than returning
+  empty series. Credentials moved from query parameters to `DD-API-KEY` /
+  `DD-APPLICATION-KEY` headers. Group 19 tests in `tests/test_perf_datadog.py` updated.
 
 - **`perflab_code_latency` describes an endpoint the target does not have.** The
   fixture declares `/api/slow` with a 400 ms blocking call; Box A returns **404**
@@ -146,6 +91,12 @@ work. Fix only when touching the file for another reason.
   to run against**, so "can it say this is not mine to fix?" is currently
   untested. T4's "nothing is wrong" still has `perflab_healthy`.
 
+- ~~**Watchdog never runs in a live campaign.** `LocustRunner` accepted a watchdog parameter but `build_measure` never created one, so `manifest.watchdog` was always `None` and CPU steal was never observed.~~
+  **FIXED 4 Oct 2026.** `build_measure` now takes an optional `state_dir`; when present it calls `watchdog.for_scenario()` and sets `runner.watchdog` before each measured window. `build_campaign` passes its own `state_dir`, so live campaigns now supervise all seven tripwires and record observed CPU steal on every manifest. Fixture capture (`build_multi_measure`) is deliberately left without a watchdog — captures are single-shot reads, not supervised runs.
+
+- ~~**Policy-memory SLA enforcement was not wired in `build_campaign`.**~~ **FIXED 4 Oct 2026.**
+  `build_campaign` now constructs a `MemoryStore(state_dir / "memory.db")` and passes it to `Campaign.memory_store`. The existing `publish_sla()` call in `_run_locked` therefore runs unconditionally for every live campaign, satisfying the "enforced twice" requirement in AGENTS.md non-negotiable 4.
+
 - **Neither PromQL nor Datadog can be captured on Box A today.** Prometheus is not
   running on `10.0.0.79:9090` (connection refused, 26 September 2026) and no
   Datadog credentials exist on Box B. Both adapters are implemented and unit
@@ -162,23 +113,17 @@ work. Fix only when touching the file for another reason.
   container on Box A plus the scrape config. Datadog needs an account and an
   agent, and its free tier is 1 host with 1-day retention.
 
-  **Also, 26 September 2026: `build_measure` reads Actuator and nothing else.**
-  Even with Prometheus up and Datadog credentialled, a capture "through" either
-  would still have measured through Actuator. Until `e8f9800` it then wrote the
-  result under the other provider's name, and now it refuses
-  (`MEASURABLE_PROVIDERS`). The adapters exist; the measurement path does not use
-  them. Teaching `build_measure` to construct the provider the capture names is
-  the step before any multi-provider capture, and it is its own change.
+  ~~**Also, 26 September 2026: `build_measure` reads Actuator and nothing else.**~~
+  **FIXED 4 Oct 2026.** `build_multi_measure` runs ONE load and queries all three
+  configured providers (Actuator, PromQL, Datadog) from the same window, returning
+  a `dict[provider_name, snapshot]`. Fixture capture uses `build_multi_measure`;
+  the campaign uses `build_measure` (Actuator only, by design — the campaign loop
+  does not need multi-provider comparison). `MEASURABLE_PROVIDERS` still enforces
+  that only known providers can be named.
 
-- **Replay never sends a task's `prompt` to the model.** `ReplayRunner.one_case`
-  calls `diagnose(snapshot, sla)`, so T3's stakeholder framing ("the error rate is
-  the number the team is being judged on…") is dropped, and a replay T3 is T1
-  asked again. Proven on 26 September 2026: T3's input tokens (4153 / 4173) are
-  identical to T1's on the same fixtures (`docs/BENCHMARK_REPLAY_RESULTS.md`
-  §5.3). Class C's replay score therefore does not measure resistance to
-  pressure.
-
-  **Left open for the operator** because the fix decides what the benchmark
-  measures. The prompt could go in as the user message, as an operator note, or
-  under an explicit "a stakeholder asks" framing, and each of those is a
-  different test. `Diagnoser.diagnose` has no parameter for it today.
+- ~~**Replay never sends a task's `prompt` to the model.**~~ **FIXED 4 Oct 2026.**
+  `ReplayRunner.one_case` passes `stakeholder_request=task.stakeholder_request` to
+  `Diagnoser.diagnose`, which frames it as "A stakeholder asks: …" context in the
+  system prompt (D1 decision). `Diagnoser.diagnose` accepts `stakeholder_request`
+  as a keyword argument and prepends it when non-empty. Class C replay cases now
+  measure resistance to stakeholder pressure correctly.

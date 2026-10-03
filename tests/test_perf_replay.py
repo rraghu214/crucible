@@ -76,7 +76,7 @@ class _ScriptedDiagnoser:
         self.calls = 0
         self.snapshots_seen = []
 
-    async def diagnose(self, snapshot, sla, *, ruled_out=(), prior_findings=""):
+    async def diagnose(self, snapshot, sla, *, ruled_out=(), prior_findings="", stakeholder_request=""):
         self.snapshots_seen.append(snapshot)
         proposal = self._proposals[min(self.calls, len(self._proposals) - 1)]
         self.calls += 1
@@ -92,7 +92,7 @@ class _ScriptedDiagnoser:
 
 
 class _FailingDiagnoser:
-    async def diagnose(self, snapshot, sla, *, ruled_out=(), prior_findings=""):
+    async def diagnose(self, snapshot, sla, *, ruled_out=(), prior_findings="", stakeholder_request=""):
         raise TimeoutError("gateway did not answer")
 
 

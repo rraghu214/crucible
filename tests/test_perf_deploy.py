@@ -13,6 +13,10 @@ caught only because a pool of 20 cannot cap active connections at 2, and the
 numbers were otherwise entirely plausible.
 """
 
+import json
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from threading import Thread
+
 import pytest
 
 from crucible.perf.deploy import (
@@ -27,6 +31,7 @@ from crucible.perf.deploy import (
     ManualDeployer,
     await_commit,
     same_commit,
+    verify_properties_via_env,
 )
 from crucible.perf.profile import TargetProfile
 
@@ -129,6 +134,63 @@ class TestAutomationIsDeclaredNeverGuessed:
 
         with pytest.raises(DeployBlocked, match="never guessed"):
             deployer.deploy(SHA)
+
+    def test_hook_commit_is_parsed_from_push_output(self):
+        """DESIGN.md §19.6: the deployer's own report is carried on the manifest
+        so a human can distinguish 'build failed' from 'build succeeded but
+        restart did not take'.  The hook writes 'built perf-lab with
+        commit=<sha>' and git forwards it prefixed with 'remote:'."""
+        import crucible.perf.deploy as mod
+
+        hook_sha = "a1b2c3d4e5f6a1b2"
+        hook_output = f"remote: 2026-10-04T09:00:00 built perf-lab with commit={hook_sha}\n"
+
+        original = mod.read_running_commit
+        mod.read_running_commit = lambda **kw: hook_sha
+        try:
+            deployer = GitPushDeployer(
+                target=pipeline_target(),
+                _runner=lambda argv: (0, hook_output),
+            )
+            result = deployer.deploy(SHA)
+        finally:
+            mod.read_running_commit = original
+
+        assert result.hook_commit == hook_sha
+        assert result.hook_exit_code == 0
+
+    def test_hook_commit_is_none_when_output_has_no_sha(self):
+        """A push with no hook output (or a hook that does not emit the line)
+        records None -- unknown rather than wrong (DESIGN.md §4.8)."""
+        import crucible.perf.deploy as mod
+
+        original = mod.read_running_commit
+        mod.read_running_commit = lambda **kw: SHA
+        try:
+            deployer = GitPushDeployer(
+                target=pipeline_target(),
+                _runner=lambda argv: (0, ""),
+            )
+            result = deployer.deploy(SHA)
+        finally:
+            mod.read_running_commit = original
+
+        assert result.hook_commit is None
+        assert result.hook_exit_code == 0
+
+    def test_hook_exit_code_is_recorded_on_push_failure(self):
+        def runner(argv: list[str]) -> tuple[int, str]:
+            # ls-remote must succeed so the branch-check path does not raise.
+            if "ls-remote" in argv:
+                return 0, "abc123\trefs/heads/perftest_sandbox"
+            # The push itself fails (hook returned non-zero).
+            return 1, "error: hook returned error"
+
+        deployer = GitPushDeployer(target=pipeline_target(), _runner=runner)
+        result = deployer.deploy(SHA)
+
+        assert result.deployed is False
+        assert result.hook_exit_code == 1
 
     def test_the_shipped_profile_declares_pipeline_and_backs_it_up(self):
         """Flipped to `pipeline` on 21 September 2026, after the hook existed.
@@ -424,3 +486,101 @@ class TestTheSandboxBranchIsCreatedFromTheBaseBranch:
 
         with pytest.raises(DeployError, match="does not resolve"):
             deployer.ensure_branch()
+
+
+# ---------------------------------------------------------------------------
+# Property read-back rung (§19.6 ladder rung 2)
+# ---------------------------------------------------------------------------
+
+
+def _fake_actuator_env(port: int, responses: dict[str, str | None]) -> None:
+    """Minimal HTTP server that answers /actuator/env/<prop>."""
+    class _Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_: object) -> None:
+            pass
+
+        def do_GET(self) -> None:  # noqa: N802
+            prop = self.path.lstrip("/").removeprefix("actuator/env/")
+            value = responses.get(prop)
+            if value is None:
+                self.send_response(404)
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            body = json.dumps({"property": {"value": value}}).encode()
+            self.wfile.write(body)
+
+    srv = HTTPServer(("127.0.0.1", port), _Handler)
+    t = Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+    return srv
+
+
+class TestVerifyPropertiesViaEnv:
+    """§19.6 rung 2: read each changed property back from /actuator/env.
+
+    The rung proves *this specific change* is in force, not just that the right
+    build is running. A sha proves the artifact; a property read-back proves
+    the config value.
+    """
+
+    def test_matching_value_returns_true(self):
+        from dataclasses import dataclass
+
+        @dataclass
+        class _Change:
+            prop: str
+            value: object
+
+        srv = _fake_actuator_env(18091, {"spring.datasource.hikari.maximum-pool-size": "20"})
+        try:
+            ok, detail = verify_properties_via_env(
+                [_Change("spring.datasource.hikari.maximum-pool-size", 20)],
+                "http://127.0.0.1:18091",
+            )
+        finally:
+            srv.shutdown()
+        assert ok is True
+        assert "confirmed" in detail
+
+    def test_mismatched_value_returns_false(self):
+        from dataclasses import dataclass
+
+        @dataclass
+        class _Change:
+            prop: str
+            value: object
+
+        srv = _fake_actuator_env(18092, {"spring.datasource.hikari.maximum-pool-size": "2"})
+        try:
+            ok, detail = verify_properties_via_env(
+                [_Change("spring.datasource.hikari.maximum-pool-size", 20)],
+                "http://127.0.0.1:18092",
+            )
+        finally:
+            srv.shutdown()
+        assert ok is False
+        assert "mismatch" in detail
+
+    def test_unreachable_endpoint_returns_false(self):
+        from dataclasses import dataclass
+
+        @dataclass
+        class _Change:
+            prop: str
+            value: object
+
+        ok, detail = verify_properties_via_env(
+            [_Change("spring.datasource.hikari.maximum-pool-size", 20)],
+            "http://127.0.0.1:19999",  # nothing listening
+            timeout_s=0.2,
+        )
+        assert ok is False
+        assert "unavailable" in detail
+
+    def test_empty_changes_returns_true(self):
+        """No changes → nothing to verify → vacuously true."""
+        ok, detail = verify_properties_via_env([], "http://127.0.0.1:19998")
+        assert ok is True

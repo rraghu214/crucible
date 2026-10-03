@@ -625,7 +625,8 @@ class TestNoMeasurementBeforeTheCommitIsProven:
         """§11. A run with human intervention is not comparable to a fully
         autonomous one, so the manifest has to be able to tell them apart."""
         campaign = _campaign(
-            profile, sla, workspace, p99s=[300.0, 58.0], deployer=_BlockingDeployer()
+            profile, sla, workspace, p99s=[300.0, 58.0],
+            deployer=_BlockingDeployer(), wait=False,
         )
 
         result = asyncio.run(campaign.run())
@@ -976,7 +977,7 @@ class _ScriptedDiagnoser:
         self._n = 0
         self.prior_findings_seen: list[str] = []
 
-    async def diagnose(self, snapshot, sla, *, ruled_out=(), prior_findings=""):
+    async def diagnose(self, snapshot, sla, *, ruled_out=(), prior_findings="", stakeholder_request=""):
         # Captured, not ignored: what history a diagnosis was shown is part of
         # what produced its answer (DESIGN.md section 14).
         self.prior_findings_seen.append(prior_findings)

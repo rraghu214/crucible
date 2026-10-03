@@ -234,26 +234,25 @@ def test_the_explicit_spellings_win_and_the_short_ones_still_work():
 def test_the_plan_counts_snapshots_not_fixtures(specs):
     """A fixture tagged for three providers is three captures, not one."""
     plan = capture_plan(specs)
-    assert plan["fixtures"] == 6
-    # Two of the six are excluded: perflab_thread_starved (its meters are not in
-    # the snapshot) and perflab_code_latency (/api/slow 404s on the target).
-    assert plan["capturing"] == 4
-    assert plan["snapshots"] == 8
+    # B6/B7: 20 fixture YAMLs; perflab_pool_starved and perflab_gc_pressure each
+    # have 3 providers, so snapshots > capturing (18×1 + 2×3 = 24).
+    assert plan["fixtures"] == 20
+    assert plan["capturing"] == 20
+    assert plan["snapshots"] == 24
     assert set(plan["providers"]) == {"actuator", "promql", "datadog"}
 
 
 def test_a_fixture_excluded_from_capture_declares_no_providers_and_is_named(specs):
-    """Operator decision, 26 September 2026: document the thread-meter gap, move on.
+    """The excluded-fixture mechanism must work: no-providers → excluded list.
 
-    Reported separately from the unvalidated ones. "Nobody has confirmed this
-    signal" and "this one is deliberately not being captured" call for different
-    responses, and rolling them together buries a decision inside a warning.
+    B5 added Tomcat thread meters (collector 1.2.0) and B8 added /api/slow,
+    so perflab_thread_starved and perflab_code_latency are no longer excluded.
+    This confirms the mechanism still reports correctly (empty when nothing is
+    excluded) rather than silently dropping names.
     """
     plan = capture_plan(specs)
-    assert plan["excluded"] == ["perflab_code_latency", "perflab_thread_starved"]
-    for excluded in plan["excluded"]:
-        assert excluded not in plan["unvalidated"]
-    assert "DEBT.md" in plan["excluded_note"]
+    assert plan["excluded"] == []
+    assert plan["excluded_note"] == ""
 
 
 def test_an_empty_providers_list_is_not_silently_restored_to_the_default():
@@ -327,7 +326,8 @@ def test_multi_provider_capture_covers_more_than_one_metric_family(specs):
 def test_both_pool_severities_exist_so_a_lucky_diagnosis_is_visible(specs):
     """An agent that says 'pool' to everything scores the same on both. One reading it does not."""
     pool = {s.severity for s in specs if s.cause_family == "connection_pool_exhaustion"}
-    assert pool == {"severe", "mild"}
+    # B7 added perflab_pool_starved_moderate; the minimum (severe + mild) still holds.
+    assert {"severe", "mild"}.issubset(pool)
 
 
 def test_every_fixture_records_the_configuration_that_produces_it(specs):
@@ -337,10 +337,10 @@ def test_every_fixture_records_the_configuration_that_produces_it(specs):
         assert spec.setup.strip(), f"{spec.id} records no prose setup"
 
 
-def test_the_declared_set_is_six_fixtures_and_the_claim_must_say_six(specs):
-    """EVALUATION.md's grid is 50. This is the brief's minimum set, and the gap is not hidden."""
-    assert len(specs) == 6
-    assert (FIXTURE_DIR / "README.md").read_text(encoding="utf-8").count("must say six") == 1
+def test_the_declared_set_is_twenty_fixtures_and_the_claim_must_say_twenty(specs):
+    """EVALUATION.md's grid is 50. The claim must accurately state the fixture count."""
+    assert len(specs) == 20
+    assert (FIXTURE_DIR / "README.md").read_text(encoding="utf-8").count("must say twenty") == 1
 
 
 # ---------------------------------------------------------------------------

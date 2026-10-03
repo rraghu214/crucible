@@ -21,6 +21,9 @@ writes only to its `perftest_sandbox` branch (`DESIGN.md` §19).
 
 ## How to run
 
+Step-by-step setup, locally and on Box B (including the always-on public UI), is
+in [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md).
+
 ```bash
 uv sync
 uv run crucible plan         # what a campaign would do: authority, bounds, deploy target. Changes nothing.

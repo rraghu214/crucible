@@ -397,6 +397,9 @@ COMMAND_WIRING = [
     ("status", ["status"], "cmd_status"),
     ("approve", ["approve", "r1", "--experiment", "1", "--as", "operator"], "cmd_approve"),
     ("abort", ["abort", "r1"], "cmd_abort"),
+    ("pause", ["pause", "r1"], "cmd_pause"),
+    ("resume", ["resume", "r1"], "cmd_resume"),
+    ("ceiling", ["ceiling"], "cmd_ceiling"),
     # Week 3. `score` reads manifests and calls no model; `bench` replays a task
     # set against captured snapshots and needs no live target.
     ("score", ["score"], "cmd_score"),
@@ -410,6 +413,9 @@ COMMAND_WIRING = [
     # Week 3, the capture half. `--plan` touches nothing, which is what makes it
     # safe to exercise here.
     ("capture", ["capture", "--plan"], "cmd_capture"),
+    # Week 4. `export` prints a credential-free YAML to stdout and exits; it
+    # never writes to disk or calls a model (DESIGN.md §8).
+    ("export", ["export"], "cmd_export"),
 ]
 
 
@@ -446,9 +452,9 @@ class TestEveryCommandIsWiredToItsImplementation:
         offered = set(_subcommands(build_parser()))
         covered = {name for name, _, _ in COMMAND_WIRING}
 
-        # `serve` predates week 2 and starts a server rather than calling into
-        # crucible.perf.commands, so it is exercised separately below.
-        assert offered - covered == {"serve"}
+        # `serve` and `serve-ui` start servers rather than calling into
+        # crucible.perf.commands, so they are exercised separately below.
+        assert offered - covered == {"serve", "serve-ui"}
 
     def test_manual_step_done_routes_away_from_the_approval_path(self, monkeypatch):
         """Same verb, different meaning, and it must not reach `cmd_approve`.
