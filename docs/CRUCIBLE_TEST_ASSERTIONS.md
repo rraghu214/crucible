@@ -2930,14 +2930,24 @@ manifests on disk.
 
 ---
 
-# GROUP 28 — The campaign UI: nineteen screens
+# GROUP 28 — The campaign UI: NiceGUI six-page app
 
-*Week 4, `crucible/ui/perf_ui.py` and `crucible/ui/client/perf.html`. Implemented
-in `tests/test_ui_perf.py` (77 assertions, most of them parametrized over the 19
-screens). Design source: `docs/crucible-screens-v2.html`.*
+*Week 4, `crucible/ui/nicegui_app.py` and `crucible/ui/perf_data.py`. The
+implementation replaced the nineteen-screen A2UI (`perf_ui.py`) with a NiceGUI
+app (six pages: Home, New, Campaign, History, Benchmark, Settings). Smoke tests
+for the data layer and module import are in `tests/test_perf_data.py`.*
 
-**REVIEW NEEDED**: drafted by Claude Code, 26 September 2026. Not yet reviewed by
-the operator.
+*The assertions in this group were drafted against the old nineteen-screen design
+(26 September 2026) and are no longer directly applicable. The operator should
+decide which of them carry over to the new design, which should be rewritten, and
+which are obsolete. The two questions that matter regardless of implementation:*
+
+1. *Does any page show a number nobody measured? (DESIGN.md §1, principle 1)*
+2. *Does any page make an irreversible action easier than the CLI does?*
+
+**REVIEW NEEDED — entire group superseded**: drafted against perf_ui.py (19
+screens), replaced by nicegui_app.py (6 pages). Rewrite from the two questions
+above before committing new test code here.
 
 *A screen can be wrong in two ways that no rendering test catches: it can show a
 number nobody measured, and it can make an irreversible action easier than the
