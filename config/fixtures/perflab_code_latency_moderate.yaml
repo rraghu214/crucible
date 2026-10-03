@@ -17,7 +17,7 @@ severity: moderate
 
 bottleneck_config:
   endpoint: /api/slow
-  sleep_ms: 200
+  perflab.slow.delay-ms: 200
 
 setup: >
   As perflab_code_latency but with a 200ms sleep instead of 400ms. Everything

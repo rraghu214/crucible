@@ -19,7 +19,7 @@ severity: severe
 
 bottleneck_config:
   endpoint: /api/slow
-  sleep_ms: 400
+  perflab.slow.delay-ms: 400
 
 setup: >
   A handler with a deliberate 400 ms sleep on its path, in the perf-lab

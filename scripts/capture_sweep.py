@@ -321,7 +321,7 @@ def _run_capture(
     fixture_id: str,
     providers: list[str],
     slo_path: str,
-    profile_path: str,
+    profile_path: str,  # kept for API compat; unused (fixture declares its own profile)
     results_dir: str,
     promql_url: str,
     promql_instance: str,
@@ -339,10 +339,13 @@ def _run_capture(
     multi = len(providers) > 1
     provider_label = "all-providers" if multi else providers[0]
 
+    # Do NOT pass --profile: the fixture YAML already declares target_profile
+    # (e.g. "spring-boot"), and cmd_capture falls back to spec.profile when the
+    # flag is empty.  Passing a file path like "config/profiles/spring-boot.yaml"
+    # is wrong — TargetProfile.named() expects a bare name, not a path.
     cmd = [
         "crucible", "capture",
         "--sla", slo_path,
-        "--profile", profile_path,
         "--fixture", fixture_id,
         "--out", results_dir,
     ]
