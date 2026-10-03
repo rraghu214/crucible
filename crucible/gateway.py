@@ -30,6 +30,17 @@ class GatewayClient:
         self._client = client or httpx.AsyncClient(timeout=120)
         self._owns_client = client is None
 
+    def _gateway_headers(self) -> dict[str, str]:
+        """Bearer token for the hosted gateway, if configured.
+
+        Set ``CRUCIBLE_GATEWAY_TOKEN`` in the environment.  The local dev
+        gateway (``127.0.0.1:8111``) does not require a token and ignores it.
+        The hosted gateway (Render) is the reason this exists: without a token
+        any caller who knows the URL can spend the shared quota (DEBT.md).
+        """
+        token = os.getenv("CRUCIBLE_GATEWAY_TOKEN", "").strip()
+        return {"Authorization": f"Bearer {token}"} if token else {}
+
     def _payload(self, prompt: str, system: str, request: dict[str, Any] | None) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "messages": [{"role": "user", "content": prompt}],
@@ -73,7 +84,8 @@ class GatewayClient:
                 provider_payload.pop("model", None)
             for attempt in range(attempts):
                 response = await self._client.post(
-                    f"{self.base_url}/v1/chat", json=provider_payload
+                    f"{self.base_url}/v1/chat", json=provider_payload,
+                    headers=self._gateway_headers(),
                 )
                 if response.status_code not in {429, 502, 503}:
                     break
@@ -114,7 +126,9 @@ class GatewayClient:
         }
 
     async def health(self, *, timeout_s: float = 3.0) -> dict[str, Any]:
-        response = await self._client.get(f"{self.base_url}/healthz", timeout=timeout_s)
+        response = await self._client.get(
+            f"{self.base_url}/healthz", timeout=timeout_s, headers=self._gateway_headers()
+        )
         response.raise_for_status()
         return response.json()
 

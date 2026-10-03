@@ -20,6 +20,7 @@ dependencies = [
     "ddgs>=9,<10",
     "networkx>=3.6,<4",
     "tzdata>=2024.1",
+    "nicegui>=3.17.1",
 ]
 
 [dependency-groups]
