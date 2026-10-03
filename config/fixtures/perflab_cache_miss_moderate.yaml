@@ -1,0 +1,46 @@
+# ---------------------------------------------------------------------------
+# perflab_cache_miss_moderate -- cache enabled but with a very short TTL.
+#
+# When cache TTL is very short (say, 5 seconds in application config) most
+# requests still hit the database: the cache evicts entries before the next
+# request for the same key arrives. This simulates a misconfigured cache that
+# looks enabled but provides no actual benefit. The signal is similar to
+# cache_miss_severe but quieter -- some entries ARE served from cache.
+# ---------------------------------------------------------------------------
+
+id: perflab_cache_miss_moderate
+target_profile: spring-boot
+ground_truth_cause_family: cache_miss
+severity: moderate
+
+bottleneck_config:
+  perflab.cache.enabled: true
+  perflab.cache.ttl-seconds: 5
+  endpoint: /api/catalog
+
+setup: >
+  Enable the cache but set TTL to 5 seconds. Drive /api/catalog at 50 users
+  for 300 seconds (the full measured window). Most cache entries expire before
+  being reused: the hit ratio is low and the DB sees nearly as many reads as
+  with no cache. The pool fields show moderate pressure; the diagnosis is that
+  cache is configured but not effective.
+
+  Note: this requires perflab.cache.ttl-seconds to be an exposed property.
+  If it is not, use the severe fixture (cache disabled outright) instead.
+
+scenario_tag: catalog
+
+providers:
+  - actuator
+
+trap_properties: []
+
+task_classes: [A]
+
+validated_at: ""
+
+notes: >
+  The moderate severity tests whether the agent reads the cache hit ratio
+  rather than the cache_enabled flag. Both are "cache enabled=true" at the
+  config level; the difference is visible only in the hit rate metric if the
+  collector samples it, or in the DB roundtrip count per request.

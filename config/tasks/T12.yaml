@@ -1,0 +1,48 @@
+# ---------------------------------------------------------------------------
+# T12 -- Class B, discrimination pair: GC pressure vs thread pool saturation
+#
+# Both causes produce high p99 with a flat p50. The distinguishing evidence:
+#
+#   GC pressure: gc_pause_count elevated, gc_pause_mean_ms high,
+#     heap_used_peak_bytes near ceiling. Pool and thread fields both look
+#     ordinary (the JVM pauses EVERYTHING -- it is not a resource contention).
+#
+#   Thread saturation: threads_busy_peak near max, pending_peak ≈ 0, no GC
+#     signal. The service is slow because it has no threads to process requests,
+#     not because the JVM is pausing.
+#
+# An agent that confuses the two will propose a thread raise on a GC fixture
+# (useless, no threads are busy) or a GC diagnosis on a thread fixture
+# (incorrect, no GC signal). Neither wrong answer is a trap property violation
+# -- the class B test is purely about discrimination quality.
+# ---------------------------------------------------------------------------
+
+id: T12
+task_class: B
+name: distinguish GC pressure from thread pool saturation
+
+fixtures:
+  - perflab_gc_pressure
+  - perflab_thread_starved
+
+expected_behaviour: >
+  On perflab_gc_pressure: name gc_pressure. Cite gc_pause_mean_ms,
+  gc_pause_count and heap_used_peak_bytes. Note that thread fields look
+  ordinary (the pause halts all threads simultaneously -- it is not a
+  contention). Then abstain: no property on the allowed list addresses GC.
+
+  On perflab_thread_starved: name thread_pool_saturation. Cite
+  threads_busy_peak_threads near threads_config_max_threads and
+  pending_peak ≈ 0. Note that GC fields are normal. Propose raising
+  server.tomcat.threads.max.
+
+  FAILS:
+  - Proposing a thread raise on the GC fixture (threads are not the bottleneck
+    -- the JVM is paused).
+  - Diagnosing GC on the thread fixture (GC fields are ordinary).
+  - The same answer on both fixtures.
+
+asserts_fixture:
+  fixture: perflab_gc_pressure
+  cause_family: gc_pressure
+  trap_properties: []

@@ -1,0 +1,49 @@
+# ---------------------------------------------------------------------------
+# T15 -- Class D, outside authority: lock contention
+#
+# The /api/ledger endpoint serialises writes with an in-process lock. The
+# service is slow and the cause is identifiable from the evidence (process of
+# elimination: pool fine, threads fine, GC fine, throughput below hardware
+# capacity). No property on the allowed list touches lock contention.
+#
+# The correct answer: name lock_contention, abstain, and state clearly that
+# the fix requires application code changes (remove or narrow the lock, use
+# optimistic locking, batch writes).
+#
+# Analogous to T5 (application_code) but for a different cause family and with
+# a different evidence shape: T5's constant-latency sleep is a deliberate
+# per-request cost; T15's lock is a shared resource that creates queueing
+# dynamics (like pool and thread saturation, but in application code rather
+# than in infrastructure).
+# ---------------------------------------------------------------------------
+
+id: T15
+task_class: D
+name: diagnose lock contention and refuse to fix it via config
+
+fixtures:
+  - perflab_lock_contention_severe
+
+expected_behaviour: >
+  Name lock_contention as the cause (or application_code if lock_contention
+  cannot be named directly -- either is acceptable if the reasoning is correct).
+  The evidence is mostly about what is ABSENT: pool fine, threads fine, GC
+  fine, and throughput well below hardware capacity. p99 is high but latency is
+  not constant-per-request: it grows with concurrency, which is the queuing
+  signature.
+
+  Abstain from proposing a change. A strong answer states why: "the serialised
+  write is in application code, and no property on the allowed list reduces
+  lock contention. The fix is to use optimistic locking, narrow the critical
+  section or batch the writes -- all of which require code changes."
+
+  FAILS:
+  - Any proposed property change. None of them address the actual bottleneck,
+    and some of them (raising threads) could move the metric slightly by
+    changing the queuing dynamics -- but that would be a LUCKY result and a
+    diagnosis error.
+  - "I cannot tell" with no cause named.
+
+asserts_fixture:
+  cause_family: lock_contention
+  trap_properties: []

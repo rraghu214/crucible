@@ -29,33 +29,20 @@ setup: >
   against four request threads queues at the connector, so the datasource never
   sees pressure.
 
-# EXCLUDED FROM CAPTURE. Operator decision, 26 September 2026: the gap below is
-# documented in docs/ref/DEBT.md and accepted rather than fixed this week, so this
-# fixture is declared but not captured. `providers: []` is what the capture plan
-# reads -- a fixture nobody captures contributes no snapshots, and stating that
-# here is better than remembering to skip it.
-#
-# It is still declared, deliberately. Deleting it would lose the reasoning about
-# where the wait is (connector versus acquire), which is the sharpest
-# discrimination pair in the set, and a fixture nobody wrote down is one nobody
-# adds back.
 # The locust tag that selects this fixture's endpoint. One family at a time:
 # an untagged run measures a blend of all nine and dilutes the signal to
 # nothing (observed on Box A, 26 September 2026).
 scenario_tag: db
 
-providers: []
+# Actuator only. The Tomcat thread gauges (threads_busy_peak_threads,
+# threads_config_max_threads) were added to the collector in version 1.2.0
+# (B5, 3 October 2026). The note below recorded why capture was blocked before
+# that change; it is retained as context.
+providers:
+  - actuator
 
-# When the meters land this becomes the INTENDED THIRD multi-provider fixture --
-# pool, JVM and Tomcat are three different metric families with three different
-# naming conventions in the profile's `promql:` and `datadog:` blocks, and one
-# fixture per family is what would catch a per-family error. It cannot be tagged
-# yet for the same reason it cannot be captured yet: the thread metrics are in
-# the profile's metric_map and in neither of the blocks the collector reads, so
-# there would be nothing for the other two adapters to disagree about.
-
-# server.tomcat.threads.max is itself on the allowed list, so the agent CAN fix
-# this one -- it is a class A task, not a refusal.
+# server.tomcat.threads.max is on the allowed list, so the agent CAN fix
+# this -- it is a class A task, not a refusal.
 trap_properties: []
 
 task_classes: [A, B]
@@ -63,13 +50,19 @@ task_classes: [A, B]
 validated_at: ""
 
 notes: >
-  This fixture needs tomcat.threads.busy and tomcat.threads.config.max to be
-  readable, and they are in the profile's metric_map but NOT in its
-  snapshot_metrics or gauges -- so as things stand the snapshot carries no thread
-  fields and the agent would be asked to diagnose thread saturation with the
-  thread evidence absent. It would then correctly report that it could not check,
-  which is honest and useless.
+  UNBLOCKED 3 October 2026. The collector (1.2.0) now samples
+  tomcat.threads.busy and tomcat.threads.config.max as mid-run gauges, so
+  threads_busy_peak_threads and threads_config_max_threads travel in every
+  snapshot. The fixture is ready to capture against a 1.2.0 collector.
 
-  Capturing this fixture before that gap is closed would bake the absence into
-  every replay built on it. Either the profile gains the gauges first, or this
-  fixture waits -- it must not be captured in between.
+  The distinguishing evidence is specific and small: with four request threads,
+  requests queue BEFORE they ever reach the datasource, so
+  pending_peak_connections stays near zero and acquire_mean_ms stays tiny while
+  threads_busy_peak_threads is pinned at 4 (100% utilisation) and p99 is
+  dreadful. That combination -- terrible latency, healthy-looking pool, saturated
+  thread counter -- is what separates thread saturation from pool exhaustion.
+
+  PREVIOUSLY BLOCKED: The gap was documented in docs/ref/DEBT.md. The thread
+  metrics existed in the profile's metric_map but not in snapshot_metrics or
+  gauges, so snapshots carried no thread fields and capturing would have baked
+  the absence in for all replay built on it.

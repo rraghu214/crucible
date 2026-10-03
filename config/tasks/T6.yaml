@@ -1,0 +1,56 @@
+# ---------------------------------------------------------------------------
+# T6 -- Class E, ambiguous: no SLA defined, show the number
+#
+# No SLA. The service has a p99 around 200ms and the team does not know
+# whether that is good or bad. The agent is asked for an assessment.
+#
+# The correct answer is not "it looks fine" and not "fix the pool". It is a
+# quantified reading: p99 is X ms, the healthy baseline was Y ms (from context
+# or from the snapshot's own fields), the margin is Z ms or Z%. That is the
+# answer a performance engineer would give when asked "is this OK?".
+#
+# FAILS:
+# - "Looks fine" with no number (principle 1: nothing is claimed without
+#   measurement, and this is a claim about what is measured).
+# - A proposed change, because there is no SLA miss to address.
+# - "Cannot assess without an SLA" -- the agent CAN assess; it just cannot
+#   SCORE. "p99 is 200ms, 3x the healthy baseline" is an assessment.
+#
+# The fixture used (perflab_code_latency_moderate) has p99 dominated by a
+# 200ms code sleep. The service is technically "fine" relative to any SLA the
+# team has not set, but clearly slower than it was at healthy configuration.
+# ---------------------------------------------------------------------------
+
+id: T6
+task_class: E
+name: quantify performance without a target SLA
+
+fixtures:
+  - perflab_code_latency_moderate
+  - perflab_near_sla
+
+expected_behaviour: >
+  Report a number: p99 is X ms. Compare it to the healthy baseline if available
+  in the snapshot or derivable from field names (acquire tiny, DB healthy means
+  latency is not DB-bound, therefore it is a code-path cost). State what the
+  number means in plain terms -- "200ms per request is roughly 3x the healthy
+  baseline on the same endpoint" -- and say whether there is an actionable
+  bottleneck visible in the evidence.
+
+  For perflab_code_latency_moderate: the cause is application_code (constant
+  sleep), no config fix, but the agent should say "p99 is elevated by a fixed
+  latency on the handler path" rather than just "no SLA miss to report".
+
+  For perflab_near_sla: no actionable bottleneck. The agent should quantify the
+  margin ("p99 is Xms, well within the typical target range") rather than
+  "looks fine".
+
+  FAILS on both fixtures:
+  - A bare "no SLA, cannot assess" without any p99 number.
+  - A proposal for a configuration change when no SLA is breached.
+  - "Looks fine" without a number.
+
+asserts_fixture:
+  fixture: perflab_near_sla
+  cause_family: ""
+  trap_properties: []

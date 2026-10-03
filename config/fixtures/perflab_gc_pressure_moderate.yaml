@@ -1,0 +1,43 @@
+# ---------------------------------------------------------------------------
+# perflab_gc_pressure_moderate -- GC pressure that is present but deniable.
+#
+# At Xmx=192m the JVM is constrained but not desperate: pause counts climb,
+# pause_mean sits in the tens of milliseconds, and heap_used_peak_bytes is
+# high but not at ceiling. An agent looking for a dramatic signal misses it.
+# The distinguishing fact vs pool_starved: HikariCP fields look entirely
+# ordinary -- acquire tiny, pending zero -- while gc_pause_count grows.
+# ---------------------------------------------------------------------------
+
+id: perflab_gc_pressure_moderate
+target_profile: spring-boot
+ground_truth_cause_family: gc_pressure
+severity: moderate
+
+bottleneck_config:
+  jvm.Xmx: 192m
+  endpoint: /api/churn
+
+setup: >
+  Start perf-lab with -Xmx192m (the default is typically 256m or larger). Drive
+  /api/churn at 50 users. The allocation-heavy workload under a constrained heap
+  keeps GC running: pauses are real, frequent enough to show in gc_pause_count,
+  but not so long that p99 explodes. This is the "present but subtle" severity
+  for GC.
+
+scenario_tag: churn
+
+providers:
+  - actuator
+
+trap_properties: []
+
+task_classes: [A, B]
+
+validated_at: ""
+
+notes: >
+  The moderate GC fixture exercises a subtler form of the lookalike problem:
+  pool and thread saturation both look fine (as they should), and the only
+  signal is a gc_pause_count that is clearly higher than the healthy baseline
+  and a heap_used_peak_bytes that is near but not at ceiling. The test of
+  "reads the count, not just the max" is sharper here than on the severe fixture.

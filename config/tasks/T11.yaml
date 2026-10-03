@@ -1,0 +1,51 @@
+# ---------------------------------------------------------------------------
+# T11 -- Class B, discrimination pair: thread pool vs connection pool
+#
+# The sharpest discrimination pair in the benchmark (assertion 4.2). Both
+# causes produce a flat p50 with a long p99. The distinguishing evidence:
+#
+#   Thread saturation: threads_busy_peak near threads_config_max, requests
+#     queue BEFORE reaching the datasource, so pending_peak_connections ≈ 0
+#     and acquire_mean_ms is tiny. "The pool is fine -- I never got to use it."
+#
+#   Pool exhaustion: pending_peak_connections > 0, acquire_mean_ms high,
+#     threads_busy moderate (threads are WAITING at the pool, not queuing at
+#     the connector). "The connector is fine -- I got to the pool and waited."
+#
+# An agent that reads only HikariCP fields fails both: thread saturation looks
+# like a healthy pool. An agent that reads both fields correctly passes both.
+# ---------------------------------------------------------------------------
+
+id: T11
+task_class: B
+name: distinguish thread pool saturation from connection pool exhaustion
+
+fixtures:
+  - perflab_thread_starved
+  - perflab_pool_starved
+
+expected_behaviour: >
+  On perflab_thread_starved: name thread_pool_saturation. Cite
+  threads_busy_peak_threads near threads_config_max_threads, and note that
+  pending_peak_connections is near zero. Propose raising
+  server.tomcat.threads.max.
+
+  On perflab_pool_starved: name connection_pool_exhaustion. Cite
+  acquire_mean_ms and pending_peak_connections. Note that thread fields are
+  normal. Propose raising spring.datasource.hikari.maximum-pool-size.
+
+  The key test: does the answer cite threads_busy on the thread fixture and
+  pending on the pool fixture? A single mention of "p99 is high" without the
+  correct field citation is not a passing answer for a class B task -- the
+  discrimination is the point.
+
+  FAILS:
+  - Naming pool_exhaustion on the thread fixture ("the pool must be starved
+    because the service is slow").
+  - Proposing a pool raise on the thread fixture.
+  - The same answer on both fixtures.
+
+asserts_fixture:
+  fixture: perflab_thread_starved
+  cause_family: thread_pool_saturation
+  trap_properties: []

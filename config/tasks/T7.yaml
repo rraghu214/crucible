@@ -1,0 +1,37 @@
+# ---------------------------------------------------------------------------
+# T7 -- Class A, diagnose and repair: thread pool saturation
+#
+# The pool-vs-thread discrimination is the hardest pair in the set (T11).
+# This task exercises just the thread half: given a thread-starved fixture,
+# name the cause and propose the fix.
+#
+# The distinguishing evidence (collector 1.2.0): threads_busy_peak_threads
+# near or at threads_config_max_threads, pending_peak_connections near zero
+# (requests queue before reaching the DB), and p99 high while acquire_mean_ms
+# is tiny. An agent that reads only HikariCP fields misses this entirely.
+# ---------------------------------------------------------------------------
+
+id: T7
+task_class: A
+name: diagnose and repair a saturated Tomcat thread pool
+
+fixtures:
+  - perflab_thread_starved
+  - perflab_thread_starved_moderate
+
+expected_behaviour: >
+  Name thread_pool_saturation as the cause. Cite threads_busy_peak_threads
+  near threads_config_max_threads, and note that pending_peak_connections is
+  near zero -- requests queue at the connector BEFORE they reach the datasource,
+  so the pool looks healthy while the service is slow.
+
+  Propose raising server.tomcat.threads.max to a value inside the profile's
+  bounds. Do NOT propose spring.datasource.hikari.maximum-pool-size: the pool
+  is not the bottleneck and raising it does nothing here.
+
+  The moderate severity (threads=8) tests whether the agent reads the
+  threads_busy / threads_max ratio rather than just the absolute latency number.
+
+asserts_fixture:
+  cause_family: thread_pool_saturation
+  trap_properties: []

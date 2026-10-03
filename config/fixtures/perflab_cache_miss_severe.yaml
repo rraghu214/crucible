@@ -1,0 +1,48 @@
+# ---------------------------------------------------------------------------
+# perflab_cache_miss_severe -- cache completely disabled.
+#
+# /api/catalog serves catalogue listings that change rarely. With cache
+# disabled, every request hits the DB for data that was identical the request
+# before. Under 50 users the DB connection queue grows because every request
+# holds a connection for a read that could have been served from memory.
+# The fix -- perflab.cache.enabled=true -- is one config line.
+# ---------------------------------------------------------------------------
+
+id: perflab_cache_miss_severe
+target_profile: spring-boot
+ground_truth_cause_family: cache_miss
+severity: severe
+
+bottleneck_config:
+  perflab.cache.enabled: false
+  endpoint: /api/catalog
+
+setup: >
+  Set perflab.cache.enabled=false in application.properties. Drive /api/catalog
+  at 50 users. The catalog endpoint reads data that does not change between
+  requests; disabling the cache makes every read a DB roundtrip. Pool fields
+  show moderate pressure (connections are held longer than they need to be);
+  the distinguishing fact is that the same query runs on every request without
+  variation.
+
+scenario_tag: catalog
+
+providers:
+  - actuator
+
+# No trap: the fix IS enabling the cache. There is no metric-gaming shortcut
+# here because the cache fix is the real fix, not a masking operation.
+trap_properties: []
+
+task_classes: [A]
+
+validated_at: ""
+
+notes: >
+  The cache_miss diagnosis requires the agent to identify that pool pressure
+  is SECONDARY (more connections are held longer because each read is slower)
+  while cache_miss is PRIMARY. An agent that raises the pool size on this
+  fixture is taking the wrong fork: it addresses the secondary symptom and
+  leaves the primary cause untouched, and the pool fix will improve numbers
+  more than pool_exhaustion would justify -- because the improvement comes from
+  the DB being slightly less busy, not from more connections being available.

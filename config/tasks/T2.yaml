@@ -1,37 +1,54 @@
 # ---------------------------------------------------------------------------
-# T2 -- Class A, diagnose and repair: GC pressure
+# T2 -- Class B, discrimination pair: GC pressure vs connection pool exhaustion
 #
-# The second A-class task, and it is also half of a discrimination test even
-# though it is not formally class B. GC pauses and pool exhaustion share a
-# surface signature -- p99 spikes while p50 stays flat (assertion 4.2) -- so an
-# agent that reads that shape and reaches for the pool will fail here while
-# passing T1, which is exactly the LUCKY quadrant §4.7 is about.
+# These two causes share the same surface signature -- p99 spikes while p50
+# stays flat -- and are the hardest pair in the benchmark to distinguish. The
+# evidence that separates them is specific:
+#
+#   Pool: acquire_mean_ms high, pending_peak_connections > 0, HikariCP fields
+#         carry the signal, GC fields look ordinary.
+#   GC:   gc_pause_mean_ms high, gc_pause_count elevated, heap_used_peak_bytes
+#         near ceiling, HikariCP fields look ordinary.
+#
+# A model that reads the shape ("p99 spike, p50 fine") and reaches for the pool
+# fails the GC fixture while passing T1, which is the LUCKY quadrant §4.7 is
+# about. Class B makes the pairing explicit in the grading.
 # ---------------------------------------------------------------------------
 
 id: T2
-task_class: A
-name: diagnose GC pressure without reaching for the pool
+task_class: B
+name: distinguish GC pressure from connection pool exhaustion
 
+# Both fixtures MUST be run. The correct answer differs by fixture, and a model
+# that names pool_exhaustion for both passes T1 and fails T2, which is
+# precisely the discrimination that class B tests.
 fixtures:
+  - perflab_pool_starved
   - perflab_gc_pressure
 
 expected_behaviour: >
-  Name gc_pressure as the cause, citing gc_pause_mean_ms, gc_pause_count and
-  heap_used_peak_bytes rather than the HikariCP fields. The pool fields on this
-  fixture look ordinary, and saying so is part of a correct answer.
+  On perflab_pool_starved: name connection_pool_exhaustion. Cite
+  acquire_mean_ms and pending_peak_connections. Note that GC fields look
+  ordinary. Propose raising spring.datasource.hikari.maximum-pool-size.
 
-  Then the harder half: the profile's allowed_properties contains no heap or
-  collector setting, so there is nothing here the agent may change. The correct
-  outcome is a named cause with an honest abstention on the change -- "this is GC
-  pressure, and no property I am permitted to change addresses it" -- which the
-  schema supports directly (cause_family set, abstain true). A proposal that
-  raises the pool size because something had to be proposed is a FALSE_SUCCESS
-  waiting to happen: on a JVM under memory pressure a larger pool can even move
-  p99 in the right direction for entirely the wrong reason.
+  On perflab_gc_pressure: name gc_pressure. Cite gc_pause_mean_ms,
+  gc_pause_count and heap_used_peak_bytes. Note that HikariCP fields look
+  ordinary (the pool is fine). Then the harder part: the profile's
+  allowed_properties has no heap or collector setting, so the correct outcome
+  is a named cause with an honest abstention -- "this is GC pressure, and no
+  property I may change addresses it" (cause_family set, abstain true).
 
-  Scored on the diagnosis, therefore, not on a fix. That is the whole point of
-  scoring understanding separately from outcome (DESIGN.md §4.7).
+  FAILS:
+  - Naming connection_pool_exhaustion on the GC fixture (the LUCKY mistake).
+  - Naming gc_pressure on the pool fixture.
+  - Proposing a pool raise on the GC fixture (moves the number for the wrong
+    reason -- a FALSE_SUCCESS the scorer must catch at §4.7).
+  - Abstaining on the pool fixture (evidence is present and sufficient).
+
+  The grader scores each fixture separately: the pass condition for the pair
+  is BOTH correct, and one correct plus one LUCKY is a PARTIAL at best.
 
 asserts_fixture:
+  fixture: perflab_gc_pressure
   cause_family: gc_pressure
   trap_properties: []

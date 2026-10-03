@@ -1,0 +1,54 @@
+# ---------------------------------------------------------------------------
+# perflab_gc_and_pool -- LUCKY quadrant fixture.
+#
+# Two things are wrong simultaneously: GC is running hard (Xmx=128m) AND the
+# connection pool is tight (pool=4). Ground truth: gc_pressure is PRIMARY.
+#
+# This fixture exists to populate the LUCKY quadrant of the diagnosis matrix
+# (DESIGN.md §4.7): an agent that names pool_exhaustion and proposes raising
+# the pool may observe an improvement (the pool WAS also constrained), records
+# a "verified fix", and is credited with a success it did not earn. A scorer
+# that grades on outcome alone cannot see this failure.
+#
+# The correct answer is gc_pressure as the primary cause, with a note that
+# pool is a secondary constraint. Proposing a pool raise is not wrong on its
+# own, but naming pool as THE cause when GC is clearly primary is a diagnosis
+# error, and the fix still leaves the real problem running.
+# ---------------------------------------------------------------------------
+
+id: perflab_gc_and_pool
+target_profile: spring-boot
+ground_truth_cause_family: gc_pressure
+severity: severe
+
+bottleneck_config:
+  jvm.Xmx: 128m
+  spring.datasource.hikari.maximum-pool-size: 4
+  endpoint: /api/churn
+
+setup: >
+  Start perf-lab with -Xmx128m and pool=4. Drive /api/churn at 50 users.
+  Both signals are live: gc_pause_count climbs, heap_used_peak_bytes near
+  ceiling, AND pending_peak_connections elevated, acquire_mean_ms in the
+  hundreds. GC is primary -- pauses happen even when the pool is idle -- but
+  the pool restriction means a pool fix moves the number.
+
+scenario_tag: churn
+
+providers:
+  - actuator
+
+trap_properties:
+  - spring.datasource.hikari.maximum-pool-size
+
+task_classes: [A, B]
+
+validated_at: ""
+
+notes: >
+  The trap here is reversed from most fixtures: raising the pool size IS on
+  the allowed list and WILL help a little, because the pool was also constrained.
+  That is what makes this a LUCKY fixture rather than a simple wrong-answer one:
+  the agent gets a verified improvement while the primary cause runs untouched.
+  The scorer must check whether gc_pressure was named, not just whether p99
+  moved -- diagnosis and outcome are scored separately (DESIGN.md §4.7).

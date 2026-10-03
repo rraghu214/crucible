@@ -69,37 +69,34 @@ snapshots"). Everything else here is Actuator only.
 
 ## Current set
 
+Twenty fixtures across nine cause families, all through Actuator; two through all
+three providers for cross-adapter agreement. Twenty-four snapshots total. The
+claim made from these twenty must say twenty.
+
 | Fixture | Cause | Severity | Providers |
 |---|---|---|---|
 | `perflab_pool_starved` | `connection_pool_exhaustion` | severe | actuator, promql, datadog |
 | `perflab_pool_starved_mild` | `connection_pool_exhaustion` | mild | actuator |
+| `perflab_pool_starved_moderate` | `connection_pool_exhaustion` | moderate | actuator |
 | `perflab_gc_pressure` | `gc_pressure` | severe | actuator, promql, datadog |
-| `perflab_thread_starved` | `thread_pool_saturation` | severe | *(none — excluded)* |
-| `perflab_healthy` | none | none | actuator |
+| `perflab_gc_pressure_moderate` | `gc_pressure` | moderate | actuator |
+| `perflab_gc_and_pool` | `gc_pressure` | severe | actuator |
+| `perflab_thread_starved` | `thread_pool_saturation` | severe | actuator |
+| `perflab_thread_starved_moderate` | `thread_pool_saturation` | moderate | actuator |
+| `perflab_inefficient_query_severe` | `inefficient_query` | severe | actuator |
+| `perflab_inefficient_query_moderate` | `inefficient_query` | moderate | actuator |
+| `perflab_cache_miss_severe` | `cache_miss` | severe | actuator |
+| `perflab_cache_miss_moderate` | `cache_miss` | moderate | actuator |
+| `perflab_downstream_latency_severe` | `downstream_latency` | severe | actuator |
+| `perflab_downstream_latency_moderate` | `downstream_latency` | moderate | actuator |
+| `perflab_lock_contention_severe` | `lock_contention` | severe | actuator |
+| `perflab_payload_severe` | `payload_serialization` | severe | actuator |
 | `perflab_code_latency` | `application_code` | severe | actuator |
+| `perflab_code_latency_moderate` | `application_code` | moderate | actuator |
+| `perflab_near_sla` | none | none | actuator |
+| `perflab_healthy` | none | none | actuator |
 
-Nine snapshots from the five fixtures being captured, ~9 minutes each: about an
-hour and a quarter, not the 7.5-hour overnight run EVALUATION.md prices at fifty
-fixtures. That gap is
-real and is not hidden: this is the *minimum* set the week-4 brief asked for, and
-EVALUATION.md's full grid is 10 families × 3 severities plus 10 special cases plus
-a 10-fixture Python slice. The claim made from these six must say six.
-
-## `perflab_thread_starved` is declared but excluded
-
-It needs `tomcat.threads.busy` and `tomcat.threads.config.max` in the profile's
-`gauges` / `snapshot_metrics`. They are in its `metric_map` but nowhere the
-collector reads, so the snapshot would carry no thread fields at all — not null
-ones, absent ones — and the agent would correctly report that it could not check.
-Honest, and useless. Capturing it first would bake that absence into every replay
-built on it.
-
-**Accepted and documented rather than fixed** (operator, 26 September 2026 —
-`docs/ref/DEBT.md`). It declares `providers: []`, which is what the capture plan
-reads, so nothing has to remember to skip it. It stays declared because deleting
-it would lose the reasoning about *where* the wait is — connector versus acquire
-— which is the sharpest discrimination pair in the set.
-
-Closing the gap later means bumping `COLLECTOR_VERSION`, which invalidates every
-fixture captured before it (DESIGN.md §7). That is the argument for doing it
-before a capture run rather than after one.
+`perflab_thread_starved` was unblocked on 3 October 2026 when collector 1.2.0
+added `tomcat.threads.busy` and `tomcat.threads.config.max` gauges. Before that
+it declared `providers: []` and was captured as excluded; bumping the collector
+version invalidated earlier snapshots of it (DESIGN.md §7), so it was recaptured.

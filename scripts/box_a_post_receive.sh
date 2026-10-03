@@ -38,6 +38,22 @@ SPRING_PROFILE="${PERFLAB_SPRING_PROFILE:-lab}"
 
 log() { printf '%s %s\n' "$(date -Is)" "$*" | tee -a "$LOG"; }
 
+# Optional: source ~/perflab.env for JVM overrides (e.g. PERFLAB_JAVA_OPTS=-Xmx128m
+# for the gc_pressure fixture) and Datadog keys (DATADOG_API_KEY, DATADOG_SITE_URI).
+# The file is not committed and holds no credentials visible in argv or this log.
+if [ -f "$HOME/perflab.env" ]; then
+  # shellcheck disable=SC1090
+  . "$HOME/perflab.env"
+  log "sourced ~/perflab.env"
+fi
+
+# If a Datadog key is present, append the datadog profile so Micrometer pushes
+# metrics there alongside Prometheus. Active only while the key is set.
+if [ -n "${DATADOG_API_KEY:-}" ]; then
+  SPRING_PROFILE="${SPRING_PROFILE},datadog"
+  log "Datadog profile active (key present)"
+fi
+
 deploy_sha=""
 while read -r _old new ref; do
   if [ "$ref" = "refs/heads/$BRANCH" ]; then
@@ -119,11 +135,15 @@ log "port is free"
 # setsid, because a post-receive hook exits as soon as the push completes and a
 # plain background child can go with it -- observed on this box on 13 September
 # 2026 when a backgrounded JVM died with its SSH session.
-setsid nohup java -jar target/perf-lab-0.1.0.jar \
+# PERFLAB_JAVA_OPTS is set per fixture in ~/perflab.env when a JVM flag is
+# needed (e.g. -Xmx128m for gc_pressure). It is empty for all other fixtures.
+# Split intentionally; quoting the whole var would pass an empty string to java.
+# shellcheck disable=SC2086
+setsid nohup java ${PERFLAB_JAVA_OPTS:-} -jar target/perf-lab-0.1.0.jar \
   --spring.profiles.active="$SPRING_PROFILE" \
   < /dev/null >> "$HOME/perflab.out" 2>&1 &
 echo $! > "$HOME/perflab.pid"
-log "started perf-lab pid $(cat "$HOME/perflab.pid") (pool size from application.properties)"
+log "started perf-lab pid $(cat "$HOME/perflab.pid") JAVA_OPTS='${PERFLAB_JAVA_OPTS:-}' (pool size from application.properties)"
 
 # Wait for health, then for the commit. Both, in that order: an unhealthy app can
 # still answer /api/version from a half-initialised context, and a healthy one

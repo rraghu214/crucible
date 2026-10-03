@@ -1,0 +1,41 @@
+# ---------------------------------------------------------------------------
+# perflab_pool_starved_moderate -- the middle case.
+#
+# Covers the gap between severe (pool=2, unmissable) and mild (pool=5, arguable).
+# Pool=8 under 50 users produces a signal that is clearly present but not
+# dramatic: pending in the mid-single figures, acquire time in the dozens of
+# milliseconds. A model that pattern-matches on a large acquire_mean_ms will
+# read this as "fine" while the arithmetic says constrained.
+# ---------------------------------------------------------------------------
+
+id: perflab_pool_starved_moderate
+target_profile: spring-boot
+ground_truth_cause_family: connection_pool_exhaustion
+severity: moderate
+
+bottleneck_config:
+  spring.datasource.hikari.maximum-pool-size: 8
+
+setup: >
+  As perflab_pool_starved, with the pool at 8. Same endpoint (/api/db), same
+  50 users, same think time. Expect pending in the 5-10 range and acquire time
+  in the 50-200 ms range -- present, but requiring the arithmetic rather than
+  just reading the number.
+
+scenario_tag: db
+
+providers:
+  - actuator
+
+trap_properties:
+  - spring.datasource.hikari.connection-timeout
+
+task_classes: [A, C]
+
+validated_at: ""
+
+notes: >
+  The three-severity set (severe=2, moderate=8, mild=5) lets the benchmark
+  distinguish a model that reads arithmetic from one that reads magnitude.
+  Moderate is the hardest to get right -- the number is neither huge nor tiny,
+  so only the pending:utilisation ratio carries the signal.

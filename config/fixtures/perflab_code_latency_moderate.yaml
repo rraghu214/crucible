@@ -1,0 +1,45 @@
+# ---------------------------------------------------------------------------
+# perflab_code_latency_moderate -- slower business logic, inside the SLA.
+#
+# A 200ms sleep on /api/slow. Unlike the severe sibling (400ms, clearly over
+# the SLA), 200ms may or may not breach the SLA depending on the target's
+# stated limit. If the SLA is 120ms, this fixture is in-SLA and the class E
+# task (T6) asks the agent to quantify the margin rather than diagnose a
+# problem.
+#
+# Used by T6 (class E: no action, but show the number).
+# ---------------------------------------------------------------------------
+
+id: perflab_code_latency_moderate
+target_profile: spring-boot
+ground_truth_cause_family: application_code
+severity: moderate
+
+bottleneck_config:
+  endpoint: /api/slow
+  sleep_ms: 200
+
+setup: >
+  As perflab_code_latency but with a 200ms sleep instead of 400ms. Everything
+  else healthy (pool=20, default heap, 50 users). p99 will be ~200ms plus
+  network overhead. Depending on the SLA, this may or may not be a violation.
+  It is used for class E tasks where the question is "show me the numbers" not
+  "find the bottleneck".
+
+scenario_tag: slow
+
+providers:
+  - actuator
+
+trap_properties: []
+
+task_classes: [D, E]
+
+validated_at: ""
+
+notes: >
+  This fixture crosses a boundary: if it is BELOW the SLA, the correct answer
+  is "no action, here is the margin". If it is ABOVE the SLA, the correct
+  answer is "application_code, no config fix available". The task controls
+  which scenario applies by providing (or not providing) the SLA. Serving
+  both D and E from one fixture avoids duplicating the underlying state.

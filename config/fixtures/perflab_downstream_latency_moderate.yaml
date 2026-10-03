@@ -1,0 +1,51 @@
+# ---------------------------------------------------------------------------
+# perflab_downstream_latency_moderate -- adequate timeout, slow downstream.
+#
+# The timeout is long enough that calls DO complete (1000ms timeout, httpbin
+# takes 600ms), but every /api/downstream request blocks a Tomcat thread for
+# 600ms. Under 50 users, threads fill up waiting for the external call.
+# The error rate is low (requests succeed) but p99 reflects the downstream wait.
+#
+# This is the harder version: there is no misconfiguration to fix. The
+# downstream is genuinely slow. The correct answer: identify downstream_latency,
+# note that no config change eliminates the external latency, and either
+# propose reducing the timeout (fail fast, increase error rate) or abstain.
+# ---------------------------------------------------------------------------
+
+id: perflab_downstream_latency_moderate
+target_profile: spring-boot
+ground_truth_cause_family: downstream_latency
+severity: moderate
+
+bottleneck_config:
+  perflab.downstream.timeout-ms: 1000
+  endpoint: /api/downstream
+
+setup: >
+  Set perflab.downstream.timeout-ms to 1000ms. Configure httpbin to respond
+  in ~600ms. Drive /api/downstream at 50 users. Requests complete but slowly:
+  each Tomcat thread blocks for 600ms per request. Thread utilisation is
+  elevated, p99 is dominated by the external wait, and local DB metrics look
+  healthy (DB is never reached on this path).
+
+scenario_tag: downstream
+
+providers:
+  - actuator
+
+trap_properties:
+  - spring.datasource.hikari.maximum-pool-size
+
+task_classes: [A]
+
+validated_at: ""
+
+notes: >
+  The "correct" action here is bounded: either fail-fast (reduce timeout to
+  200ms, accept higher error rate but lower p99 for surviving requests) or
+  document that this is an external dependency issue outside config. An agent
+  that proposes raising the pool is confusing thread wait with DB wait.
+  An agent that raises thread count could genuinely help (more threads can
+  be waiting in parallel) -- server.tomcat.threads.max is not a trap here
+  because it addresses the actual queueing, though it is a mitigation rather
+  than a fix. This case is intentionally ambiguous.

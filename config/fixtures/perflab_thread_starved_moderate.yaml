@@ -1,0 +1,41 @@
+# ---------------------------------------------------------------------------
+# perflab_thread_starved_moderate -- thread saturation, arguable.
+#
+# threads=8 under 50 users: the queue is real, but not pinned at 100%
+# every instant. Requests still complete; they are just slow. The signal
+# is threads_busy_peak_threads close to the configured max, not pinned there,
+# with p99 elevated but not catastrophic. Distinguish from pool_starved:
+# pending_peak_connections stays near zero because queueing happens at the
+# connector, before any DB work begins.
+# ---------------------------------------------------------------------------
+
+id: perflab_thread_starved_moderate
+target_profile: spring-boot
+ground_truth_cause_family: thread_pool_saturation
+severity: moderate
+
+bottleneck_config:
+  server.tomcat.threads.max: 8
+
+setup: >
+  Set server.tomcat.threads.max to 8, connection pool at healthy 20. Drive
+  /api/db at 50 users. 50 concurrent users against 8 request threads produces
+  queuing at the connector: threads_busy_peak_threads near 8, p99 elevated,
+  but acquire_mean_ms stays small because most requests never reach the pool.
+
+scenario_tag: db
+
+providers:
+  - actuator
+
+trap_properties: []
+
+task_classes: [A, B]
+
+validated_at: ""
+
+notes: >
+  The moderate severity has two uses. First, it proves the discrimination pair
+  (T11) works at a signal strength that is not just the dramatic obvious case.
+  Second, the thread metrics were added in collector 1.2.0; this fixture plus
+  its severe sibling are what exercise those new fields first.

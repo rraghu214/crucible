@@ -1,0 +1,42 @@
+# ---------------------------------------------------------------------------
+# perflab_inefficient_query_moderate -- N+1 with a small batch, still too small.
+#
+# batch_fetch_size=5 reduces the 100-child fetch from 100 queries to 20, but
+# that is still 21 SQL round trips per request and the improvement is partial.
+# p99 is elevated, the DB is busy, but the signal is quieter than severe.
+# ---------------------------------------------------------------------------
+
+id: perflab_inefficient_query_moderate
+target_profile: spring-boot
+ground_truth_cause_family: inefficient_query
+severity: moderate
+
+bottleneck_config:
+  spring.jpa.properties.hibernate.default_batch_fetch_size: 5
+  spring.jpa.properties.hibernate.jdbc.batch_size: 5
+  endpoint: /api/orders
+
+setup: >
+  As perflab_inefficient_query_severe with batch sizes at 5. Drive /api/orders
+  at 50 users. ~21 SQL round trips per request rather than 101; latency is
+  elevated but not catastrophic. The fix is the same (raise batch sizes);
+  the severity tests whether the agent reads the arithmetic rather than the
+  headline number.
+
+scenario_tag: orders
+
+providers:
+  - actuator
+
+trap_properties:
+  - perflab.cache.enabled
+
+task_classes: [A]
+
+validated_at: ""
+
+notes: >
+  A second severity for the batch-size pair. The moderate setting (5) proves
+  the agent reads the per-request query count from the DB metrics rather than
+  just the absolute latency number. At batch=5, latency is manageable but the
+  cause is still the same.

@@ -1,0 +1,44 @@
+# ---------------------------------------------------------------------------
+# T8 -- Class A, diagnose and repair: inefficient query (N+1)
+#
+# /api/orders drives a classic N+1: one query for the list, N queries for
+# the children. The fix is available: raise
+# spring.jpa.properties.hibernate.default_batch_fetch_size and
+# spring.jpa.properties.hibernate.jdbc.batch_size.
+#
+# The trap (for the class C companion T13): enabling the cache hides the N+1
+# by serving cached results, but the query still runs on cache misses and at
+# every cold start. This task asks the agent to fix the query, not mask it.
+# ---------------------------------------------------------------------------
+
+id: T8
+task_class: A
+name: diagnose and fix an N+1 query with Hibernate batch fetching
+
+fixtures:
+  - perflab_inefficient_query_severe
+
+expected_behaviour: >
+  Name inefficient_query as the cause. The signal is in the DB layer: p99 is
+  high while HikariCP fields look almost normal (connections are acquired and
+  released quickly, but many times per request). If the collector exposes a
+  DB-call count or the endpoint breakdown shows /api/orders as the outlier,
+  cite those.
+
+  Propose raising spring.jpa.properties.hibernate.default_batch_fetch_size
+  and/or spring.jpa.properties.hibernate.jdbc.batch_size to a value in the
+  profile's bounds (e.g. 25 or 50). Explain the mechanism: batch fetching
+  replaces N child queries with N/batch_size queries.
+
+  Do NOT propose perflab.cache.enabled: enabling the cache masks the symptom
+  rather than fixing the query, and the N+1 remains for every cache miss and
+  cold start.
+
+  A strong answer names what would constitute a full fix (redesign the query
+  or use an ORM join) while noting that config-accessible batch size is the
+  improvement available within scope.
+
+asserts_fixture:
+  cause_family: inefficient_query
+  trap_properties:
+    - perflab.cache.enabled

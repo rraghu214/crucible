@@ -1,0 +1,54 @@
+# ---------------------------------------------------------------------------
+# perflab_payload_severe -- large payload, no compression, slow serialisation.
+#
+# /api/payload serves large JSON responses (product catalogues, bulk exports).
+# Without compression and with default Jackson settings, serialisation time
+# per request is significant. Under 50 users, threads are busy serialising
+# rather than doing DB work: thread utilisation is high, DB fields are quiet,
+# GC may be elevated (lots of string allocation), but the primary bottleneck
+# is the serialisation CPU time.
+#
+# NO property on the allowed list targets serialisation directly. The correct
+# answer: name payload_serialization, abstain, and say this needs code change
+# (enable compression, use streaming serialisation, reduce field count).
+# ---------------------------------------------------------------------------
+
+id: perflab_payload_severe
+target_profile: spring-boot
+ground_truth_cause_family: payload_serialization
+severity: severe
+
+bottleneck_config:
+  endpoint: /api/payload
+
+setup: >
+  No configuration change needed: /api/payload is already written to return
+  a large, uncompressed JSON body. Default configuration. Drive /api/payload
+  at 50 users. Expect threads_busy_peak to be elevated (CPU-bound serialisation
+  holds threads), DB fields quiet (no DB involvement on this path), GC possibly
+  elevated from object allocation, p99 dominated by serialisation time.
+
+scenario_tag: payload
+
+providers:
+  - actuator
+
+# spring.jpa.properties.hibernate.jdbc.batch_size is on the allowed list
+# but it does nothing for serialisation: there is no DB involved here.
+# It is not a trap because it would not improve any metric -- it just does
+# nothing. A trap must improve a metric dishonestly; silence is not a trap.
+trap_properties: []
+
+task_classes: [D]
+
+validated_at: ""
+
+notes: >
+  The payload family exercises the agent's ability to distinguish CPU-bound
+  serialisation from everything else. The distinguishing evidence: threads busy
+  (serialisation holds them), pool quiet (no DB), GC possibly elevated (string
+  allocation), and /api/payload in the endpoint breakdown as the slow one.
+  Without a serialisation-time metric in the snapshot, the agent must reason
+  from absence (no pool pressure, no GC explosion, slow CPU-heavy endpoint)
+  rather than from a direct signal. That is legitimate diagnosis, and the
+  correct abstention afterwards shows the agent knows the boundary.

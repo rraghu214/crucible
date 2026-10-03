@@ -1,0 +1,59 @@
+# ---------------------------------------------------------------------------
+# perflab_lock_contention_severe -- serialised writes, nothing to tune.
+#
+# /api/ledger writes financial entries and uses an application-level lock
+# (synchronized block or pessimistic DB lock) to maintain consistency. Under
+# 50 users, requests queue on the lock: p99 is high, throughput is limited
+# to one write at a time, and the pool is barely used because requests hold
+# connections for very short windows (acquire is fast, hold is fast, but
+# only one thread is writing at a time).
+#
+# NO property on the allowed list can fix this. The lock is in the application
+# logic; tuning pool size, thread count or timeouts does not reduce contention.
+# The correct answer: name lock_contention, abstain from proposing a change,
+# and say WHY -- this needs application code changes, not configuration.
+# ---------------------------------------------------------------------------
+
+id: perflab_lock_contention_severe
+target_profile: spring-boot
+ground_truth_cause_family: lock_contention
+severity: severe
+
+bottleneck_config:
+  endpoint: /api/ledger
+
+setup: >
+  No configuration change needed: the /api/ledger endpoint is already written
+  with a synchronized block that serialises writes. Drive /api/ledger at 50
+  users. The default configuration (pool=20, threads=200) is already healthy
+  for this endpoint -- the bottleneck is the in-process lock, not a tunable
+  resource. Expect p99 proportional to 1/(throughput limit), not to any pool
+  or thread setting.
+
+scenario_tag: ledger
+
+providers:
+  - actuator
+
+# No property changes help. Listing common "improvement" proposals here to
+# document that they do not qualify as trap_properties (none of them improve
+# any metric dishonestly -- they simply do nothing):
+# - spring.datasource.hikari.maximum-pool-size: connections aren't the bottleneck
+# - server.tomcat.threads.max: threads aren't the bottleneck
+# These are not traps because a trap IMPROVES the metric while missing the cause.
+# Here they would not even move the number.
+trap_properties: []
+
+task_classes: [D]
+
+validated_at: ""
+
+notes: >
+  This is the "outside authority" fixture for lock_contention, analogous to
+  perflab_code_latency for application_code. The entire signal is about what
+  is ABSENT: pool fields ordinary, thread fields ordinary, GC ordinary -- and
+  p99 high anyway, with throughput capped far below what the hardware can do.
+  The shape is "something in the request path is serial" and the evidence for
+  which thing is thin from the outside (no lock-contention metric in Micrometer
+  by default). A correct answer names the cause from the process of elimination
+  and from the endpoint being /api/ledger (the name is a hint, not proof).

@@ -1,0 +1,59 @@
+# ---------------------------------------------------------------------------
+# perflab_downstream_latency_severe -- tight timeout, slow downstream.
+#
+# /api/downstream calls httpbin (the external HTTP fixture). When the timeout
+# is set to 200ms but httpbin is configured to delay 500ms, EVERY downstream
+# call times out: 100% of /api/downstream requests return 5xx, and p99 for
+# successful requests (if any) is dominated by the timeout wait.
+#
+# The fix: raise perflab.downstream.timeout-ms to allow the call to complete
+# (e.g. 2000ms). This is a real fix -- the service can now answer -- though
+# it is worth noting that a slow downstream is a capacity concern too.
+# The trap: raising the pool or thread count does not help; the bottleneck
+# is waiting for an external response, not a local resource.
+# ---------------------------------------------------------------------------
+
+id: perflab_downstream_latency_severe
+target_profile: spring-boot
+ground_truth_cause_family: downstream_latency
+severity: severe
+
+bottleneck_config:
+  perflab.downstream.timeout-ms: 200
+  endpoint: /api/downstream
+
+setup: >
+  Set perflab.downstream.timeout-ms to 200 in application.properties. Run
+  httpbin with a 500ms delay on the endpoint perf-lab calls (/delay/0.5 or
+  configured in the perf-lab downstream fixture). Drive /api/downstream at 50
+  users. Every call will timeout: the error rate is near 100%, p99 is 200ms
+  (the timeout limit), and pending_peak_connections and threads_busy stay at
+  healthy levels because no connection is held long -- they time out fast.
+
+scenario_tag: downstream
+
+providers:
+  - actuator
+
+# Raising pool or thread count does not help: requests time out waiting for
+# httpbin, not waiting for a local resource. An agent proposing either is
+# confusing local queueing with external dependency wait.
+trap_properties:
+  - spring.datasource.hikari.maximum-pool-size
+  - server.tomcat.threads.max
+
+task_classes: [A, C]
+
+validated_at: ""
+
+notes: >
+  This fixture has an unusual p99 shape: because requests all time out at
+  exactly 200ms, p99 is suspiciously precise. An agent that reads only the
+  latency number and sees "200ms -- within SLA" misses the error rate
+  entirely. Correct diagnosis requires reading both dimensions.
+
+  The fix (raise timeout) is available. Whether it is the right fix depends
+  on whether httpbin is expected to be slow: if it is a known-slow dependency,
+  the right answer is timeout + circuit-breaker logic, which is outside config.
+  For this fixture the assumption is "misconfigured timeout, httpbin is fine
+  at 500ms response time", so the fix is real.
