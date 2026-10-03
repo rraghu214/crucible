@@ -19,32 +19,42 @@ target, not of the benchmark — keeping them separate means the same task set
 runs against a second target application by swapping fixtures, not by
 rewriting tasks.
 
-## Scale
+## Scale (as of 4 October 2026)
 
-8 tasks · 50 fixtures · ~150 test cases:
+**Task set v2:** 18 tasks (T1–T17 + T3b) covering all five classes A–E.
+`config/tasks/` holds one file per task.
+
+**Fixture set:** 20 Java (Spring Boot) fixtures across 9 cause families +
+healthy baseline. 3 fixtures need JVM flags (`gc_pressure`, `gc_pressure_moderate`,
+`gc_and_pool`); these require Box A shell access to set `-Xmx`. FastAPI profile is
+in-scope but deferred (AGENTS.md scope cut order).
 
 | Group | Count |
 |---|---|
-| Java — 10 bottleneck families × 3 severities | 30 |
-| Java — special cases (healthy, two-at-once, noisy, code-level, injection) | 10 |
-| Python (FastAPI) — representative slice | 10 |
+| Java — 9 bottleneck families (pool, thread, gc, cache, inefficient_query, lock, downstream, code, payload) | 18 (2–3 severities each) |
+| Java — special cases (healthy, near_sla, gc+pool) | 2 |
+| Multi-provider fixtures (pool_starved, gc_pressure) | 2 (up to 3 snapshots each) |
 
-.NET is out of scope for the capstone (`DESIGN.md` §16 lists Runtime as
-Spring Boot · FastAPI only), so there are no .NET fixtures. The Python slice
-answers "does it generalise or did it memorise Java?" and no more — it isn't
-meant to be full depth.
+**Multi-provider captures.** `perflab_pool_starved` and `perflab_gc_pressure` are
+tagged `providers: [actuator, promql, datadog]`. A single `--all-providers` run
+captures all three providers from one load window, so provider-agreement comparisons
+use identical traffic. Prometheus is running on Box A; Datadog credentials are set
+on Box B. These two fixtures produce up to 3 snapshots each (~22 total).
 
-**Capture cost.** ~9 minutes per fixture (120 s warmup discarded, 300 s
-measured, ~120 s restart and settle). 50 fixtures ≈ 7.5 hours — one
-overnight run, comfortably.
+**Capture cost.** ~7 minutes per fixture (0 warmup, 300 s measured). 20 fixtures
+≈ 2.5 hours — one overnight run. Each fixture produces 1–3 snapshots depending
+on declared providers.
 
-**Open: fixtures vs snapshots.** A fixture is a target state; a snapshot is
-that state as seen through one metrics provider. With Actuator, PromQL and
-Datadog all in scope (`DESIGN.md` §16), 50 fixtures could mean up to 150
-snapshots. Not every fixture needs every provider — decide before Week 3
-which slice gets multi-provider capture (likely the 10 Java special cases
-plus a few core families, not all 50 × 3), or the replay corpus size stays
-undefined.
+**The claim format**
+
+Every reported result follows this template — change any one input and it's
+a different claim:
+
+> Under task set v2 — 18 tasks, 20 fixtures, 3 repeats (Actuator), 1 repeat
+> (PromQL/Datadog), harness `<sha>`, `gemini-1.5-flash` pinned, failover disabled,
+> on Box B / Oracle Cloud US East: N diagnosed correctly, N refused correctly,
+> N false successes, N refusals missed. Integrity: 0 protected-path writes.
+> Provider agreement: same cause on Actuator/PromQL/Datadog on N of M fixtures.
 
 ## Five task classes
 
@@ -79,21 +89,6 @@ verified" without checking class C coverage specifically.
 Outcome · diagnosis accuracy (the 2×2, including the `LUCKY` quadrant — see
 `DESIGN.md` §4.7) · integrity · efficiency · calibration · cost.
 
-## The claim format
-
-Every reported result follows this template — change any one input and it's
-a different claim:
-
-> Under task set v1 — N tasks, N fixtures, 3 repeats where duration allowed —
-> with harness `<sha>`, `<model>` pinned and failover disabled, budget $X per
-> campaign, ceiling N experiments, profile `<profile>`, on `<host>`: N
-> verified fixes, N unverified, N honest failures, N false successes, N
-> unreachable. Diagnosis correct on N of M. Zero protected-path writes, N
-> refusals. Median N experiments, $X, N minutes.
-
-Change the model → different claim. Change the fixtures → different
-benchmark. Change the scorer → same runs, rescored (this is why the scorer
-calls no model — see `DESIGN.md` §4.6).
 
 ## Economics: replay vs live
 
@@ -113,6 +108,10 @@ data with nothing to flag it. The eval runner must refuse mismatched
 snapshots by version and name which ones need recapture, rather than silently
 running.
 
+Change the model → different claim. Change the fixtures → different
+benchmark. Change the scorer → same runs, rescored (this is why the scorer
+calls no model — see `DESIGN.md` §4.6).
+
 ## Calibration baseline (K3)
 
 The only real number on record so far: the agent predicted 140 ms post-fix,
@@ -120,3 +119,29 @@ measured came in at 93 ms — conservative by ~1.5×, on a single data point.
 Not yet a calibration curve; treat it as a sanity check for the first real
 `calibration` scores once the benchmark runs at scale, not as an established
 baseline to grade against.
+
+## Benchmark status (4 October 2026)
+
+**Fixtures captured so far:** in progress (sweep running on Box B).
+Snapshot files land in `results/<fixture_id>.<provider>.json` with
+`collector_version: 1.2.0`. Stale snapshots from earlier collector versions
+are refused by `crucible bench`; `crucible capture --plan` lists what needs
+recapture.
+
+**Replay run:** not yet. Once the sweep finishes, run:
+```
+crucible bench --tasks config/tasks/ --fixture-dir results/ --out results/replay.json
+crucible score --journal results/ --fixture-dir config/fixtures/
+```
+
+**Live campaigns run:** not yet (needs user approval per DESIGN.md §19.4).
+Target: T1 (pool starvation), T3 (stakeholder pressure), T4 (healthy baseline).
+
+**JVM fixture status:** `gc_pressure`, `gc_pressure_moderate`, `gc_and_pool` require
+`PERFLAB_JAVA_OPTS` set on Box A via shell SSH (not via the git-shell-restricted
+deploy key). Steps: `ssh ubuntu@129.213.121.108 'printf "PERFLAB_JAVA_OPTS=\"-Xmx128m\"\n" > ~/perflab.env'`,
+then re-run sweep with `--boxa-shell-key ~/.ssh/perflab_boxa_shell --fixture <id>`.
+
+**Provider coverage:** Actuator for all fixtures; PromQL + Datadog for
+`perflab_pool_starved` and `perflab_gc_pressure` (Prometheus running on Box A,
+Datadog credentials on Box B).
