@@ -130,8 +130,8 @@ recapture.
 
 **Replay run:** not yet. Once the sweep finishes, run:
 ```
-crucible bench --tasks config/tasks/ --fixture-dir results/ --out results/replay.json
-crucible score --journal results/ --fixture-dir config/fixtures/
+crucible bench --tasks config/tasks/ --fixtures results/ --out results/replay.json --skip-missing-fixtures
+crucible score --journal results/ --fixtures config/fixtures/
 ```
 
 **Live campaigns run:** not yet (needs user approval per DESIGN.md §19.4).
