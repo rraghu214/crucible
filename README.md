@@ -44,16 +44,20 @@ uv run crucible run          # a real campaign; proposals park for `crucible app
   proposed. Abort with `crucible abort <run-id>`: that discards the in-flight
   experiment and redeploys the last good commit.
 
-`crucible serve` starts the UI at `http://127.0.0.1:8113/perf`: the nineteen
-screens of `docs/crucible-screens-v2.html`, read from the same files the CLI
-reads. Crucible holds no provider keys. The model gateway (`glc_v5`) does, and
-`GLC_BASE_URL` points at it.
+`crucible serve-ui` starts the NiceGUI campaign UI at `http://127.0.0.1:8765`:
+six screens — Home, New, Campaign (live view with proposal cards), History,
+Benchmark, Settings — each twinned to a CLI command. `crucible serve` starts the
+HTTP API surface (approvals, A2A) at port 8113. Crucible holds no provider keys.
+The model gateway (`glc_v5`) does, and `GLC_BASE_URL` points at it.
 
 Before every commit: `uv run pytest -q` and `uv run ruff check .`
 
 ## What the benchmark measures
 
-Five task classes (`EVALUATION.md`), each a behaviour rather than a fixture:
+Five task classes (`EVALUATION.md`), each a behaviour rather than a fixture.
+Task set v2 covers all five classes: 18 tasks (T1–T17 + T3b), 20 fixtures across
+9 cause families. Replay runs against captured snapshots; live campaigns run on
+Box B under Raghu's approval.
 
 | Class | In plain English |
 |---|---|
@@ -75,31 +79,23 @@ In `EVALUATION.md`'s format. Every number comes from
 [`docs/BENCHMARK_LIVE_RESULTS.md`](docs/BENCHMARK_LIVE_RESULTS.md). Anything
 not measured says so.
 
-> Under a subset of task set v1 — 3 of 5 tasks (T1, T3, T4), 3 of 6 fixtures,
-> 3 repeats — with harness `crucible@4b8b8de`, `gemini-3.5-flash-lite` pinned and
-> failover disabled, budget $0.05 per campaign, ceiling 5 experiments (the
-> campaign default; neither binds replay), profile
-> `spring-boot`, fixtures captured on Oracle Box A through Actuator only:
-> **not yet measured** verified fixes, **not yet measured** unverified,
-> **not yet measured** honest failures, **not yet measured** false successes,
-> **not yet measured** unreachable — no live benchmark campaign has run.
-> Diagnosis correct on 12 of 12 replays with a ground-truth cause, and no change
-> proposed on 3 of 3 healthy replays. Protected-path writes: **not yet measured**
-> (replay writes nothing). 0 trap properties proposed. Median experiments:
-> **not yet measured**. $0.0012 per replay case, $0.018 for all 15. Campaign
-> duration: **not yet measured**.
+> Task set v2, 18 tasks (T1–T17 + T3b), 20 fixtures, 3 repeats (Actuator),
+> 1 repeat (PromQL/Datadog), harness `crucible@HEAD capstone/perf-agent`,
+> `gemini-1.5-flash-lite` pinned, failover disabled, profile `spring-boot`,
+> fixtures captured on Oracle Box A: **pending** — sweep in progress (4 Oct 2026).
+> Replay benchmark not yet run. Live campaigns not yet run.
+> Prior v1 result (3 tasks, 3 fixtures, Actuator only): diagnosis correct on
+> 12/12 replays with a ground-truth cause, 0 trap properties proposed.
+> Full results update pending Box B captures. See `EVALUATION.md` §Benchmark status.
 
-What that claim does **not** support, stated so it can't be read into it:
+What the pending claim does **not** yet cover:
 
-- **Class C is untested.** The trap was never tempted, and T3's stakeholder
-  prompt is never sent to the model (`docs/ref/DEBT.md`). 6/6 on class C means
-  the plain diagnosis avoided the shortcut, and nothing more.
-- **Classes B and E have no task**, and T2 (GC discrimination) and T5 (outside
-  authority) have no captured fixture.
-- **One metrics provider.** PromQL and Datadog adapters exist but are not wired
-  into measurement, so provider independence is a design, not a result.
-- **Confidence carried no signal.** All 15 replies said 1.0, including the mild
-  fixture.
+- **Replay scores** will be in `docs/BENCHMARK_REPLAY_RESULTS.md` once the sweep
+  completes and `crucible bench --tasks config/tasks/ --fixtures results/` runs.
+- **Live campaign outcomes** will be in `docs/BENCHMARK_LIVE_RESULTS.md` once
+  T1, T3, T4 run under approval on Box B.
+- **Provider agreement** (Actuator vs PromQL vs Datadog on identical load) will
+  be measured on `perflab_pool_starved` and `perflab_gc_pressure`.
 
 The one end-to-end live campaign on record (21 September 2026,
 `docs/W2_E2E_RESULT.md`) took p99 from 1200 ms to 60 ms on the pool-starved
@@ -157,5 +153,5 @@ The evaluation side reads what that loop writes and never runs inside it:
 | `report.py` | the report and the diff; refuses to compare unlike setups | never |
 | `commands.py` | the CLI above | only via `run` and `bench` |
 
-`crucible/ui/perf_ui.py` renders the nineteen screens from the same modules,
-through the same injection-wall validator as any agent-built surface.
+`crucible/ui/nicegui_app.py` renders the six campaign-path screens from the same
+modules, reading the same `results/`, `config/` and state files the CLI reads.

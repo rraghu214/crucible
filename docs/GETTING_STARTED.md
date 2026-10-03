@@ -9,7 +9,7 @@ You can use it in two places:
 
 | | Where | What you can do there |
 |---|---|---|
-| **Locally** | your own machine | Browse all 19 screens, read the benchmark results, replay saved snapshots against the model. You **cannot** run a live campaign: the target is not reachable from outside Box B. |
+| **Locally** | your own machine | Browse the six UI screens, read the benchmark results, replay saved snapshots against the model. You **cannot** run a live campaign: the target is not reachable from outside Box B. |
 | **Box B** | the Oracle cloud box next to the target | Everything: live campaigns, approvals, and the UI other people can open. |
 
 The UI is a window onto the work. Starting a run, approving a change and
@@ -33,22 +33,23 @@ cd <path-to>\crucible
 git checkout capstone/perf-agent
 git pull
 uv sync
-uv run crucible serve
+uv run crucible serve-ui
 ```
 
-Open **http://127.0.0.1:8113/perf**. Press Ctrl+C in that terminal to stop it.
+Open **http://127.0.0.1:8765**. Press Ctrl+C in that terminal to stop it.
 
-If port 8113 is taken, run `uv run crucible serve --port 8119` and open
-`http://127.0.0.1:8119/perf` instead.
+If port 8765 is taken, run `uv run crucible serve-ui --port 8766` instead.
 
 ### 1.3 What you will see locally
 
-| Screens | What they show on your machine |
+| Page | What it shows on your machine |
 |---|---|
-| 1–12, 19 | Real configuration: the SLA, the target profile, budgets, the plan, the CLI |
-| 18 · Benchmark | The replay results committed in `docs/bench/` |
-| 13–17 | "No campaign is running" and "no campaign manifests". Correct: campaigns run on Box B |
-| 6 · Telemetry "Test all", 12 · Preflight "Run checks" | "Not reached". Also correct: your machine has no route to the target |
+| **Home** | Service config, any active campaigns (none locally), recent results |
+| **New** | The exact `crucible run` command for the current config |
+| **Campaign** | "No campaign running" — correct, campaigns run on Box B |
+| **History** | Campaign manifests if you copy results from Box B |
+| **Benchmark** | Replay results, task table (18 tasks), fixture table (20 fixtures) |
+| **Settings** | Workspace config, SLA, profile, collector version, CLI reference |
 
 ### 1.4 Things that do work locally
 
@@ -116,7 +117,7 @@ After=network-online.target
 User=ubuntu
 WorkingDirectory=/home/ubuntu/crucible
 EnvironmentFile=/home/ubuntu/crucible/.env
-ExecStart=/home/ubuntu/.local/bin/uv run crucible serve --host 0.0.0.0 --port 8113
+ExecStart=/home/ubuntu/.local/bin/uv run crucible serve-ui --host 0.0.0.0 --port 8765 --root /home/ubuntu/crucible
 Restart=always
 
 [Install]
@@ -131,7 +132,7 @@ systemctl status crucible-ui          # should say "active (running)"
 
 After every `git pull`, run `sudo systemctl restart crucible-ui`.
 
-### 2.3 Open port 8113
+### 2.3 Open port 8765
 
 It has to be opened in two places.
 
@@ -139,26 +140,26 @@ It has to be opened in two places.
 network security group) for Box B. Add an ingress rule:
 
 - Protocol: TCP
-- Destination port: `8113`
+- Destination port: `8765`
 - Source: `0.0.0.0/0` for anyone, or **`<viewer-ip>/32` to allow a single
   person**. Prefer the second.
 
 **On the box:**
 
 ```bash
-sudo iptables -I INPUT -p tcp --dport 8113 -j ACCEPT
+sudo iptables -I INPUT -p tcp --dport 8765 -j ACCEPT
 sudo netfilter-persistent save
 ```
 
 ### 2.4 Open it
 
-**http://<BoxB-public-IP>:8113/perf**
+**http://<BoxB-public-IP>:8765**
 
 Share that link with anyone you want to watch, for example your trainer.
 
 ### 2.5 Know what a public URL exposes
 
-- **Viewers can read every screen.** That includes the SLA and profile, which
+- **Viewers can read every page.** That includes the SLA and profile, which
   mention Box A's private IP. Box A is not reachable from outside, so this is low
   risk, but it is visible.
 - **Viewers cannot change anything.** Every write action needs the control
@@ -173,10 +174,10 @@ Use this when nobody else needs to see the UI. It needs no open port. Run it
 **on your own machine**:
 
 ```powershell
-ssh -i <your-BoxB-key> -L 8113:127.0.0.1:8113 ubuntu@<BoxB-public-IP>
+ssh -i <your-BoxB-key> -L 8765:127.0.0.1:8765 ubuntu@<BoxB-public-IP>
 ```
 
-Keep that window open, then browse to **http://localhost:8113/perf**. Over the
+Keep that window open, then browse to **http://localhost:8765**. Over the
 tunnel it is safe to paste the control token into the sidebar.
 
 ---
@@ -240,24 +241,22 @@ uv run crucible report --run demo-1           # why it changed what it changed, 
 uv run crucible diff --a demo-1 --b demo-2    # compare two runs; refuses if their setups differ
 ```
 
-In the UI, the same results are on **16 · Report** and **17 · History & diff**.
+In the UI, the same results are on the **Campaign** and **History** pages.
 
 ---
 
 ## 4 · Where things live in the UI
 
-| Group | Screens | Use it to |
-|---|---|---|
-| Structure | 1 Home, 2 Service settings, 3 Collection, 4 Environments | See what is configured |
-| Getting set up | 5 Target profile, 6 Telemetry, 7 Setup overview, 8 Requirements, 9 Scenarios, 10 Budget | Check authority, metrics, load and cost |
-| Before it runs | 11 Plan, 12 Preflight | Review scope, check the plumbing |
-| While it runs | 13 Live campaign, 14 Plan graph, 15 Watchdog | Watch a run, approve a proposal |
-| Afterwards | 16 Report, 17 History & diff | Read and compare results |
-| Testing itself | 18 Benchmark | See how Crucible scores on its own benchmark |
-| Terminal | 19 CLI | Every command |
+| Page | Use it to |
+|---|---|
+| **Home** | See active campaigns, recent results, quick-start buttons |
+| **New** | Review configuration, copy the `crucible run` command |
+| **Campaign** | Watch a live run; approve or reject proposals; pause or abort |
+| **History** | Browse all past campaigns; compare two with `crucible diff` |
+| **Benchmark** | See replay scores, task list, fixture list |
+| **Settings** | Workspace config, SLA, profile, CLI reference |
 
-Some screens say **"not built"** or **"not yet measured"**. That text is
-deliberate: Crucible never shows a number nobody measured.
+Everything else is exposed through the CLI (run `crucible --help`).
 
 ---
 
@@ -265,12 +264,12 @@ deliberate: Crucible never shows a number nobody measured.
 
 | Symptom | Check |
 |---|---|
-| Page will not load on the public URL | On Box B, `curl localhost:8113/perf`. If that fails, run `systemctl status crucible-ui` and `journalctl -u crucible-ui -n 50`. |
-| Loads on Box B but not from outside | `sudo iptables -L INPUT -n \| grep 8113`, then the Oracle ingress rule, including its source IP. |
-| Locally, `address already in use` | Another server holds 8113. Use `--port 8119`. |
+| Page will not load on the public URL | On Box B, `curl localhost:8765`. If that fails, run `systemctl status crucible-ui` and `journalctl -u crucible-ui -n 50`. |
+| Loads on Box B but not from outside | `sudo iptables -L INPUT -n \| grep 8765`, then the Oracle ingress rule, including its source IP. |
+| Locally, `address already in use` | Another server holds 8765. Use `--port 8766`. |
 | Approve says **401** | Wrong control token. |
 | Approve says **503** | No `CRUCIBLE_CONTROL_TOKEN` in the server's `.env`. |
 | Approve says **409** | Already decided, or the values did not match the proposal. |
 | `crucible run` fails at the baseline | The target is not reachable, or not in the expected state. Run `crucible preflight`. |
-| `crucible bench` refuses the task set | A task names a fixture that is not captured yet. Use the T1/T3/T4 subset (§1.4). |
+| `crucible bench` refuses the task set | A task names a fixture not yet captured. Add `--skip-missing-fixtures` to skip those tasks. |
 | The first model call is slow | The hosted gateway spins down when idle. The first call waits for it to wake, which can take up to about a minute. |
