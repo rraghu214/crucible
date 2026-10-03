@@ -226,10 +226,23 @@ This runs all 18 tasks × available fixtures, 3 repeats. Expect ~30–40 min and
 ~$0.05–0.10 of model spend. The JVM fixtures (gc_pressure, gc_and_pool) are
 skipped until Box A shell access is available to set `-Xmx128m`.
 
-### Step 4: score the replay results
+### Step 4: view the replay results
+
+The replay JSON already carries per-case scores (diagnosis correct/incorrect, etc.).
+View it directly or use the Benchmark page in the UI:
 
 ```bash
-uv run crucible score --fixtures config/fixtures/ --json-out results/replay_score.json
+# Print a summary (jq optional):
+cat results/replay.json | python -c "
+import json, sys
+d = json.load(sys.stdin)
+cases = d.get('cases', [])
+correct = sum(1 for c in cases if c.get('diagnosis_correct'))
+print(f'{correct}/{len(cases)} correct ({len(cases)} cases total)')
+"
+
+# To score live campaign manifests (results/*.json from crucible run):
+uv run crucible score --fixtures config/fixtures/ --json-out results/live_score.json
 ```
 
 ### Step 5: JVM fixtures (needs Box A shell SSH separately)
