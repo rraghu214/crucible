@@ -182,6 +182,95 @@ tunnel it is safe to paste the control token into the sidebar.
 
 ---
 
+## 2a · After the capture sweep (next steps for 4–6 Oct 2026)
+
+The overnight capture sweep (PID 182230, started 3 Oct ~21:16 UTC) ran all
+non-JVM fixtures. When you SSH into Box B, do this in order:
+
+### Step 1: check the sweep and pull latest code
+
+```bash
+# See if the sweep finished or is still running
+ps aux | grep capture_sweep | grep -v grep
+cat ~/crucible/logs/sweep.log 2>/dev/null | tail -20   # or wherever nohup wrote output
+
+# Pull the latest commits (skip-missing-fixtures, doc fixes, etc.)
+cd ~/crucible
+git pull origin capstone/perf-agent
+uv sync
+```
+
+### Step 2: count what was captured
+
+```bash
+ls ~/crucible/results/*.json | wc -l      # should be 17+ snapshots for non-JVM fixtures
+ls ~/crucible/results/                    # spot-check provider suffixes
+```
+
+Expected: one `.<provider>.json` file per fixture per declared provider.
+`perflab_pool_starved` should have `.actuator.json`, `.promql.json`, and
+`.datadog.json` (multi-provider fixture).
+
+### Step 3: run the replay benchmark
+
+```bash
+cd ~/crucible
+uv run crucible bench \
+    --tasks config/tasks/ \
+    --fixtures results/ \
+    --out results/replay.json \
+    --skip-missing-fixtures   # skips JVM fixtures not yet captured
+```
+
+This runs all 18 tasks × available fixtures, 3 repeats. Expect ~30–40 min and
+~$0.05–0.10 of model spend. The JVM fixtures (gc_pressure, gc_and_pool) are
+skipped until Box A shell access is available to set `-Xmx128m`.
+
+### Step 4: score the replay results
+
+```bash
+uv run crucible score --fixtures config/fixtures/ --json-out results/replay_score.json
+```
+
+### Step 5: JVM fixtures (needs Box A shell SSH separately)
+
+The three JVM fixtures need `-Xmx128m` set on Box A via a shell SSH key
+(not the restricted deploy key):
+
+```bash
+# Set JVM opts on Box A (only works with shell access, not the git deploy key)
+ssh ubuntu@129.213.121.108 'printf "PERFLAB_JAVA_OPTS=\"-Xmx128m\"\n" > ~/perflab.env'
+
+# Then re-run sweep for JVM fixtures only:
+cd ~/crucible
+uv run python scripts/capture_sweep.py \
+    --workspace ~/perf-lab \
+    --boxa-ip 10.0.0.79 \
+    --key-path ~/.ssh/perflab_deploy \
+    --boxa-shell-key ~/.ssh/perflab_boxa_shell \   # shell key, not deploy key
+    --version-url http://10.0.0.79:8080/api/version \
+    --results-dir results \
+    --fixture perflab_gc_pressure \
+    --fixture perflab_gc_pressure_moderate \
+    --fixture perflab_gc_and_pool
+```
+
+### Step 6: live campaigns (needs your approval for each proposal)
+
+In one terminal on Box B (keep it running):
+```bash
+cd ~/crucible
+# Campaign 1: pool starvation (T1, class A)
+uv run crucible run --run-id c1-pool --workspace ~/perf-lab \
+    --provider gemini --model gemini-3.5-flash-lite \
+    --users 50 --warmup 120 --measure 300
+
+# While it runs, approve proposals from a second terminal:
+# uv run crucible approve c1-pool --experiment 1 --as raghu
+```
+
+---
+
 ## 3 · Running a campaign (on Box B)
 
 ### 3.1 Before you start
