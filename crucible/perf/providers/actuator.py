@@ -70,6 +70,28 @@ class ActuatorMetricsProvider:
             return None
         return prop.get("value") if prop else None
 
+    def fetch_all_env(self) -> dict[str, Any] | None:
+        """All resolved configuration properties from ``/actuator/env``.
+
+        Must be passed through
+        :func:`crucible.perf.collector.redact_runtime_config` before it
+        reaches a model or a journal: ``/actuator/env`` returns datasource
+        passwords and API keys alongside pool sizes.
+        """
+        try:
+            response = self._client.get(f"{self.base_url}/actuator/env")
+            response.raise_for_status()
+            payload = response.json()
+        except (httpx.HTTPError, ValueError):
+            return None
+        out: dict[str, Any] = {}
+        # propertySources is ordered highest-priority first; first occurrence wins.
+        for source in payload.get("propertySources") or []:
+            for key, prop in (source.get("properties") or {}).items():
+                if key not in out:
+                    out[key] = prop.get("value") if isinstance(prop, dict) else prop
+        return out or None
+
     def endpoint_breakdown(self) -> dict[str, Any] | None:
         """Per-URI request statistics, or ``None`` when the target does not tag by URI.
 

@@ -157,6 +157,9 @@ class DatadogMetricsProvider:
     #: Metrics the profile declared with a unit this adapter will not convert.
     #: Surfaced rather than dropped -- ``DESIGN.md`` 4.8.
     unreadable: dict[str, Any] = field(default_factory=dict)
+    #: Set when a 403 or 401 comes back so the provider can declare auth failure
+    #: rather than treating it as "no data" (DESIGN.md 4.8, Principle 2).
+    auth_error: str = ""
 
     def __post_init__(self) -> None:
         self.base_url = self.base_url.rstrip("/")
@@ -167,7 +170,23 @@ class DatadogMetricsProvider:
                 "with a 403 that is easy to mistake for an empty metric."
             )
         if self._client is None:
-            self._client = httpx.Client(timeout=self.timeout_s)
+            # Keys go in headers, never in URL params. A URL param ends up in
+            # proxy logs, reverse-proxy access logs, and the journal, which is
+            # replayed hundreds of times. The header form is equally documented
+            # and does not leak the key into any log line Crucible writes.
+            self._client = httpx.Client(
+                timeout=self.timeout_s,
+                headers={
+                    "DD-API-KEY": self.api_key,
+                    "DD-APPLICATION-KEY": self.application_key,
+                },
+            )
+        else:
+            # Client was injected (tests/overrides): still enforce auth headers.
+            # The provider contract is that credentials travel in headers; an
+            # injected client that lacks them would silently send no auth.
+            self._client.headers["DD-API-KEY"] = self.api_key
+            self._client.headers["DD-APPLICATION-KEY"] = self.application_key
 
     # -- construction -----------------------------------------------------
 
@@ -252,14 +271,21 @@ class DatadogMetricsProvider:
                     "query": expression,
                     "from": end - self.window_s,
                     "to": end,
-                    # Datadog accepts credentials either as these query
-                    # parameters or as DD-API-KEY / DD-APPLICATION-KEY headers.
-                    # The parameter form is used because it is the one the v1
-                    # query API documents by these exact names.
-                    "api_key": self.api_key,
-                    "application_key": self.application_key,
+                    # Keys are in the client's default headers (DD-API-KEY /
+                    # DD-APPLICATION-KEY), never in params. See __post_init__.
                 },
             )
+            if response.status_code in (401, 403):
+                # Auth failure is not "no data". Record it so the caller can
+                # declare it rather than silently treating every metric as null
+                # (DESIGN.md 4.8, Principle 2). Every subsequent query will hit
+                # the same wall, so one message per provider instance is enough.
+                self.auth_error = (
+                    f"Datadog returned HTTP {response.status_code} "
+                    f"(check DD-API-KEY / DD-APPLICATION-KEY and the site URL). "
+                    f"All metrics for this run are unreadable."
+                )
+                return []
             response.raise_for_status()
             payload = response.json()
         except (httpx.HTTPError, ValueError):

@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import fnmatch
 import json
+import re
 import subprocess
 import time
 import urllib.error
@@ -175,6 +176,12 @@ class DeployResult:
     waited_s: float = 0.0
     observed_commit: str | None = None
     reason: str = ""
+    hook_commit: str | None = None
+    hook_exit_code: int | None = None
+    #: Property read-back: did we confirm the specific changed value is live?
+    #: ``True`` = rung-2 verification passed; ``None`` = not attempted (no provider).
+    property_verified: bool | None = None
+    property_reason: str = ""
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -388,6 +395,14 @@ class GitPushDeployer:
         result.reason = self.ensure_branch()
 
         code, output = self._run(self.push_command(commit))
+        result.hook_exit_code = code
+        # The post-receive hook writes "built perf-lab with commit=<sha>" to
+        # stdout.  Git forwards remote hook output prefixed with "remote:".
+        # Capture it here so the manifest can distinguish "build failed" from
+        # "build succeeded but restart did not take" (DESIGN.md 19.6).
+        m = re.search(r"built \S+ with commit=([0-9a-f]{7,40})", output)
+        if m:
+            result.hook_commit = m.group(1)
         if code != 0:
             result.reason = f"git push failed ({code}): {output[:400]}"
             return result
@@ -405,6 +420,56 @@ class GitPushDeployer:
         else:
             result.reason = f"target confirmed running {commit} after {waited:.1f}s"
         return result
+
+
+def verify_properties_via_env(
+    changes: "Any",
+    base_url: str,
+    *,
+    timeout_s: float = 5.0,
+) -> tuple[bool, str]:
+    """Rung-2 proof: read each changed property back from ``/actuator/env``.
+
+    §19.6 ladder: stronger than a commit sha because it proves *this specific
+    change* took effect, not just that the right build is running. A sha proves
+    the artifact; a property read-back proves the configuration.
+
+    Returns ``(verified, detail)``. ``verified`` is True only when every change
+    reads back at the expected value. When the endpoint is unreachable or a
+    property is not present, ``verified`` is False and ``detail`` says why —
+    the caller decides whether to treat that as a hard failure or as "bottom rung
+    only" (DESIGN.md §19.6 last two entries of the ladder).
+
+    ``changes`` is any iterable of objects with ``.prop`` (property key) and
+    ``.value`` (applied value). The value comparison is loose — both sides are
+    coerced to strings, because ``/actuator/env`` always returns strings and the
+    profile may have stored an int.
+    """
+    mismatches: list[str] = []
+    read_errors: list[str] = []
+    for change in changes:
+        prop = str(change.prop)
+        expected = str(change.value)
+        try:
+            resp = urllib.request.urlopen(
+                f"{base_url.rstrip('/')}/actuator/env/{prop}",
+                timeout=timeout_s,
+            )
+            payload = json.load(resp)
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            read_errors.append(f"{prop}: {exc}")
+            continue
+        prop_block = payload.get("property") or {}
+        actual = str(prop_block.get("value", "")) if isinstance(prop_block, dict) else ""
+        if not actual:
+            read_errors.append(f"{prop}: not in /actuator/env response")
+        elif actual != expected:
+            mismatches.append(f"{prop}: expected {expected!r}, got {actual!r}")
+    if mismatches:
+        return False, "property mismatch after deploy: " + "; ".join(mismatches)
+    if read_errors:
+        return False, "property read-back unavailable: " + "; ".join(read_errors)
+    return True, "all changed properties confirmed via /actuator/env"
 
 
 @dataclass
