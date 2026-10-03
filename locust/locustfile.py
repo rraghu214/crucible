@@ -101,6 +101,12 @@ class PerfLabUser(HttpUser):
         """payload_serialization."""
         self._get(f"/api/payload?rows={PAYLOAD_ROWS}", name="/api/payload")
 
+    @tag("slow")
+    @task
+    def slow(self):
+        """application_code. No DB, no pool -- pure handler latency."""
+        self._get("/api/slow")
+
 
 @events.quitting.add_listener
 def save_summary(environment, **kwargs):

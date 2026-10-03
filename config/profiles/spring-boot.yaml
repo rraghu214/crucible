@@ -204,6 +204,8 @@ gauges:
   idle: hikaricp.connections.idle
   threads_live: jvm.threads.live
   heap_used: jvm.memory.used
+  tomcat_threads_busy: tomcat.threads.busy
+  tomcat_threads_config_max: tomcat.threads.config.max
 
 # The SAME logical metrics as above, as Prometheus publishes them.
 #
@@ -262,6 +264,8 @@ promql:
     labels:
       area: heap
     aggregate: sum
+  tomcat.threads.busy: tomcat_threads_busy_threads
+  tomcat.threads.config.max: tomcat_threads_config_max_threads
 
 # The SAME logical metrics again, as Datadog publishes them.
 #
@@ -317,6 +321,8 @@ datadog:
     aggregator: sum
     tags:
       area: heap
+  tomcat.threads.busy: tomcat.threads.busy
+  tomcat.threads.config.max: tomcat.threads.config.max
 
 # Histogram series for true service-wide percentiles. Actuator cannot do this:
 # it exposes one instance's pre-aggregated p99, and two instances' p99s do not

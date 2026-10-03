@@ -29,7 +29,7 @@ from typing import Any, Protocol
 
 #: Bumped whenever a field is added, renamed, or its arithmetic changes.
 #: The eval runner refuses snapshots that do not match (``DESIGN.md`` section 7).
-COLLECTOR_VERSION = "1.1.0"
+COLLECTOR_VERSION = "1.2.0"
 
 #: Micrometer timers are reported in seconds. This is the whole of the K3 fix.
 _SECONDS_TO_MS = 1000.0
@@ -305,6 +305,10 @@ def build_snapshot(
             **derive_timer_ms(by_role("gc_pause"), "gc_pause"),
             "heap_used_peak_bytes": peak_during_load(samples.get("heap_used")),
             "threads_live_peak_threads": peak_during_load(samples.get("threads_live")),
+        },
+        "tomcat": {
+            "threads_busy_peak_threads": peak_during_load(samples.get("tomcat_threads_busy")),
+            "threads_config_max_threads": peak_during_load(samples.get("tomcat_threads_config_max")),
         },
         "http": derive_timer_ms(by_role("http_requests"), "request"),
         "endpoint_breakdown": endpoint_breakdown,
