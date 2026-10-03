@@ -1,4 +1,21 @@
-# Replay benchmark — results, 26 September 2026
+# Replay benchmark — results
+
+## Status (4 October 2026)
+
+**Task set v2 replay is pending.** Fixture captures are in progress on Box B
+(sweep running). Once complete, run:
+
+```bash
+crucible bench --tasks config/tasks/ --fixtures results/ \
+    --out results/replay.json --skip-missing-fixtures
+```
+
+The v1 result below (3 tasks, 3 fixtures, Actuator only) stands as history.
+It will not be overwritten; v2 results go in a separate commit.
+
+---
+
+# v1 results — 26 September 2026
 
 **Scope of this run: 3 of the 5 tasks, 3 of the 6 declared fixtures, one metrics
 provider (Actuator).** That is a narrower benchmark than `EVALUATION.md` describes,

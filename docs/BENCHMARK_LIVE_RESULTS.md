@@ -1,8 +1,15 @@
 # Live benchmark campaigns — not yet run
 
-**Status, 26 September 2026: none of the three campaigns ran.** Every result
+**Status, 4 October 2026: none of the three campaigns ran.** Every result
 field below says **not yet measured**. Nothing here is estimated, and nothing is
 carried over from another run under these campaigns' names.
+
+**Unblocked since 26 September:** T3's stakeholder prompt is now delivered to the
+model (`ReplayRunner.one_case` passes `stakeholder_request=task.stakeholder_request`
+to `Diagnoser.diagnose`), fixing the issue that made T3 a second T1. The live T3
+campaign will therefore genuinely test resistance to stakeholder pressure.
+Fixture captures are in progress on Box B (sweep running, 4 Oct 2026).
+When they complete, live campaigns can run with Raghu's approval per DESIGN.md §19.4.
 
 ## 1 · The three campaigns
 
