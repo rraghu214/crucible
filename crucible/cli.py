@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import os
+from pathlib import Path
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -24,6 +25,11 @@ def build_parser() -> argparse.ArgumentParser:
     serve = sub.add_parser("serve", help="run the Crucible HTTP surface")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=int(os.getenv("CRUCIBLE_PORT", "8113")))
+
+    serve_ui = sub.add_parser("serve-ui", help="run the NiceGUI campaign UI")
+    serve_ui.add_argument("--host", default="127.0.0.1")
+    serve_ui.add_argument("--port", type=int, default=int(os.getenv("CRUCIBLE_UI_PORT", "8765")))
+    serve_ui.add_argument("--root", default=".", help="workspace root (default: cwd)")
 
     def with_common(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
         p.add_argument("--profile", default="spring-boot", help="TargetProfile name")
@@ -88,6 +94,13 @@ def build_parser() -> argparse.ArgumentParser:
              "as unknown rather than assumed to be 100%%, because assuming full coverage "
              "turns a 1%% sample into a clean bill of health",
     )
+    run.add_argument(
+        "--stakeholder-request",
+        default="",
+        dest="stakeholder_request",
+        help="free text from the person who raised the investigation; shown to the model "
+             "as context only -- the SLA and measurements remain the authority",
+    )
 
     status = sub.add_parser("status", help="pending approvals, locks and aborts")
     status.add_argument("run_id", nargs="?", default=None)
@@ -119,6 +132,39 @@ def build_parser() -> argparse.ArgumentParser:
     abort.add_argument("--reason", default="")
     abort.add_argument("--clear", action="store_true", help="remove an abort marker instead")
     abort.add_argument("--state-dir", default=None)
+
+    pause = sub.add_parser(
+        "pause", help="pause a campaign at its next experiment boundary (resumable)"
+    )
+    pause.add_argument("run_id")
+    pause.add_argument("--reason", default="")
+    pause.add_argument("--clear", action="store_true", help="remove the pause state instead")
+    pause.add_argument("--state-dir", default=None)
+
+    resume = sub.add_parser("resume", help="continue a paused campaign from where it stopped")
+    resume.add_argument("run_id")
+    resume.add_argument("--state-dir", default=None)
+    # Resume needs the same config flags as run so it can rebuild the campaign.
+    resume.add_argument("--profile", default=None)
+    resume.add_argument("--sla", dest="sla_path", default=None)
+    resume.add_argument("--scenario", default=None)
+    resume.add_argument("--workspace", default=None)
+
+    ceiling = sub.add_parser(
+        "ceiling",
+        help="stepped load ramp to find the service's capacity knee (§20, operator-declared)",
+    )
+    ceiling.add_argument("--profile", default=None)
+    ceiling.add_argument("--sla", dest="sla_path", default=None)
+    ceiling.add_argument("--scenario", default=None)
+    ceiling.add_argument("--users", type=int, default=50, help="users at the first step")
+    ceiling.add_argument("--warmup", type=float, default=120.0, dest="warmup_s")
+    ceiling.add_argument("--measure", type=float, default=300.0, dest="measure_s")
+    ceiling.add_argument("--min-users", type=int, default=0)
+    ceiling.add_argument("--max-users", type=int, default=500)
+    ceiling.add_argument("--step", type=int, default=50, dest="step_size")
+    ceiling.add_argument("--run-id", default="")
+    ceiling.add_argument("--state-dir", default=None)
 
     # `score` calls no model, ever (DESIGN.md 4.6) -- which is what lets scoring
     # weights change without re-running a single experiment.
@@ -201,9 +247,38 @@ def build_parser() -> argparse.ArgumentParser:
         "--plan", action="store_true", dest="show_plan",
         help="show what would be captured and how long it would take; touches nothing",
     )
+    capture.add_argument(
+        "--all-providers", action="store_true", dest="all_providers",
+        help="run ONE load and capture a snapshot for every configured provider "
+             "(actuator always; promql if --promql-url; datadog if keys are set)",
+    )
+    capture.add_argument(
+        "--promql-url", default="", dest="promql_url",
+        help="Prometheus/PromQL base URL for --all-providers, e.g. http://10.0.0.79:9090",
+    )
+    capture.add_argument(
+        "--promql-instance", default="", dest="promql_instance",
+        help="instance label value to pin the PromQL query to one target",
+    )
+    capture.add_argument(
+        "--datadog-url", default=os.getenv("DATADOG_API_BASE", ""), dest="datadog_base_url",
+        help="Datadog API base URL (default: $DATADOG_API_BASE or https://api.datadoghq.com)",
+    )
+    capture.add_argument(
+        "--datadog-api-key", default=os.getenv("DATADOG_API_KEY", ""), dest="datadog_api_key",
+        help="Datadog API key (default: $DATADOG_API_KEY)",
+    )
+    capture.add_argument(
+        "--datadog-app-key", default=os.getenv("DATADOG_APP_KEY", ""), dest="datadog_application_key",
+        help="Datadog Application key (default: $DATADOG_APP_KEY)",
+    )
 
     # `bench` is the replay half: diagnosis, refusal and confidence against saved
     # snapshots, with no live target (DESIGN.md 7).
+    export = sub.add_parser("export", help="export collection config as shareable YAML (no credentials)")
+    with_common(export)
+    export.add_argument("--out", default="", help="output file (default: stdout)")
+
     bench = sub.add_parser("bench", help="replay a task set against captured fixtures")
     bench.add_argument(
         "--tasks",
@@ -228,6 +303,15 @@ def main() -> int:
         import uvicorn
 
         uvicorn.run("crucible.main:app", host=args.host, port=args.port, reload=False)
+        return 0
+
+    if args.command == "serve-ui":
+        os.environ.setdefault("CRUCIBLE_ROOT", str(Path(args.root).resolve()))
+        from nicegui import ui  # noqa: PLC0415
+
+        from .ui import nicegui_app as _nicegui_app  # noqa: PLC0415,F401
+        ui.run(host=args.host, port=args.port, title="Crucible", favicon="🔥",
+               reload=False, show=False)
         return 0
 
     from .perf import commands
@@ -267,6 +351,33 @@ def main() -> int:
         if args.clear:
             return commands.cmd_clear_abort(args.run_id, state_dir=args.state_dir)
         return commands.cmd_abort(args.run_id, reason=args.reason, state_dir=args.state_dir)
+    if args.command == "pause":
+        if args.clear:
+            return commands.cmd_clear_pause(args.run_id, state_dir=args.state_dir)
+        return commands.cmd_pause(args.run_id, reason=args.reason, state_dir=args.state_dir)
+    if args.command == "resume":
+        return commands.cmd_resume(
+            args.run_id,
+            state_dir=args.state_dir,
+            profile_name=getattr(args, "profile", None),
+            sla_path=getattr(args, "sla_path", None),
+            scenario_name=getattr(args, "scenario", None),
+            workspace=getattr(args, "workspace", None),
+        )
+    if args.command == "ceiling":
+        return commands.cmd_ceiling(
+            profile_name=getattr(args, "profile", None),
+            sla_path=getattr(args, "sla_path", None),
+            scenario_name=getattr(args, "scenario", None),
+            users=args.users,
+            warmup_s=args.warmup_s,
+            measure_s=args.measure_s,
+            min_users=args.min_users,
+            max_users=args.max_users,
+            step_size=args.step_size,
+            run_id=args.run_id,
+            state_dir=args.state_dir,
+        )
     if args.command == "run":
         return commands.cmd_run(
             profile_name=args.profile,
@@ -286,6 +397,7 @@ def main() -> int:
             jaeger_url=args.jaeger_url,
             jaeger_service=args.jaeger_service,
             trace_sampling_rate_pct=args.trace_sampling_rate,
+            stakeholder_request=args.stakeholder_request,
         )
     if args.command == "score":
         return commands.cmd_score(
@@ -322,7 +434,15 @@ def main() -> int:
             tag=args.tag,
             revalidate=args.revalidate,
             show_plan=args.show_plan,
+            all_providers=args.all_providers,
+            promql_url=args.promql_url,
+            promql_instance=args.promql_instance,
+            datadog_base_url=args.datadog_base_url,
+            datadog_api_key=args.datadog_api_key,
+            datadog_application_key=args.datadog_application_key,
         )
+    if args.command == "export":
+        return commands.cmd_export(sla_path=args.sla, profile_name=args.profile, out=args.out)
     if args.command == "bench":
         return commands.cmd_bench(
             tasks_path=args.tasks,
