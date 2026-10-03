@@ -319,7 +319,7 @@ def _wait_for_commit(
 
 def _run_capture(
     fixture_id: str,
-    provider: str,
+    providers: list[str],
     slo_path: str,
     profile_path: str,
     results_dir: str,
@@ -327,15 +327,31 @@ def _run_capture(
     promql_instance: str,
     dry_run: bool,
 ) -> bool:
+    """Run crucible capture for a fixture.
+
+    If the fixture declares only one provider, use ``--provider``.
+    If it declares multiple, use ``--all-providers`` so all three measure the
+    SAME load window — the provider-agreement comparison requires identical
+    traffic, not three separate runs.  Datadog credentials are read from
+    environment variables (DATADOG_API_KEY, DATADOG_APP_KEY, DATADOG_API_BASE)
+    by crucible's own fallback, so they do not appear in argv.
+    """
+    multi = len(providers) > 1
+    provider_label = "all-providers" if multi else providers[0]
+
     cmd = [
         "crucible", "capture",
         "--sla", slo_path,
         "--profile", profile_path,
         "--fixture", fixture_id,
-        "--provider", provider,
         "--out", results_dir,
     ]
-    if provider == "promql" and promql_url:
+    if multi:
+        cmd += ["--all-providers"]
+    else:
+        cmd += ["--provider", providers[0]]
+
+    if promql_url and ("promql" in providers):
         cmd += ["--promql-url", promql_url]
         if promql_instance:
             cmd += ["--promql-instance", promql_instance]
@@ -343,12 +359,12 @@ def _run_capture(
     if dry_run:
         log.info("[dry-run] would run: %s", " ".join(cmd))
         return True
-    log.info("Capturing fixture=%s provider=%s", fixture_id, provider)
-    result = subprocess.run(cmd, capture_output=False, timeout=900)
+    log.info("Capturing fixture=%s providers=%s", fixture_id, provider_label)
+    result = subprocess.run(cmd, capture_output=False, timeout=1200)
     if result.returncode != 0:
-        log.error("capture failed for %s/%s (exit %d)", fixture_id, provider, result.returncode)
+        log.error("capture failed for %s/%s (exit %d)", fixture_id, provider_label, result.returncode)
         return False
-    log.info("Captured %s/%s", fixture_id, provider)
+    log.info("Captured %s/%s", fixture_id, provider_label)
     return True
 
 
@@ -374,7 +390,33 @@ def _mark_validated(fixture_path: Path) -> None:
 # Main sweep loop
 # ---------------------------------------------------------------------------
 
+def _load_dotenv(env_path: Path) -> None:
+    """Load KEY=VALUE pairs from an .env file into os.environ.
+
+    Used so that DATADOG_API_KEY / DATADOG_APP_KEY / DATADOG_API_BASE reach
+    ``crucible capture --all-providers`` via the env-var fallback in cli.py
+    without passing secrets on the command line.  Silently skips if the file
+    does not exist.
+    """
+    if not env_path.exists():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, _, val = stripped.partition("=")
+        key = key.strip()
+        val = val.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = val
+    log.info("Loaded env from %s", env_path)
+
+
 def sweep(args: argparse.Namespace) -> int:
+    # Load Datadog credentials from ~/crucible/.env so they reach crucible
+    # capture subprocesses via env-var fallback (not on the command line).
+    _load_dotenv(Path.home() / "crucible" / ".env")
+
     fixtures_dir = Path(args.fixtures_dir)
     workspace = Path(args.workspace)
     app_props = workspace / "src" / "main" / "resources" / "application.properties"
@@ -494,23 +536,22 @@ def sweep(args: argparse.Namespace) -> int:
             continue
 
         # ----------------------------------------------------------------
-        # Step 5: capture through each provider
+        # Step 5: capture (one call; --all-providers for multi-provider)
         # ----------------------------------------------------------------
         capture_ok = True
-        for provider in spec.providers:
-            ok = _run_capture(
-                fixture_id=spec.id,
-                provider=provider,
-                slo_path=args.slo,
-                profile_path=args.profile,
-                results_dir=args.results_dir,
-                promql_url=args.promql_url,
-                promql_instance=args.promql_instance,
-                dry_run=args.dry_run,
-            )
-            if not ok:
-                capture_ok = False
-                log.error("Capture failed for %s/%s", spec.id, provider)
+        ok = _run_capture(
+            fixture_id=spec.id,
+            providers=spec.providers,
+            slo_path=args.slo,
+            profile_path=args.profile,
+            results_dir=args.results_dir,
+            promql_url=args.promql_url,
+            promql_instance=args.promql_instance,
+            dry_run=args.dry_run,
+        )
+        if not ok:
+            capture_ok = False
+            log.error("Capture failed for %s", spec.id)
 
         if capture_ok:
             if not args.dry_run:

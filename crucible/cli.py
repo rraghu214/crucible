@@ -420,6 +420,7 @@ def main() -> int:
             json_out=args.json_out,
         )
     if args.command == "capture":
+        import os as _os  # noqa: PLC0415
         return commands.cmd_capture(
             fixture_id=args.fixture_id,
             fixture_config_dir=args.fixture_config,
@@ -437,9 +438,12 @@ def main() -> int:
             all_providers=args.all_providers,
             promql_url=args.promql_url,
             promql_instance=args.promql_instance,
-            datadog_base_url=args.datadog_base_url,
-            datadog_api_key=args.datadog_api_key,
-            datadog_application_key=args.datadog_application_key,
+            # CLI args take precedence; fall back to env vars so the capture
+            # sweep on Box B can use --all-providers without passing keys on
+            # the command line (they live in ~/crucible/.env already).
+            datadog_base_url=args.datadog_base_url or _os.environ.get("DATADOG_API_BASE", ""),
+            datadog_api_key=args.datadog_api_key or _os.environ.get("DATADOG_API_KEY", ""),
+            datadog_application_key=args.datadog_application_key or _os.environ.get("DATADOG_APP_KEY", ""),
         )
     if args.command == "export":
         return commands.cmd_export(sla_path=args.sla, profile_name=args.profile, out=args.out)
