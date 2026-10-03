@@ -1237,6 +1237,7 @@ def cmd_bench(
     out: str = "results/replay.json",
     provider: str = "gemini",
     model: str = "",
+    skip_missing_fixtures: bool = False,
 ) -> int:
     """Replay a task set against captured snapshots. No live target needed.
 
@@ -1293,7 +1294,12 @@ def cmd_bench(
         # always T1 on perflab_pool_starved -- the headline fixture was the one
         # replay could never measure, on every run, without looking flaky.
         await gateway.warm_up()
-        return await runner.run(tasks, fixture_dir, task_set_name=str(Path(tasks_path).name))
+        return await runner.run(
+            tasks,
+            fixture_dir,
+            task_set_name=str(Path(tasks_path).name),
+            skip_missing_fixtures=skip_missing_fixtures,
+        )
 
     print(f"replaying {len(tasks)} task(s) against fixtures in {fixture_dir}")
     try:

@@ -182,6 +182,9 @@ def check_task_fixture_agreement(
     Returns the disagreements, by name. A task naming a fixture that was not
     loaded is reported too: silently scoring a four-fixture task set against three
     fixtures is how a benchmark shrinks without anybody noticing.
+
+    See also :func:`find_missing_fixtures` for the subset that are just missing
+    (not yet captured), which ``--skip-missing-fixtures`` treats as warnings.
     """
     by_id = {f.spec.id: f.spec for f in fixtures}
     problems: list[str] = []
@@ -225,6 +228,24 @@ def check_task_fixture_agreement(
                         f"{sorted(spec.trap_properties)}"
                     )
     return problems
+
+
+def find_missing_fixtures(
+    tasks: list[ReplayTask], fixtures: list[CapturedFixture]
+) -> list[str]:
+    """Fixture IDs referenced by tasks that are not in the loaded set.
+
+    A subset of :func:`check_task_fixture_agreement`'s results — only the
+    "not in the loaded set" entries, returned as fixture IDs so the caller
+    can filter tasks rather than parse error strings.
+    """
+    by_id = {f.spec.id for f in fixtures}
+    missing: set[str] = set()
+    for task in tasks:
+        for fixture_id in task.fixtures:
+            if fixture_id not in by_id:
+                missing.add(fixture_id)
+    return sorted(missing)
 
 
 @dataclass
@@ -356,15 +377,39 @@ class ReplayRunner:
         fixture_dir: str | Path,
         *,
         task_set_name: str = "",
+        skip_missing_fixtures: bool = False,
     ) -> ReplayResult:
-        """Every applicable (task, fixture) pair, in a stable order."""
+        """Every applicable (task, fixture) pair, in a stable order.
+
+        ``skip_missing_fixtures``: when True, tasks that reference a fixture not
+        found in ``fixture_dir`` are skipped with a warning instead of aborting
+        the entire run. Use this to run a partial benchmark while some fixtures
+        (e.g. JVM flag fixtures that need manual Box-A setup) have not been
+        captured yet. A full run (all fixtures present) does not need it.
+        """
         fixtures, refused = load_fixtures(fixture_dir)
         if not fixtures and not refused:
             raise ReplayError(
                 f"no fixtures found in {fixture_dir}. Replay reads captured "
                 "snapshots; without them there is nothing to ask the model about."
             )
-        disagreements = check_task_fixture_agreement(tasks, fixtures)
+
+        if skip_missing_fixtures:
+            missing = find_missing_fixtures(tasks, fixtures)
+            if missing:
+                print(
+                    f"  NOTE: {len(missing)} fixture(s) not captured yet — "
+                    f"tasks that require them are skipped: {', '.join(missing)}"
+                )
+                tasks = [
+                    t for t in tasks
+                    if not any(fid in missing for fid in t.fixtures)
+                ]
+            # After filtering, run the normal agreement check on remaining tasks.
+            disagreements = check_task_fixture_agreement(tasks, fixtures)
+        else:
+            disagreements = check_task_fixture_agreement(tasks, fixtures)
+
         if disagreements:
             raise ReplayError(
                 "the task set and the fixtures disagree about ground truth, so the "

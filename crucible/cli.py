@@ -292,6 +292,14 @@ def build_parser() -> argparse.ArgumentParser:
     bench.add_argument("--out", default="results/replay.json")
     bench.add_argument("--provider", default=os.getenv("CRUCIBLE_GATEWAY_PROVIDER", "gemini"))
     bench.add_argument("--model", default=os.getenv("CRUCIBLE_MODEL", ""))
+    bench.add_argument(
+        "--skip-missing-fixtures",
+        action="store_true",
+        default=False,
+        help="skip tasks whose required fixtures have not been captured yet, "
+             "instead of aborting. Use for partial runs while JVM or other "
+             "special-setup fixtures are not yet available.",
+    )
 
     return parser
 
@@ -456,6 +464,7 @@ def main() -> int:
             out=args.out,
             provider=args.provider,
             model=args.model,
+            skip_missing_fixtures=args.skip_missing_fixtures,
         )
     raise SystemExit(f"unhandled command {args.command!r}")
 

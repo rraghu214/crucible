@@ -508,3 +508,101 @@ class TestTheFirstReplayCaseIsNotLostToTheWarmUp:
         first = json.loads(out.read_text(encoding="utf-8"))["cases"][0]
         assert first["error"] == "", first["error"]
         assert first["served_by_model"] == "fake-model"
+
+
+# ---------------------------------------------------------------------------
+# 22.7 — skip-missing-fixtures: partial benchmark while JVM fixtures pending
+#
+# DRAFTED by Claude Code, 4 October 2026. NOT YET REVIEWED by the operator.
+#
+# JVM flag fixtures (gc_pressure, gc_and_pool) need manual Box-A setup and are
+# often not captured yet when a partial benchmark run is useful. The default
+# behaviour -- refusing the whole run -- is correct when everything should be
+# present; --skip-missing-fixtures trades completeness for the ability to run
+# at all. The operator's judgement: does the partial result give enough signal?
+# ---------------------------------------------------------------------------
+
+
+from crucible.perf.replay import find_missing_fixtures  # noqa: E402
+
+
+class TestSkipMissingFixtures:
+    """Tests for --skip-missing-fixtures: partial benchmark while some fixtures
+    have not been captured yet (e.g. JVM flag fixtures needing manual setup).
+    """
+
+    def test_find_missing_returns_fixture_ids_not_in_loaded_set(self, tmp_path):
+        _write_fixture(tmp_path, "pool_starved", "connection_pool_exhaustion")
+        from crucible.perf.fixtures import load_fixtures
+        fixtures, _ = load_fixtures(tmp_path)
+        tasks = [
+            ReplayTask(id="T1", task_class="A", fixtures=("pool_starved",)),
+            ReplayTask(id="T2", task_class="B", fixtures=("pool_starved", "gc_pressure")),
+        ]
+
+        missing = find_missing_fixtures(tasks, fixtures)
+
+        assert missing == ["gc_pressure"]
+
+    def test_find_missing_returns_empty_when_all_fixtures_present(self, tmp_path):
+        _write_fixture(tmp_path, "pool_starved", "connection_pool_exhaustion")
+        _write_fixture(tmp_path, "gc_pressure", "gc_pressure")
+        from crucible.perf.fixtures import load_fixtures
+        fixtures, _ = load_fixtures(tmp_path)
+        tasks = [
+            ReplayTask(id="T1", task_class="A", fixtures=("pool_starved",)),
+            ReplayTask(id="T2", task_class="B", fixtures=("pool_starved", "gc_pressure")),
+        ]
+
+        missing = find_missing_fixtures(tasks, fixtures)
+
+        assert missing == []
+
+    def test_skip_missing_removes_tasks_with_uncaptured_fixtures(self, tmp_path):
+        """T2 references gc_pressure which is not captured; it should be
+        skipped, and T1 (pool_starved only) should still run."""
+        _write_fixture(tmp_path, "pool_starved", "connection_pool_exhaustion")
+        diagnoser = _ScriptedDiagnoser(
+            _proposal(cause="connection_pool_exhaustion"),
+        )
+        runner = ReplayRunner(diagnoser=diagnoser)
+        tasks = [
+            ReplayTask(id="T1", task_class="A", fixtures=("pool_starved",)),
+            ReplayTask(id="T2", task_class="B", fixtures=("pool_starved", "gc_pressure")),
+        ]
+
+        result = asyncio.run(
+            runner.run(tasks, tmp_path, skip_missing_fixtures=True)
+        )
+
+        # Only the T1/pool_starved case should have run (T2 skipped: gc_pressure missing)
+        assert len(result.cases) == 1
+        assert result.cases[0].task_id == "T1"
+
+    def test_skip_missing_raises_when_ground_truth_disagrees(self, tmp_path):
+        """Missing fixtures are skipped; mismatched ground truth is still an error."""
+        _write_fixture(tmp_path, "pool_starved", "connection_pool_exhaustion")
+        runner = ReplayRunner(diagnoser=_ScriptedDiagnoser(_proposal()))
+        tasks = [
+            ReplayTask(
+                id="T1",
+                task_class="A",
+                fixtures=("pool_starved",),
+                asserts_fixture={"cause_family": "gc_pressure"},  # wrong ground truth
+            ),
+        ]
+
+        with pytest.raises(ReplayError, match="disagree"):
+            asyncio.run(runner.run(tasks, tmp_path, skip_missing_fixtures=True))
+
+    def test_default_mode_still_refuses_when_fixture_missing(self, tmp_path):
+        """The default (skip_missing_fixtures=False) is unchanged: a missing
+        fixture still aborts the whole run."""
+        _write_fixture(tmp_path, "pool_starved", "connection_pool_exhaustion")
+        runner = ReplayRunner(diagnoser=_ScriptedDiagnoser(_proposal()))
+        tasks = [
+            ReplayTask(id="T2", task_class="B", fixtures=("pool_starved", "gc_pressure")),
+        ]
+
+        with pytest.raises(ReplayError, match="not in the loaded set"):
+            asyncio.run(runner.run(tasks, tmp_path))
