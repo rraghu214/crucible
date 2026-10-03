@@ -97,21 +97,14 @@ work. Fix only when touching the file for another reason.
 - ~~**Policy-memory SLA enforcement was not wired in `build_campaign`.**~~ **FIXED 4 Oct 2026.**
   `build_campaign` now constructs a `MemoryStore(state_dir / "memory.db")` and passes it to `Campaign.memory_store`. The existing `publish_sla()` call in `_run_locked` therefore runs unconditionally for every live campaign, satisfying the "enforced twice" requirement in AGENTS.md non-negotiable 4.
 
-- **Neither PromQL nor Datadog can be captured on Box A today.** Prometheus is not
-  running on `10.0.0.79:9090` (connection refused, 26 September 2026) and no
-  Datadog credentials exist on Box B. Both adapters are implemented and unit
-  tested; neither has been exercised against a live backend.
-
-  This is the gap that matters most for the product's central claim. "Whatever
-  your stack" rests on provider independence, and the honest evidence for it is
-  the same target state diagnosed identically through three backends -- which is
-  exactly what `perflab_pool_starved` and `perflab_gc_pressure` are tagged for and
-  cannot yet deliver. Until then the benchmark demonstrates ONE provider, and the
-  claim must say so.
-
-  Prometheus is the cheap half: it is already in the §16 target stack and needs a
-  container on Box A plus the scrape config. Datadog needs an account and an
-  agent, and its free tier is 1 host with 1-day retention.
+- ~~**Neither PromQL nor Datadog can be captured on Box A today.**~~ **FIXED 4 Oct 2026.**
+  Prometheus is confirmed running on Box A at `10.0.0.79:9090`, reporting
+  `hikaricp_connections_max{application="perf-lab"}=20` (baseline). Datadog
+  credentials (`DATADOG_API_KEY`, `DATADOG_APP_KEY`, `DATADOG_API_BASE`) are
+  set in `~/crucible/.env` on Box B. `build_multi_measure` is wired. The
+  capture sweep will exercise both adapters when it reaches `perflab_pool_starved`
+  (providers: actuator, promql, datadog). Until those snapshots are captured and
+  validated, the provider-agreement claim in EVALUATION.md is marked pending.
 
   ~~**Also, 26 September 2026: `build_measure` reads Actuator and nothing else.**~~
   **FIXED 4 Oct 2026.** `build_multi_measure` runs ONE load and queries all three
