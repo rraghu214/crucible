@@ -472,16 +472,30 @@ def sweep(args: argparse.Namespace) -> int:
         # Step 1: set JVM flags on Box A if needed
         # ----------------------------------------------------------------
         if spec.jvm_flags:
+            shell_key = getattr(args, "boxa_shell_key", "") or ""
+            if not shell_key:
+                log.warning(
+                    "Skipping %s: --boxa-shell-key not set. "
+                    "JVM fixtures need shell access to Box A. "
+                    "Copy the Box A instance key to Box B as "
+                    "~/.ssh/perflab_boxa_shell and re-run with "
+                    "--boxa-shell-key ~/.ssh/perflab_boxa_shell --fixture %s",
+                    spec.id, spec.id,
+                )
+                failed.append(spec.id)
+                continue
             ok = _set_boxa_java_opts(
-                spec.jvm_flags, args.boxa_ip, args.key_path, args.dry_run
+                spec.jvm_flags, args.boxa_ip, shell_key, args.dry_run
             )
             if not ok:
                 log.error("Skipping %s: could not set JVM flags on Box A", spec.id)
                 failed.append(spec.id)
                 continue
         else:
-            # Ensure any previous JVM override is cleared
-            _set_boxa_java_opts("", args.boxa_ip, args.key_path, args.dry_run)
+            # Ensure any previous JVM override is cleared (deploy key can't shell;
+            # the baseline is no PERFLAB_JAVA_OPTS at all, which is set by the hook
+            # default when the key is absent from the env file)
+            pass
 
         # ----------------------------------------------------------------
         # Step 2: apply bottleneck_config to application.properties
@@ -568,7 +582,22 @@ def sweep(args: argparse.Namespace) -> int:
         # ----------------------------------------------------------------
         log.info("Restoring baseline after %s", spec.id)
         _write_properties_updates(app_props, _BASELINE_APP_PROPERTIES)
-        _set_boxa_java_opts("", args.boxa_ip, args.key_path, args.dry_run)
+        if spec.jvm_flags:
+            # Clear JVM opts with the shell key — the deploy key can't shell.
+            shell_key = getattr(args, "boxa_shell_key", "") or ""
+            if shell_key:
+                _set_boxa_java_opts("", args.boxa_ip, shell_key, args.dry_run)
+            # If no shell key, PERFLAB_JAVA_OPTS persists on Box A until manually
+            # cleared. Warn and continue — the restart via the post-receive hook
+            # will still pick up the previous value. The user must clear it manually
+            # before running a non-JVM fixture that follows a JVM one.
+            else:
+                log.warning(
+                    "Cannot clear PERFLAB_JAVA_OPTS on Box A after %s — "
+                    "no --boxa-shell-key. Clear it manually: "
+                    "ssh ubuntu@%s 'echo > ~/perflab.env'",
+                    spec.id, args.boxa_ip,
+                )
         ok_b, sha_b = _commit_and_push(
             workspace, app_props,
             f"sweep: restore baseline after {spec.id}",
@@ -607,8 +636,13 @@ def main() -> None:
     parser.add_argument("--results-dir", default="results", help="Where crucible capture writes snapshots")
     parser.add_argument("--workspace", required=True, help="Local perf-lab checkout (Box B)")
     parser.add_argument("--boxa-ip", default="10.0.0.79", help="Box A private IP")
-    parser.add_argument("--key-path", default=os.path.expanduser("~/.ssh/perflab-deploy-key"),
-                        help="SSH key for Box A (for JVM-flag fixtures)")
+    parser.add_argument("--key-path", default=os.path.expanduser("~/.ssh/perflab_deploy"),
+                        help="SSH deploy key for Box A git-push (git-shell restricted)")
+    parser.add_argument("--boxa-shell-key", default="",
+                        help="SSH key granting shell access to Box A; required for JVM-flag "
+                             "fixtures (gc_pressure, gc_and_pool). Without it those fixtures "
+                             "are skipped. Copy the Box A instance key here as "
+                             "~/.ssh/perflab_boxa_shell on Box B.")
     parser.add_argument("--remote", default="perftest", help="git remote for Box A's bare repo")
     parser.add_argument("--branch", default="perftest_sandbox", help="sandbox branch on Box A")
     parser.add_argument("--version-url", default="http://10.0.0.79:8080/api/version",
