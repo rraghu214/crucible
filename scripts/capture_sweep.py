@@ -329,11 +329,11 @@ def _run_capture(
 ) -> bool:
     cmd = [
         "crucible", "capture",
-        "--slo", slo_path,
+        "--sla", slo_path,
         "--profile", profile_path,
         "--fixture", fixture_id,
         "--provider", provider,
-        "--results-dir", results_dir,
+        "--out", results_dir,
     ]
     if provider == "promql" and promql_url:
         cmd += ["--promql-url", promql_url]
