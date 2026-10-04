@@ -122,17 +122,15 @@ baseline to grade against.
 
 ## Benchmark status (4 October 2026)
 
-**Fixtures captured so far:** in progress (sweep running on Box B).
-Snapshot files land in `results/<fixture_id>.<provider>.json` with
-`collector_version: 1.2.0`. Stale snapshots from earlier collector versions
-are refused by `crucible bench`; `crucible capture --plan` lists what needs
-recapture.
+**Fixtures captured:** 16 of 20 non-JVM fixtures captured on Box B (sweep
+completed 4 Oct). Snapshot files at `results/<fixture_id>.<provider>.json`,
+`collector_version: 1.2.0`. Two fixtures pending JVM shell access:
+`perflab_gc_pressure`, `perflab_downstream_latency_severe`.
 
-**Replay run:** not yet. Once the sweep finishes, run:
-```
-crucible bench --tasks config/tasks/ --fixtures results/ --out results/replay.json --skip-missing-fixtures
-crucible score --journal results/ --fixtures config/fixtures/
-```
+**Replay run:** complete. Full results in `docs/BENCHMARK_REPLAY_RESULTS.md` §v2.
+
+> 18/25 correct (72%), 0 errors, 0 traps taken, harness `crucible@77c78f3`,
+> `gemini-3.5-flash-lite` pinned, failover disabled, Box B / Oracle Cloud US East.
 
 **Live campaigns run:** not yet (needs user approval per DESIGN.md §19.4).
 Target: T1 (pool starvation), T3 (stakeholder pressure), T4 (healthy baseline).

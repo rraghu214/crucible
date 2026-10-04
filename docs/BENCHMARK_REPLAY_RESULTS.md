@@ -1,17 +1,60 @@
 # Replay benchmark — results
 
-## Status (4 October 2026)
+## v2 results — 4 October 2026
 
-**Task set v2 replay is pending.** Fixture captures are in progress on Box B
-(sweep running). Once complete, run:
+**18/25 correct (72%), 0 errors, 0 traps taken, 0 refused fixtures.**
 
-```bash
-crucible bench --tasks config/tasks/ --fixtures results/ \
+| | |
+|---|---|
+| Harness | `crucible@77c78f3` |
+| Model | `gemini-3.5-flash-lite` pinned, served by `gemini_1` throughout |
+| Failover | disabled (`CRUCIBLE_GATEWAY_FALLBACK_PROVIDERS` empty) |
+| Gateway | hosted `glc_v5` (https://glc-v5-rraghu214.onrender.com) |
+| Tasks | 18 (T1–T17 + T3b), all five classes A–E |
+| Fixtures | 16 of 20 captured (Actuator); `perflab_gc_pressure` and `perflab_downstream_latency_severe` not yet captured — skipped via `--skip-missing-fixtures` |
+| Multi-provider | `perflab_pool_starved`: Actuator + PromQL + Datadog captured |
+| Run from | Box B / Oracle Cloud US East (Ashburn) |
+
+```
+uv run crucible bench --tasks config/tasks/ --fixtures results/ \
     --out results/replay.json --skip-missing-fixtures
 ```
 
+| Metric | Value |
+|---|---|
+| Cases | 28 |
+| Errors | 0 |
+| Abstentions | 13 |
+| Scored against ground truth | 25 |
+| **Diagnosis correct** | **18 / 25 (72%)** |
+| Traps taken | 0 |
+| Refused fixtures | 0 |
+| Spans multiple models | False |
+
+**Note on traps:** 6 trap fixtures were never tempted (`perflab_pool_starved`,
+`perflab_pool_starved_mild`, `perflab_pool_starved_moderate`,
+`perflab_downstream_latency_moderate`, `perflab_inefficient_query_moderate`,
+`perflab_inefficient_query_severe`). Zero violations on an untempted trap is an
+untested zero, not a clean pass.
+
+**The claim** (in `EVALUATION.md` format):
+
+> Under task set v2 — 18 tasks, 16 of 20 fixtures captured, harness
+> `crucible@77c78f3`, `gemini-3.5-flash-lite` pinned and failover disabled,
+> on Box B / Oracle Cloud US East: diagnosis correct on 18 of 25 cases with
+> a ground-truth cause; 13 abstentions (correct on healthy/near-SLA fixtures);
+> 0 errors; 0 trap properties proposed (trap never tempted — untested zero);
+> 0 refused fixtures. Live campaign outcomes (VERIFIED_FIX / HONEST_FAILURE /
+> FALSE_SUCCESS) not yet measured — replay cannot produce outcomes.
+
+---
+
+## v1 results — 26 September 2026 (history)
+
+**Task set v2 replay is pending** note removed — v2 ran above.
+
 The v1 result below (3 tasks, 3 fixtures, Actuator only) stands as history.
-It will not be overwritten; v2 results go in a separate commit.
+It will not be overwritten.
 
 ---
 
