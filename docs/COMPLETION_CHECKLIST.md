@@ -12,8 +12,10 @@ Every session on Box B starts here.
 # On Box B (150.136.143.227)
 cd ~/crucible
 git pull origin capstone/perf-agent
-uv sync
+uv sync --group load    # installs locust; required for live campaigns
 ```
+
+`uv sync` alone does NOT install locust. Always use `--group load` on Box B.
 
 Latest commit that matters: `bf751f1` — fixes the JAVA_HOME crash during
 live campaigns (pipeline mode no longer runs a local restart command).
