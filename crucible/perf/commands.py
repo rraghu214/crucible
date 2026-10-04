@@ -405,7 +405,9 @@ def _apply_revert_rehearsal(profile: TargetProfile, workspace: str) -> list[Pref
         profile=profile,
         workspace=Path(workspace),
         restarter=(
-            ManualRestarter(profile.restart)
+            None
+            if profile.deploy.automated
+            else ManualRestarter(profile.restart)
             if profile.restart.manual
             else CommandRestarter(profile.restart, workspace=workspace)
         ),
@@ -977,8 +979,15 @@ def build_campaign(
         else ManualDeployer(target=profile.deploy)
     )
 
+    # Pipeline deploys (push → hook → rebuild → restart) handle the restart on
+    # the target box. Running a local restart command before the push would try
+    # to start the service on Box B, which is wrong. Set restarter=None so the
+    # applicator skips the local step; the deploy hook is what puts the change
+    # in force (DESIGN.md §19, applicator.py lines 577–581).
     restarter = (
-        ManualRestarter(profile.restart)
+        None
+        if profile.deploy.automated
+        else ManualRestarter(profile.restart)
         if profile.restart.manual
         else CommandRestarter(profile.restart, workspace=workspace)
     )
