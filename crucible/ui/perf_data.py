@@ -101,7 +101,11 @@ def list_campaigns(ctx: PerfContext) -> tuple[list[dict[str, Any]], list[tuple[s
         try:
             loaded.append(load_campaign(path))
         except ReportError as exc:
-            skipped.append((path.name, str(exc)))
+            # Silently skip files that are simply not campaign manifests
+            # (no 'experiments' key) — these are capture run records or
+            # other intermediate JSON, not broken campaigns.
+            if "not a campaign manifest" not in str(exc):
+                skipped.append((path.name, str(exc)))
     loaded.sort(key=lambda c: float(c.get("started_at_epoch_s") or 0.0))
     return loaded, skipped
 
