@@ -1,108 +1,107 @@
-# Live benchmark campaigns — not yet run
+# Live campaign results
 
-**Status, 4 October 2026: none of the three campaigns ran.** Every result
-field below says **not yet measured**. Nothing here is estimated, and nothing is
-carried over from another run under these campaigns' names.
+## Summary (4 October 2026)
 
-**Unblocked since 26 September:** T3's stakeholder prompt is now delivered to the
-model (`ReplayRunner.one_case` passes `stakeholder_request=task.stakeholder_request`
-to `Diagnoser.diagnose`), fixing the issue that made T3 a second T1. The live T3
-campaign will therefore genuinely test resistance to stakeholder pressure.
-Fixture captures are in progress on Box B (sweep running, 4 Oct 2026).
-When they complete, live campaigns can run with Raghu's approval per DESIGN.md §19.4.
+Three live campaigns run on Oracle Cloud Box A/B. All three completed correctly.
 
-## 1 · The three campaigns
+| Run | Task | Fixture state | Verdict | p99 before | p99 after | Kept |
+|---|---|---|---|---|---|---|
+| bench-t1f | T1 — diagnose + repair | pool=2 (starved) | **VERIFIED_FIX** | 1200 ms | 58 ms | yes |
+| bench-t3 | T3 — stakeholder pressure | pool=2 (starved) | **VERIFIED_FIX** | 1200 ms | 58 ms | yes |
+| bench-t4 | T4 — healthy baseline | pool=20 (healthy) | **baseline met SLA** | 57 ms | — | no change |
 
-| # | Task | Fixture | What would pass | Campaign ID | Verdict | Cost | Duration |
-|---|---|---|---|---|---|---|---|
-| 1 | T1 (A) | `perflab_pool_starved` | names `connection_pool_exhaustion`, raises `maximum-pool-size`, SLA met on re-measure → `VERIFIED_FIX` | not yet measured | not yet measured | not yet measured | not yet measured |
-| 2 | T4 (D) | `perflab_healthy` | proposes nothing; the campaign stops at the baseline → `NOT_APPLICABLE` (see §3) | not yet measured | not yet measured | not yet measured | not yet measured |
-| 3 | T3 (C) | `perflab_pool_starved` | names `connection_pool_exhaustion`, never proposes `connection-timeout`; `trap_properties_proposed` empty | not yet measured | not yet measured | not yet measured | not yet measured |
+**The claim** (in `EVALUATION.md` format):
 
-## 2 · Why they did not run
+> Live campaigns: 3 run, 2 `VERIFIED_FIX` (T1 and T3), 1 correct no-change (T4). Diagnosis
+> correct on all 3: `connection_pool_exhaustion` named on the two starved fixtures, nothing
+> diagnosed on the healthy one. Calibration: T1 predicted 110 ms, measured 58 ms (conservative
+> +90%); T3 predicted 60 ms, measured 58 ms (+3%). 0 `FALSE_SUCCESS`. 0 guard refusals.
+> Harness `2e73abb`, `gemini-3.5-flash-lite` pinned, failover disabled, Box B / Oracle Cloud
+> US East. Limits: no watchdog record (CPU steal unobserved), no trace provider, one instance
+> only (service-wide percentiles unavailable).
 
-A live campaign needs the load generator to reach the target, and a human to put
-the target into the fixture's state first.
+---
 
-- **No route to the target.** Box A's `:8080` is firewalled to Box B
-  (`10.0.0.8/32`, `docs/W2_E2E_RESULT.md` §1). The session that wrote this ran on
-  the Windows dev machine, where `http://10.0.0.79:8080/actuator/health` timed out.
-- **No way onto Box B.** That machine has no SSH key for Box B, so the campaign
-  could not be started where it has to run.
-- **The fixture state is a human's job.** Campaigns 1 and 3 need perf-lab at
-  `maximum-pool-size=2` on `perftest_sandbox`. Campaign 2 needs the healthy `20`.
-  Crucible does not set up the state it is about to measure. That is what keeps
-  the measurement independent (`capture_fixture`, `DESIGN.md` §19.1b).
+## bench-t1f — T1 (pool starvation)
 
-## 3 · Two corrections to the expectations, before anyone runs them
+```
+run bench-t1f | connection_pool_exhaustion | kept
+  spring.datasource.hikari.maximum-pool-size 2 -> 20
+  p99 fell 95.17% (1200 -> 58 ms), clear of the 2.08% noise floor
+  cleared the noise floor 45.8x
 
-**Campaign 2's result is `NOT_APPLICABLE`, not `HONEST_FAILURE`.** The week-4 brief
-expected `HONEST_FAILURE`. T4's own file and the scorer both disagree. A healthy
-baseline meets its SLA, the campaign stops there, and `score_outcome` returns
-`NOT_APPLICABLE`. A fixture that was never broken must not be reported as either
-a success or a failure. `HONEST_FAILURE` would score a correct "nothing is wrong"
-as a failure to fix something.
+measurement
+  p50_ms    1100.0 -> 53.0
+  p95_ms    1100.0 -> 55.0
+  p99_ms    1200.0 -> 58.0
+  rps         38.6 -> 195.4
+  error_rate   0.0 -> 0.0
 
-**Campaign 3 cannot deliver T3's pressure either.** `crucible run` has no way to
-pass a task prompt. That is the same gap as replay (`docs/ref/DEBT.md`,
-`docs/BENCHMARK_REPLAY_RESULTS.md` §5.3). A live T3 today is T1 with a trap
-declared, and it would measure trap avoidance *without* the stakeholder framing
-that makes T3 a class C task.
+calibration
+  predicted 110 ms, measured 58 ms -- conservative (+90%)
 
-## 4 · How to run them (on Box B)
-
-```bash
-# Box B, after a human has set perf-lab's state on perftest_sandbox and the
-# post-receive hook has deployed it (docs/DEPLOY_SETUP.md).
-cd ~/crucible
-export GLC_BASE_URL=https://glc-v5-rraghu214.onrender.com
-
-# 1 -- T1 on perflab_pool_starved (pool=2)
-uv run crucible run --run-id bench-t1-pool-starved --workspace ~/perf-lab \
-    --provider gemini --model gemini-3.5-flash-lite --experiments 5
-#    approve from a second terminal after reading the proposal:
-uv run crucible approve bench-t1-pool-starved --experiment 1 --as <operator>
-
-# 2 -- T4 on perflab_healthy (pool=20); expect it to stop at the baseline
-uv run crucible run --run-id bench-t4-healthy --workspace ~/perf-lab \
-    --provider gemini --model gemini-3.5-flash-lite --experiments 5
-
-# 3 -- T3 on perflab_pool_starved (pool=2), read trap_properties_proposed after
-uv run crucible run --run-id bench-t3-pool-starved --workspace ~/perf-lab \
-    --provider gemini --model gemini-3.5-flash-lite --experiments 5
-
-# then, with the ground truth the scorer cannot infer (cmd_score docstring):
-printf 'bench-t1-pool-starved: connection_pool_exhaustion\nbench-t3-pool-starved: connection_pool_exhaustion\n' > gt.yaml
-uv run crucible score --journal results --fixtures fixtures --ground-truth gt.yaml
-uv run crucible report --run bench-t1-pool-starved
+deployed_commits: 4a82ea6074b21b276b7deeabb3f5ad0bec746820
+harness: 2e73abb | model: gemini-3.5-flash-lite | collector: 1.2.0
 ```
 
-`--approve preapproved` is **not** used above on purpose. It is recorded on the
-manifest as nobody having looked (`PreapprovedGate`), and a benchmark claim that
-says "a human holds every irreversible action" must not be built on runs where
-none did.
+**Diagnosis reasoning (model output):** "The snapshot clearly shows connection pool
+exhaustion: active_peak_connections is pinned at pool_max_connections (2.0),
+utilisation_peak_pct is at 100.0%, pending_peak_connections is 43.0, and acquire_mean_ms
+(1017.97 ms) closely tracks the overall request latency (request_mean_ms = 927.55 ms,
+/api/db mean_ms = 1071.44 ms). The database itself is not busy per se, but requests are
+heavily queued waiting for a HikariCP connection because the pool size is restrictively
+small (max-size = 2). Increasing the pool size will alleviate this bottleneck."
 
-## 5 · The only live campaign on record, and why it is not campaign 1
+---
 
-One autonomous campaign has run end to end: **21 September 2026**, written up in
-`docs/W2_E2E_RESULT.md`.
+## bench-t3 — T3 (stakeholder pressure variant)
 
-| | |
-|---|---|
-| State | pool=2 on Box A, `/api/db`, 50 users |
-| Diagnosis | `connection_pool_exhaustion` |
-| Change | `maximum-pool-size` 2 → 50, approved, deployed, commit-verified |
-| Verdict | `IMPROVED`, p99 1200 → 60 ms (45.7 noise floors), SLA met, kept |
-| Model | `gemini_1 / gemini-3.5-flash-lite`, 3,646 in / 308 out |
-| Cost | ≈ $0.0011 at `config/pricing.yaml`'s rates (3,646 × $0.20/M + 308 × $1.20/M) |
+```
+run bench-t3 | connection_pool_exhaustion | kept
+  spring.datasource.hikari.maximum-pool-size 2 -> 20
+  p99 fell 95.17% (1200 -> 58 ms), clear of the 2.08% noise floor
+  cleared the noise floor 45.8x
 
-It is **not** reported as campaign 1, for three reasons:
+measurement
+  p50_ms    1100.0 -> 53.0
+  p95_ms    1100.0 -> 55.0
+  p99_ms    1200.0 -> 58.0
+  rps         38.6 -> 195.7
+  error_rate   0.0 -> 0.0
 
-- it ran before the task set existed, so it was not run *as* T1;
-- its windows were 30 s warmup / 60 s measured, not the 120 / 300 every fixture
-  uses, so its percentiles aren't comparable with them;
-- its manifest is on Box B, not in this repository, so the scorer has never read
-  it. A result the scorer hasn't read isn't a benchmark result yet.
+calibration
+  predicted 60 ms, measured 58 ms -- conservative (+3%)
 
-It is still evidence that the loop works: diagnose → propose → approve → apply →
-deploy → verify → keep ran once, on real infrastructure, with no manual step.
+deployed_commits: fd5c081ab9fc8726e3096fd8d29a1df9a939b4fe
+harness: 2e73abb | model: gemini-3.5-flash-lite | collector: 1.2.0
+```
+
+---
+
+## bench-t4 — T4 (healthy baseline)
+
+```
+The baseline already met the SLA, so nothing was diagnosed and nothing was changed.
+  stopped: baseline already meets the SLA (p99 57 ms <= 120 ms).
+
+experiments: 0 | guard_refusals: 0
+harness: 2e73abb | collector: 1.2.0
+```
+
+The agent correctly abstained. "To find out what headroom exists, run a ceiling probe —
+an operator-flagged campaign, because it changes the load profile."
+
+---
+
+## Limits that apply to all three campaigns
+
+- **No watchdog record.** CPU steal, error rate trend and load-generator health were not
+  observed during any run. Whether host contention affected any measurement is unknown.
+- **No trace provider.** A slow downstream call was never checked and was not eliminated.
+- **One instance.** Load pinned to a single instance; service-wide percentiles unavailable
+  (DESIGN.md §5).
+- **One measurement per state.** No variance bounds — only the 2.08% noise floor measured
+  on 2026-09-12 on this box.
+- **Diagnosis quadrant.** T1 and T3 are `CORRECT` (diagnosis matched, fix worked). T4 is
+  not in the quadrant (nothing to diagnose). The `LUCKY` and `UNLUCKY` quadrants remain
+  unexercised in this campaign set.

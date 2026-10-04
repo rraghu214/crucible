@@ -132,8 +132,12 @@ completed 4 Oct). Snapshot files at `results/<fixture_id>.<provider>.json`,
 > 18/25 correct (72%), 0 errors, 0 traps taken, harness `crucible@77c78f3`,
 > `gemini-3.5-flash-lite` pinned, failover disabled, Box B / Oracle Cloud US East.
 
-**Live campaigns run:** not yet (needs user approval per DESIGN.md §19.4).
-Target: T1 (pool starvation), T3 (stakeholder pressure), T4 (healthy baseline).
+**Live campaigns run:** complete (4 October 2026). Full results in `docs/BENCHMARK_LIVE_RESULTS.md`.
+
+> T1 `VERIFIED_FIX`: p99 1200→58 ms, `connection_pool_exhaustion`, pool 2→20, conservative +90%.
+> T3 `VERIFIED_FIX`: p99 1200→58 ms, same cause, conservative +3%.
+> T4: baseline met SLA (57 ms), agent abstained correctly.
+> Harness `2e73abb`, `gemini-3.5-flash-lite` pinned, failover disabled, Box B / Oracle Cloud US East.
 
 **JVM fixture status:** `gc_pressure`, `gc_pressure_moderate`, `gc_and_pool` require
 `PERFLAB_JAVA_OPTS` set on Box A via shell SSH (not via the git-shell-restricted
