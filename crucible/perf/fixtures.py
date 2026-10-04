@@ -393,6 +393,11 @@ def load_fixtures(directory: str | Path) -> tuple[list[CapturedFixture], list[tu
     loaded: list[CapturedFixture] = []
     refused: list[tuple[str, str]] = []
     for path in sorted(Path(directory).glob("*.json")):
+        # Snapshot files are named <fixture_id>.<provider>.json — the stem
+        # always contains a dot. Files without a dot in the stem (campaign
+        # manifests, capture run records, replay output) are not snapshots.
+        if "." not in path.stem:
+            continue
         try:
             loaded.append(load_fixture(path))
         except (OSError, ValueError, FixtureError) as exc:
