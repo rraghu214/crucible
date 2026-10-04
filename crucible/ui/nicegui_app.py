@@ -237,7 +237,7 @@ def page_new() -> None:
                 ui.label("Profile:")
                 ui.label(profile.name)
                 ui.label("SLA:")
-                ui.label(f"{sla.name} — p99 ≤ {sla.latency_p99_ms}ms, error ≤ {sla.error_rate_pct}%")
+                ui.label(f"{sla.name} — p99 ≤ {sla.p99_ms}ms, error ≤ {sla.error_rate_pct}%")
                 ui.label("Environment:")
                 ui.label(sla.environment_name or "—")
 
