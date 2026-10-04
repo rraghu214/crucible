@@ -94,6 +94,10 @@ def list_campaigns(ctx: PerfContext) -> tuple[list[dict[str, Any]], list[tuple[s
     loaded: list[dict[str, Any]] = []
     skipped: list[tuple[str, str]] = []
     for path in sorted(ctx.path(ctx.results_dir).glob("*.json")):
+        # Skip snapshot files (<fixture>.<provider>.json) and replay output files.
+        # Campaign manifests are named <run-id>.json with no dot in the stem.
+        if "." in path.stem or path.stem.startswith("replay"):
+            continue
         try:
             loaded.append(load_campaign(path))
         except ReportError as exc:
