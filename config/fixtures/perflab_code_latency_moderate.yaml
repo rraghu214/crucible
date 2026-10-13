@@ -35,8 +35,7 @@ trap_properties: []
 
 task_classes: [D, E]
 
-validated_at: ""
-
+validated_at: "2026-10-03"
 notes: >
   This fixture crosses a boundary: if it is BELOW the SLA, the correct answer
   is "no action, here is the margin". If it is ABOVE the SLA, the correct

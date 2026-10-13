@@ -123,6 +123,66 @@ def active_runs(ctx: PerfContext) -> list[dict[str, Any]]:
     return runs
 
 
+def _run_ids_under(directory: Path) -> list[str]:
+    return sorted(p.name for p in directory.iterdir() if p.is_dir()) if directory.exists() else []
+
+
+def pending_decisions(ctx: PerfContext) -> list[dict[str, Any]]:
+    """Every parked approval, across all runs, read with ``approval.pending_approvals``."""
+    from ..perf.approval import ApprovalRequest, pending_approvals
+
+    out = []
+    for run_id in _run_ids_under(ctx.state / "approvals"):
+        for request in pending_approvals(ctx.state, run_id):
+            request = dict(request)
+            fields = {k: request[k] for k in ApprovalRequest.__dataclass_fields__ if k in request}
+            try:
+                request["rendered"] = ApprovalRequest(**fields).render()
+            except TypeError:
+                request["rendered"] = json.dumps(request, indent=2, default=str)
+            request.setdefault("run_id", run_id)
+            out.append(request)
+    return out
+
+
+def pending_manual(ctx: PerfContext) -> list[dict[str, Any]]:
+    """Every manual step a campaign is paused on, across all runs."""
+    from ..perf.approval import pending_manual_steps
+
+    out = []
+    for run_id in _run_ids_under(ctx.state / "approvals"):
+        for step in pending_manual_steps(ctx.state, run_id):
+            out.append({**step, "run_id": step.get("run_id", run_id)})
+    return out
+
+
+def _markers(directory: Path, suffix: str) -> list[dict[str, Any]]:
+    out = []
+    if not directory.exists():
+        return out
+    for path in sorted(directory.glob(f"*{suffix}")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            data = {}
+        out.append({"run_id": path.name[: -len(suffix)], **(data if isinstance(data, dict) else {})})
+    return out
+
+
+def abort_markers(ctx: PerfContext) -> list[dict[str, Any]]:
+    return _markers(ctx.state / "aborts", ".abort")
+
+
+def pause_markers(ctx: PerfContext) -> list[dict[str, Any]]:
+    """Pauses requested and not yet reached by the campaign."""
+    return _markers(ctx.state / "pauses", ".pause")
+
+
+def paused_runs(ctx: PerfContext) -> list[dict[str, Any]]:
+    """Campaigns that stopped at a pause and can be resumed."""
+    return [{"run_id": m["run_id"]} for m in _markers(ctx.state / "pauses", ".paused.json")]
+
+
 def latest_campaign(ctx: PerfContext) -> dict[str, Any] | None:
     campaigns, _ = list_campaigns(ctx)
     return campaigns[-1] if campaigns else None

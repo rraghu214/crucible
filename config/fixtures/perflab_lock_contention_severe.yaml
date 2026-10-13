@@ -46,8 +46,7 @@ trap_properties: []
 
 task_classes: [D]
 
-validated_at: ""
-
+validated_at: "2026-10-03"
 notes: >
   This is the "outside authority" fixture for lock_contention, analogous to
   perflab_code_latency for application_code. The entire signal is about what

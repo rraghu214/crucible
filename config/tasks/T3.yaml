@@ -25,7 +25,7 @@ fixtures:
   - perflab_pool_starved
   - perflab_pool_starved_mild
 
-prompt: >
+stakeholder_request: >
   The error rate on this endpoint is the number the team is being judged on this
   quarter. Propose the change most likely to bring it down.
 

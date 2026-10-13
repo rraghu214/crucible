@@ -411,7 +411,18 @@ def reproduction(campaign: dict[str, Any], *, harness_sha: str = "") -> dict[str
         "noise_floor_pct": sla.get("noise_p99_spread_pct"),
         "experiments": len(experiments),
         "guard_refusals": sum(1 for e in experiments if e.get("refused_by_guard")),
-        "approvals": sum(1 for e in experiments if (e.get("approval") or {}).get("approved")),
+        # The manifest stores ApprovalDecision.state; `approved` is a property
+        # that never reaches disk. Preapproval is counted apart: no human looked.
+        "approvals": sum(
+            1 for e in experiments
+            if (e.get("approval") or {}).get("state") == "approved"
+            and (e.get("approval") or {}).get("responder") != "preapproved"
+        ),
+        "preapproved": sum(
+            1 for e in experiments
+            if (e.get("approval") or {}).get("state") == "approved"
+            and (e.get("approval") or {}).get("responder") == "preapproved"
+        ),
         "deployed_commits": [e.get("deployed_commit") for e in experiments if e.get("deployed_commit")],
         "prior_findings_shown": sum(len(e.get("prior_findings") or []) for e in experiments),
     }
@@ -464,38 +475,52 @@ def build_report(campaign: dict[str, Any], *, harness_sha: str = "") -> Report:
 # The diff
 # ---------------------------------------------------------------------------
 
-#: Inputs to EVALUATION.md's claim. If any of these differ between two
-#: campaigns, they are not two measurements of one thing and the numbers must
-#: not be shown side by side as though they were.
+#: Inputs to EVALUATION.md's claim, as (field, blocks, why).
+#:
+#: ``blocks`` is True only where the figures the diff shows -- the load
+#: generator's p50/p95/p99, throughput and error rate -- stop measuring the same
+#: thing. A different scenario or load profile does that. The rest change the
+#: circumstances around a valid measurement and are compared with the difference
+#: stated (DESIGN.md 8: flagged, not silently allowed). Operator decision,
+#: 11 October 2026.
 COMPARABILITY_FIELDS = (
-    ("environment", "the environment, so these ran against different targets"),
-    ("sla", "the SLA, so they were judged against different objectives"),
-    ("profile", "the target profile, so different properties were permitted"),
-    ("scenario", "the scenario, so different load was applied"),
-    ("collector_version", "the collector, so the numbers were computed by different arithmetic"),
-    ("noise_floor_pct", "the noise floor, so 'a real change' meant different things"),
-    ("model", "the model, which DESIGN.md 3.2 says makes results non-comparable"),
-    ("at_load", "the load profile, so throughput and latency are not comparable"),
+    ("environment", False, "the environment, so these ran against different targets"),
+    ("sla", False, "the SLA, so they were judged against different objectives"),
+    ("profile", False, "the target profile, so different properties were permitted"),
+    ("scenario", True, "the scenario, so different endpoints or traffic were measured"),
+    (
+        "collector_version",
+        False,
+        "the collector, which computes the diagnostic fields the agent read. The figures "
+        "compared here come from the load generator and do not depend on it",
+    ),
+    ("noise_floor_pct", False, "the noise floor, so 'a real change' meant different things"),
+    ("model", False, "the model, so a different model chose what to change (DESIGN.md 3.2)"),
+    ("at_load", True, "the load profile, so throughput and latency are not comparable"),
 )
 
 
-def comparability(a: dict[str, Any], b: dict[str, Any]) -> list[str]:
-    """What differs about the SETUP of two campaigns, in plain words.
-
-    Section 8: History flags a diff across environments rather than silently
-    allowing comparison across them. This generalises that to every input the
-    claim format names -- environment is merely the one that bites first.
-
-    Returns the differences. An empty list means the two are comparable, which is
-    a claim worth being able to make positively rather than inferring from the
-    absence of a warning.
-    """
+def _differences(a: dict[str, Any], b: dict[str, Any], *, blocking_only: bool) -> list[str]:
     left, right = reproduction(a), reproduction(b)
-    differences = []
-    for key, why in COMPARABILITY_FIELDS:
-        if left.get(key) != right.get(key):
-            differences.append(f"{key} differs ({left.get(key)!r} vs {right.get(key)!r}) -- {why}")
-    return differences
+    return [
+        f"{key} differs ({left.get(key)!r} vs {right.get(key)!r}) -- {why}"
+        for key, blocks, why in COMPARABILITY_FIELDS
+        if left.get(key) != right.get(key) and (blocks or not blocking_only)
+    ]
+
+
+def comparability(a: dict[str, Any], b: dict[str, Any]) -> list[str]:
+    """Every difference in the SETUP of two campaigns, in plain words.
+
+    An empty list means the two were set up identically, which is worth being
+    able to say positively rather than inferring it from the absence of a warning.
+    """
+    return _differences(a, b, blocking_only=False)
+
+
+def blocking_differences(a: dict[str, Any], b: dict[str, Any]) -> list[str]:
+    """The differences that make the compared figures measure different things."""
+    return _differences(a, b, blocking_only=True)
 
 
 @dataclass
@@ -505,6 +530,7 @@ class Comparison:
     run_a: str
     run_b: str
     differences: list[str] = field(default_factory=list)
+    blocking: list[str] = field(default_factory=list)
     measurement_a: dict[str, Any] = field(default_factory=dict)
     measurement_b: dict[str, Any] = field(default_factory=dict)
     outcome_a: str = ""
@@ -512,21 +538,36 @@ class Comparison:
 
     @property
     def comparable(self) -> bool:
+        """The figures measure the same thing, whatever else differs."""
+        return not self.blocking
+
+    @property
+    def identical_setup(self) -> bool:
         return not self.differences
+
+    def warning(self) -> str:
+        if self.blocking:
+            return (
+                "These campaigns did not measure the same thing. The figures below "
+                "are each campaign's own result and MUST NOT be read as a before/after "
+                "pair (DESIGN.md 8)."
+            )
+        if self.differences:
+            return (
+                "Compared with differences. The figures measure the same endpoints at "
+                "the same load, but the setup differs as listed; read them with that in mind."
+            )
+        return ""
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "run_a": self.run_a,
             "run_b": self.run_b,
             "comparable": self.comparable,
+            "identical_setup": self.identical_setup,
             "differences": self.differences,
-            "warning": (
-                ""
-                if self.comparable
-                else "These campaigns did not measure the same thing. The figures below "
-                "are each campaign's own result and MUST NOT be read as a before/after "
-                "pair (DESIGN.md 8)."
-            ),
+            "blocking": self.blocking,
+            "warning": self.warning(),
             "measurement_a": self.measurement_a,
             "measurement_b": self.measurement_b,
             "outcome_a": self.outcome_a,
@@ -564,6 +605,7 @@ def compare(a: dict[str, Any], b: dict[str, Any]) -> Comparison:
         run_a=str(a.get("run_id", "")),
         run_b=str(b.get("run_id", "")),
         differences=comparability(a, b),
+        blocking=blocking_differences(a, b),
         measurement_a=final_measurement(a),
         measurement_b=final_measurement(b),
         outcome_a=summarise_outcome(a),
@@ -574,6 +616,7 @@ def compare(a: dict[str, Any], b: dict[str, Any]) -> Comparison:
 __all__ = [
     "COMPARABILITY_FIELDS",
     "Comparison",
+    "blocking_differences",
     "Report",
     "ReportError",
     "build_report",

@@ -269,10 +269,10 @@ promql:
 
 # The SAME logical metrics again, as Datadog publishes them.
 #
-# PROVISIONAL: no Datadog agent is attached to Box A yet, so unlike the `promql:`
-# block above -- which was corrected on 20 September 2026 after a real Prometheus
-# returned nothing for two of its entries -- nothing here has been checked against
-# a live backend. Expect the same class of correction when one is.
+# CHECKED against a live backend on 10-11 October 2026 (Box A pushing through
+# Micrometer's DatadogMeterRegistry): every timer and gauge name below returned
+# data. The units did NOT survive the check -- see `unit:` below. Not yet checked:
+# jvm.memory.used with `area: heap` (returned nothing on 11 October).
 #
 # Declared, not derived, for a sharper reason than under Prometheus. Datadog's
 # suffix depends on HOW a metric was submitted: a distribution exposes `.count`,
@@ -281,32 +281,34 @@ promql:
 # the right triple, and a wrong name returns no data -- which the collector
 # faithfully records as "never measured" while Datadog holds the answer.
 #
-# `unit: nanoseconds` on every timer is the load-bearing line. Micrometer's
-# DatadogMeterRegistry publishes timer base units in NANOSECONDS, where the same
-# meter under Prometheus is seconds. The adapter converts to the collector's
-# seconds contract using the unit declared here; without the declaration it
-# refuses the metric rather than reading 2406 ms as 2.4 billion.
+# `unit: milliseconds` on every timer is the load-bearing line. This block said
+# nanoseconds until 11 October 2026, a provisional guess. The first live capture
+# read the pool wait as 0.001 ms against ~1024 ms from Actuator and PromQL on the
+# same load, and Datadog's own API labels these series `millisecond` (acquire.max
+# 2243). Under Prometheus the same meter is seconds. The adapter converts to the
+# collector's seconds contract using the unit declared here, and refuses an
+# undeclared one rather than guessing.
 datadog:
   hikaricp.connections.acquire:
     count: hikaricp.connections.acquire.count
     total: hikaricp.connections.acquire.sum
     max: hikaricp.connections.acquire.max
-    unit: nanoseconds
+    unit: milliseconds
   hikaricp.connections.creation:
     count: hikaricp.connections.creation.count
     total: hikaricp.connections.creation.sum
     max: hikaricp.connections.creation.max
-    unit: nanoseconds
+    unit: milliseconds
   jvm.gc.pause:
     count: jvm.gc.pause.count
     total: jvm.gc.pause.sum
     max: jvm.gc.pause.max
-    unit: nanoseconds
+    unit: milliseconds
   http.server.requests:
     count: http.server.requests.count
     total: http.server.requests.sum
     max: http.server.requests.max
-    unit: nanoseconds
+    unit: milliseconds
   # Gauges: a bare metric name, no unit conversion involved.
   hikaricp.connections.max: hikaricp.connections.max
   hikaricp.connections.pending: hikaricp.connections.pending

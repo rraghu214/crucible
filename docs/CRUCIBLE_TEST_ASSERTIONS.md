@@ -1249,6 +1249,34 @@ says "paused, not failed".
 **Why it exists.** §7's pause holds without discarding. An operator who was asleep
 has not destroyed the run, and nothing was applied on their behalf.
 
+**FIXED at the campaign level, 11 October 2026 (operator: "a missed approval
+shouldn't abort the campaign, it should just pause it").** The gate raised
+`ApprovalTimeout` with a "paused, not failed" message, but `Campaign` turned it
+into `CampaignAborted`. Resuming meant a new campaign and a new baseline. Now the
+campaign pauses:
+
+- nothing is applied, and the unanswered experiment is not recorded;
+- the proposal is saved in the pause state;
+- resume re-parks the same proposal without re-diagnosing, so a decision written
+  after the timeout answers exactly what was shown.
+
+A second bug surfaced while fixing it: resume rebuilt the result without the
+experiments completed before the pause, then rewrote `results/<run>.json` without
+them. The pause state now carries the experiments, the ruled-out list, the models
+used and the start time.
+
+**REVIEW NEEDED**: the four new tests are in `tests/test_perf_pause_resume.py`
+(`TestAMissedApprovalPauses`, and
+`TestResume.test_resume_keeps_experiments_completed_before_the_pause`).
+
+**For review:**
+- Is re-parking without re-diagnosis right if the operator resumes days later?
+  The target may have changed since. The alternative, re-diagnosing on resume,
+  would make a late approval fail the binding check whenever the model proposes
+  something different.
+- A rejection written after the timeout ends the campaign on resume ("operator
+  declined"), as a rejection does anywhere else.
+
 ---
 
 ### 13.6 A manual step pauses the campaign and is not an approval
@@ -1782,6 +1810,26 @@ promises ("conversion belongs to the collector... the K3 failure would then have
 four places to hide instead of one"). As implemented, that promise now has an
 explicit, declared exception, and this is the decision that needs your sign-off.
 
+**CORRECTED, 11 October 2026: Datadog timers are milliseconds, not
+nanoseconds.** The first live capture through all three providers on one load
+read the pool wait as 0.001 ms from Datadog, against ~1024 ms from Actuator and
+PromQL. Datadog's own API labels these series `millisecond` (acquire.max 2243 ms).
+The profile now declares `unit: milliseconds`, the adapter accepts it, and
+`test_the_k3_numbers_survive_millisecond_timers_through_the_shipped_profile`
+checks the shipped profile end to end. The nanosecond tests above stay: they
+test the conversion for a declared unit, which is still correct. **REVIEW
+NEEDED** on the new test. The mechanism this group exists to protect did its
+job: the unit was declared in one place, the three-provider capture exposed the
+disagreement, and the fix was one line of config. After the fix, on one load:
+pool wait 1023 / 1023 / 1036 ms (Actuator / PromQL / Datadog). Still disagreeing:
+Datadog's request mean, 131 ms against 949, because `http.server.requests` is
+averaged across every endpoint's series.
+
+**DECIDED, operator, 11 October 2026: each adapter normalises to seconds; the
+collector is not widened.** Every adapter hands the collector the same unit, and
+the collector keeps its single seconds-to-milliseconds step. This is how
+`datadog.py` already works, so no code changed.
+
 ---
 
 ### 19.2 An undeclared unit is refused and surfaced
@@ -1839,6 +1887,59 @@ to work out why a comparison is missing.
 block (corrected 20 September 2026 after a real Prometheus returned nothing for two
 entries) nothing in it has been checked against a live backend. Expect the same
 class of correction when one is.
+
+**Update, 10 October 2026:** a Datadog key is now set on Box A, and
+`hikaricp.connections.pending`, `.active` and `.max` were read back through this
+adapter's `query()` from Box B. Those three names are confirmed against a live
+backend. On 11 October the timer names were confirmed too, and the declared unit
+was found wrong and corrected (see 19.1). Still unconfirmed: `jvm.memory.used`
+with `area: heap`, which returned nothing.
+
+---
+
+### 19.6 A rejected key is declared, not read as "no data"
+
+**REVIEW NEEDED** — added 11 October 2026 (`TestAnUnreachableBackendDegradesToUnknown`).
+
+**What it checks.** A 401 or 403 makes `fetch` return `None`, as every other
+failure does, but also sets `provider.auth_error` to a message naming the status
+code and the key headers. A 502 leaves `auth_error` empty.
+`commands._snapshot_from` copies `auth_error` into `available_evidence.notes`.
+
+**Why it exists.** A rejected key and a metric with no data both come back as an
+empty series. If they stay indistinguishable, a bad key turns every metric into
+"never measured" with no reason attached. The agent then reasons from an empty
+picture without knowing why it is empty (principle 2), and the operator has to
+guess what broke.
+
+**For review:**
+- Is the 502 case right? It checks that an outage is *not* labelled as an auth
+  failure. It does not check that an outage gets any label of its own, and today
+  it doesn't. An outage and "no data" still look the same.
+- The test stops at the provider. The step that copies the message into the
+  snapshot's notes (`commands.py`) has no test. Is the provider-level check enough?
+
+---
+
+### 19.7 Keys travel in headers, never in the URL
+
+**REVIEW NEEDED** — written into this doc 11 October 2026; the test already
+existed (`TestTheQueryItSends.test_credentials_and_a_time_window_are_sent_on_every_query`).
+
+**What it checks.** Every query carries `DD-API-KEY` and `DD-APPLICATION-KEY` as
+headers, and neither `api_key` nor `application_key` appears in the query string.
+The same holds when a client is injected.
+
+**Why it exists.** §19.8: a URL ends up in proxy logs, error messages and stack
+traces, and journals are replayed hundreds of times. On 10 October 2026 Box A's own
+log showed the opposite pattern from Micrometer's Datadog registry, which puts the
+key in `?api_key=`, so a failed push printed the URL in full. That is the
+application's registry, outside Crucible's control. This assertion keeps Crucible's
+adapter from doing the same.
+
+**For review:** does the test say what you want? Right now it only checks that the
+keys are missing from the query string. It does not check that they are missing
+from the URL path.
 
 ---
 
@@ -2526,7 +2627,9 @@ needing both a label matcher (`area: heap`) and an aggregation, because Micromet
 publishes one series per memory pool — an adapter summing non-heap along with heap
 reports a number that is not the thing its name claims, and nothing but a
 cross-provider disagreement would show it. The same Micrometer timer is also
-**seconds** under Prometheus and **nanoseconds** under Datadog.
+**seconds** under Prometheus and **milliseconds** under Datadog (this said
+nanoseconds until the 11 October capture showed otherwise, which is the
+disagreement this assertion predicted the multi-provider fixtures would surface).
 
 **For review — `perflab_thread_starved` is the intended third** (pool, JVM,
 Tomcat being three families) and is blocked behind the same missing gauges that
@@ -2777,6 +2880,9 @@ agent cannot see the reasoning behind. Within a single campaign the hard rule
 stands unchanged. If you disagree, the fix is to render journal findings under the
 same "do not propose" heading.
 
+**DECIDED, operator, 11 October 2026: accepted.** Within one campaign the ban is
+hard. Across campaigns, findings are advisory evidence that carries its date.
+
 **A collector mismatch splits the finding rather than hiding it.** That a change
 was *tried* survives a collector change; that it *measured 93 ms* does not, and
 the render says exactly that.
@@ -2814,6 +2920,15 @@ incompatible vectors at two settings.
 Nothing embeds yet. The rule is written down now because it costs nothing now and
 is expensive to relearn later.
 
+**Embedder availability, checked 11 October 2026.** The hosted gateway's
+`/v1/embedders` lists only `ollama` / `nomic-embed-text`. A `POST /v1/embed` came
+back "all embedders unavailable": no Ollama runs on Render. So the gateway has no
+working embedder. **Decided, operator, 11 October 2026: `gemini-embedding-001` at
+768 dimensions, on every box** (DESIGN.md §14). Do not mix them: a corpus
+indexed with one cannot be queried with the other. This rule enforces that by
+refusing the query, and it is why a corpus has to be indexed by the same embedder
+on every box that reads it.
+
 ---
 
 ### 25.5 One corrupt manifest does not cost the whole history
@@ -2835,7 +2950,8 @@ to start would be absurd. And an unreadable manifest is a fact worth naming:
 `tests/test_perf_report.py` (43 assertions). DESIGN.md §4.6, §8, §3.2; screens
 16 and 17.*
 
-**REVIEW NEEDED**: not yet reviewed by the operator.
+**REVIEWED**, operator, 11 October 2026: agreed, with 26.5 revised (below).
+26.1–26.4 and 26.6 stand as written.
 
 *Screen 16 names the audience: "the teammate who asks why did you change the pool
 size?" Such a reader is not hostile but is entitled to be unconvinced, and the
@@ -2916,6 +3032,30 @@ can subtract; where they do not, a delta is the exact thing that must not exist,
 and one offered "with a warning attached" is how a number escapes its caveat and
 ends up on a slide.
 
+**REVISED, operator, 11 October 2026: flag by default, refuse only where the
+figures stop meaning the same thing.** The diff only ever puts the load
+generator's figures side by side: p50/p95/p99, throughput and error rate
+(`report._load_of`). Two differences change what those figures measure, and they
+still refuse: the **scenario** (different endpoints or traffic) and the **load
+profile**. Every other difference is listed above the figures with its reason, and
+the comparison goes ahead. That covers environment, SLA, profile, collector, noise
+floor and model. `crucible diff` exits non-zero only when it refuses.
+
+The collector is the case the operator asked about. A collector bump changes how
+the *diagnostic* fields are calculated (pool wait, heap and so on). The diff
+compares none of those, so a bump such as 1.1.0 → 1.2.0, which only added two
+Tomcat gauges, cannot make the figures in a diff disagree.
+`test_a_collector_difference_says_the_compared_figures_do_not_depend_on_it` pins
+that reasoning: it fails if `final_measurement` ever returns a field outside the
+load generator's set. If the diff ever compares snapshot fields, the collector has
+to block again, or a per-field change log has to decide which fields are safe.
+
+**For review:**
+- Is the scenario right to block? Two scenarios on the same endpoint with the same
+  traffic mix would be comparable, but the manifest only records the scenario's
+  name, not its contents.
+- No delta is still computed, even when the comparison goes ahead.
+
 ---
 
 ### 26.6 The report calls no model
@@ -2930,144 +3070,141 @@ manifests on disk.
 
 ---
 
-# GROUP 28 — The campaign UI: NiceGUI six-page app
+# GROUP 28 — The campaign UI: everything the CLI does, no easier path
 
-*Week 4, `crucible/ui/nicegui_app.py` and `crucible/ui/perf_data.py`. The
-implementation replaced the nineteen-screen A2UI (`perf_ui.py`) with a NiceGUI
-app (six pages: Home, New, Campaign, History, Benchmark, Settings). Smoke tests
-for the data layer and module import are in `tests/test_perf_data.py`.*
+*Rewritten 11 October 2026. `crucible/ui/nicegui_app.py` (seven pages: Home,
+New, Campaign, History, Benchmark, Jobs, Settings), `crucible/ui/actions.py`
+(one argument builder per CLI command) and `crucible/ui/jobs.py` (runs the CLI
+detached). Implemented in `tests/test_ui_actions.py` (42),
+`tests/test_ui_jobs.py` (10), `tests/test_nicegui_app.py` (13) and
+`tests/test_perf_data.py`. DESIGN.md §15 as revised on 11 October 2026.*
 
-*The assertions in this group were drafted against the old nineteen-screen design
-(26 September 2026) and are no longer directly applicable. The operator should
-decide which of them carry over to the new design, which should be rewritten, and
-which are obsolete. The two questions that matter regardless of implementation:*
+**REVIEW NEEDED**: new group, not yet reviewed by the operator.
 
-1. *Does any page show a number nobody measured? (DESIGN.md §1, principle 1)*
-2. *Does any page make an irreversible action easier than the CLI does?*
-
-**REVIEW NEEDED — entire group superseded**: drafted against perf_ui.py (19
-screens), replaced by nicegui_app.py (6 pages). Rewrite from the two questions
-above before committing new test code here.
-
-*A screen can be wrong in two ways that no rendering test catches: it can show a
-number nobody measured, and it can make an irreversible action easier than the
-CLI makes it. These assertions are about those two and nothing cosmetic.*
-
-**Scope note for review.** DESIGN.md §15/§16 put UI in scope for the campaign path
-only (setup → live → report) and the CLI for everything else. The week-4 brief
-asked for all nineteen. They are built as read-mostly views over the functions the
-CLI already calls: no screen has its own implementation of a capability. If §15's
-line still stands, screens 1–4, 8 and 17–19 are the ones to drop.
+*The operator's decision: the UI does everything the CLI does, for the end user
+and for the demo. The old group was drafted against the nineteen-screen A2UI
+(`perf_ui.py`, still mounted under `crucible serve`) and asked two questions: does
+any page show a number nobody measured, and does any page make an irreversible
+action easier than the CLI does? Both still apply. The assertions below answer
+the second one by construction: a UI action IS the CLI command.*
 
 ---
 
-### 28.1 Every screen passes the injection wall, including with nothing to show
+### 28.1 Every CLI command has a UI route, and the suite fails if one is added without one
 
-**What it checks.** Every screen, built against the real `config/` with an empty
-state directory and journal, has zero validator rejections and uses only catalog
-types. No screen fails on an empty state. A builder that raises becomes a `bad`
-Notice on a valid surface, not a 500.
+**What it checks.** `actions.ACTIONS` holds exactly the parser's subcommands
+minus `serve` and `serve-ui`. For every builder, a sample argv goes through
+`crucible.cli.main` and reaches the same `cmd_*` function typing it would.
 
-**Why it exists.** `routes.py` validates the run surface it built itself before
-serving it, treating its own output as untrusted. The perf screens get the same
-treatment. A rejected component is dropped silently by the client, so a screen
-that fails validation looks fine and is missing something.
-
-**For review:** is "a builder error becomes a Notice" right? It keeps the rest of
-the UI usable at 3am, but a broken screen then returns 200.
+**Why it exists.** Parity was decided once. Without a test, the next CLI verb is
+CLI-only by default and nobody notices. Checking dispatch, not just parsing,
+follows `test_perf_cli`'s own lesson: a verb that parses and then falls through
+to "unhandled command" is not reachable.
 
 ---
 
-### 28.2 The navigation is the design's
+### 28.2 A UI action is the CLI, run as its own process
 
-**What it checks.** `(number, title, group)` for all nineteen screens equals what
-is parsed out of `docs/crucible-screens-v2.html`'s sidebar.
+**What it checks.** A job runs `python -m crucible.ui.jobs <dir> -- <argv>`,
+which calls `crucible.cli.main`. Its output, its exit code (including argparse's
+`2` and `diff`'s refusal) and its argv are kept under `<state>/ui-jobs/<id>/`.
+An approval started from the UI writes a decision whose params are the parked
+request's.
 
-**Why it exists.** The design file is the authority. Parsing it, rather than
-copying its list, means a renamed or regrouped screen in either place fails here.
-That is the drift AGENTS.md records for the two assertions docs.
+**Why it exists.** Two reasons. First, no second implementation: the UI cannot
+skip a guard the CLI applies, because it runs the CLI. Second, survival: a
+campaign is an hour or more, and one running inside the UI server would die with
+it, mid-experiment, which §7 says leaves the target in a state no manifest
+describes. A detached process outlives the UI and its log stays readable.
 
-**For review:** the design's sidebar still says "17 screens" in its subtitle while
-listing nineteen. The test reads the buttons, not the subtitle.
-
----
-
-### 28.3 Nothing from the mock-up is shown as data; absence is declared
-
-**What it checks.** No screen shows the mock-up's example values (`payments-api`,
-`1,300`, `38 / 40`, `cmp-2026-1005-a41f`, …). With no campaign: Live campaign says
-none is running, Report and History say there are no manifests, the quadrant says
-"not yet measured" in all four cells, a class with no task says "not measured"
-and never `0 / 0`, and Playbooks says "not built" rather than `0`.
-
-**Why it exists.** Principle 1 (nothing claimed that was not measured) and §4.2's
-null-versus-zero rule, applied to the UI. The design file is a picture of what a
-screen holds. Rendering its examples would be a claim with no measurement behind
-it, and it would look identical to a real one.
+**DECIDED, operator, 11 October 2026: `unknown` stays; no `psutil`.** A job
+the current UI process did not start, and which has not written its exit code,
+reads `unknown`, never `running` or `finished`. On Windows the standard-library
+check (`os.kill(pid, 0)`) would terminate the process, so it is not used there.
+That only affects the laptop, only jobs started before a UI restart, and only
+until they finish. Box B is Linux and checks the process id correctly.
 
 **For review:**
-- The example list is hand-picked. What distinctive mock-up value is missing?
-- Several screens show "not built" (hooks, plans, playbooks, knowledge,
-  requirements chat, service/collection overrides). Each is a real gap against
-  DESIGN.md. Is "not built" the right wording, or should each name its DESIGN
-  section?
+- There is no "kill job" button. The CLI has none either (only Ctrl-C), and
+  killing a campaign mid-apply is what abort exists to avoid. A stuck `bench`
+  has to be stopped from a shell.
 
 ---
 
-### 28.4 Afterwards screens read the journal through report.py, not their own logic
+### 28.3 Approval from the browser is bound to what was parked
 
-**What it checks.** Report renders a manifest's headline, measurement and limits.
-History refuses a comparison across environments by calling `report.compare`, and
-names a replay file in `results/` as "not a campaign manifest" instead of drawing
-an empty campaign.
+**What it checks.** `approve_args` has no parameter for a value; its signature is
+pinned. The approve dialog states the exact property and value being approved
+and says that a different value means rejecting. End to end, card → dialog →
+`crucible approve` writes the parked params with the typed responder.
 
-**Why it exists.** One comparability rule (§8, 26.5), not two. A second rule in
-the UI would drift from the CLI's `diff` and could permit a comparison the CLI
-refuses. This test found a real bug while it was being written: History read
-`final_measurement()["p99_ms"]` as a number when it is `{before, after}`.
+**Why it exists.** Assertions 13.1 and 13.2 in the browser. A value field is the
+hole somebody adds while being helpful.
 
 ---
 
-### 28.5 Approve from the browser is bound, gated, and the action set is not widened
+### 28.4 A form value cannot become a flag
 
-**What it checks.** The ApprovalCard's `confirm.args` is the same binding as its
-`params`, and those equal the parked request's params. `POST …/decision`:
-- refuses different values with 409 and writes nothing;
-- on matching values writes a decision whose params come from the request, with
-  responder `ui:…`;
-- refuses a second decision on the same experiment;
-- returns 503 when no control token is configured and 401 for a wrong one.
+**What it checks.** Every free-text option is passed as one `--name=value`
+token. A stakeholder request of `--approve=preapproved` stays text and the gate
+stays `file`. Positional run ids must match `[A-Za-z0-9][A-Za-z0-9._-]*`, so
+`-r1`, `../x` and `a/b` are refused before anything runs.
 
-`REGISTERED_ACTIONS` is unchanged, and Abort is offered as `crucible abort
-<run-id>`.
-
-**Why it exists.** Session 12's sixth invariant and `approval.py`'s rule: the
-approval is bound to the final parameters. The browser gets no easier path than
-`crucible approve`. The params are checked three times: `decide_resume` in the
-route, `write_decision` copies from the request, and the campaign's file gate
-re-checks on read.
-
-**For review — the decisions that are yours:**
-- **Abort and Pause are not buttons.** A browser Abort needs a new registered
-  action (`abort`), which widens the event invariant for every surface an agent
-  can compose, not just these. Pause has no command at all: an unanswered
-  approval pauses a campaign, and nothing else does. Is a CLI line on the Live
-  screen acceptable for the demo, or should `abort` be registered?
-- **The token lives in page memory**, typed into the sidebar, never stored. Is
-  the control token the right credential for approving a change, or should
-  approvals have their own, as completions do?
+**Why it exists.** The UI turns typed text into argv. Without this, the cheapest
+way around the approval gate is a text box.
 
 ---
 
-### 28.6 Preflight shows the CLI's checks, and never the restarting rehearsal
+### 28.5 Anything that touches the target asks first, naming it
 
-**What it checks.** With network probes stubbed, every check `crucible preflight`
-prints (apart from the two load checks) appears on the screen with "Run checks".
-An `apply_probe` query parameter does not trigger the rehearsal.
+**What it checks.** `touches_target` is true for `run`, `resume`, `ceiling`, a
+live `capture` and `preflight --apply-probe`, and false for plans, reports,
+approvals and status. Those five open a dialog showing the target URL, the
+environment and its kind, and the exact command line. Cancel starts nothing.
 
-**Why it exists.** `preflight_checks` was split out of `cmd_preflight` so the
-screen can't grow a second list. `--apply-probe` restarts the target, so it stays
-a deliberate CLI act rather than a button next to "Run checks".
+**Why it exists.** DESIGN.md §15's second rule. On the CLI, typing the command
+is the deliberate act. In a browser a click is cheap, so the deliberate act is
+the confirmation.
+
+**DECIDED, operator, 11 October 2026: abort keeps its single dialog, which now
+also names the target and environment.** Abort can redeploy the last good commit
+(§19.9), so it does touch the target. But it is the emergency brake, so a second
+confirmation would cost more than it buys. It stays off the `touches_target`
+list. `test_the_abort_dialog_names_the_target_it_may_roll_back`.
+
+---
+
+### 28.6 No open network port without a token
+
+**What it checks.** `serve-ui` refuses a non-loopback host unless
+`CRUCIBLE_UI_TOKEN` is set. With a token set, no action starts until the token
+has been entered on the Settings page, compared in constant time.
+
+**Why it exists.** Principle 4: a human holds every irreversible action. A UI
+that can start campaigns and approve changes, listening on `0.0.0.0` with no
+credential, makes "the human" anyone who can reach the port.
+
+**For review:** the token is kept in NiceGUI's per-browser storage, signed with
+`CRUCIBLE_UI_SECRET` (random per process when unset, so a restart logs everyone
+out). On loopback no token is needed. Box B is reached by SSH tunnel.
+
+---
+
+### 28.7 Nothing on a page claims more than was measured
+
+**What it checks.** The Benchmark page grades replay cases with the scorer's own
+`grade_replay_case`: a transport error is "not graded", never a wrong answer,
+and the headline is passed/graded. A job nobody observed ending is `unknown`. The
+campaign card shows each experiment's approval state and responder as the
+manifest records them.
+
+**Why it exists.** Principle 1, and the first of the old group's two questions.
+The previous Benchmark page counted an error as "not correct" and read
+proposal fields the manifest does not use, so every change showed as `?`.
+
+**For review:** Datadog keys never appear in the UI. `capture` reads them from
+the environment, as the CLI already does, so they stay out of argv, the job
+record and the process list (§19.8).
 
 ---
 

@@ -41,9 +41,14 @@ log() { printf '%s %s\n' "$(date -Is)" "$*" | tee -a "$LOG"; }
 # Optional: source ~/perflab.env for JVM overrides (e.g. PERFLAB_JAVA_OPTS=-Xmx128m
 # for the gc_pressure fixture) and Datadog keys (DATADOG_API_KEY, DATADOG_SITE_URI).
 # The file is not committed and holds no credentials visible in argv or this log.
+# `set -a` exports every assignment, so `KEY=value` lines reach the JVM without
+# needing `export`. Without it Spring saw the literal ${DATADOG_API_KEY} and every
+# Datadog push failed (found on Box A, 10 October 2026).
 if [ -f "$HOME/perflab.env" ]; then
+  set -a
   # shellcheck disable=SC1090
   . "$HOME/perflab.env"
+  set +a
   log "sourced ~/perflab.env"
 fi
 

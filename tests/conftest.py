@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import pytest
 
+# Provides the `user` fixture that drives NiceGUI pages in-process (test_nicegui_app.py).
+pytest_plugins = ["nicegui.testing.user_plugin"]
+
 CONTROL_TOKEN = "test-control-token"
 COMPLETION_TOKEN = "test-completion-token"
 

@@ -33,8 +33,7 @@ trap_properties:
 
 task_classes: [A]
 
-validated_at: ""
-
+validated_at: "2026-10-03"
 notes: >
   A second severity for the batch-size pair. The moderate setting (5) proves
   the agent reads the per-request query count from the DB metrics rather than

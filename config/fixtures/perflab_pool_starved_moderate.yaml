@@ -32,8 +32,7 @@ trap_properties:
 
 task_classes: [A, C]
 
-validated_at: ""
-
+validated_at: "2026-10-03"
 notes: >
   The three-severity set (severe=2, moderate=8, mild=5) lets the benchmark
   distinguish a model that reads arithmetic from one that reads magnitude.

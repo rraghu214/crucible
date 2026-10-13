@@ -38,8 +38,7 @@ trap_properties:
 
 task_classes: [A]
 
-validated_at: ""
-
+validated_at: "2026-10-03"
 notes: >
   The "correct" action here is bounded: either fail-fast (reduce timeout to
   200ms, accept higher error rate but lower p99 for surviving requests) or

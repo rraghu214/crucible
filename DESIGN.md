@@ -442,6 +442,14 @@ running gateway, 11 September 2026), so the gateway is the first choice;
 `gemini-embedding-001` at `outputDimensionality=768` is the fallback, and any
 free provider of a comparable model is acceptable in its place.
 
+**Decided, operator, 11 October 2026: `gemini-embedding-001` at
+`outputDimensionality=768` is the embedder, on every box.** The hosted gateway
+lists only `ollama` / `nomic-embed-text`, and no Ollama runs on Render: a test
+embed on 11 October came back "all embedders unavailable". Ollama stays usable for
+local experiments, but a corpus built that way cannot be read on Box B (see the
+correction below). One embedder everywhere means one corpus everywhere. It uses the
+Gemini keys already in rotation.
+
 **Correction — matching dimensionality is not the same vector space.** An
 earlier draft of this note called the 768-dimension fallback "a candidate
 fallback in the same vector space". That was wrong. Two different models at
@@ -473,6 +481,17 @@ Nineteen screens exist as design reference in `crucible-screens-v2.html`.
 campaign path (setup → live → report) gets built as a screen; everything
 else is exposed through the CLI.
 
+**Superseded, operator, 11 October 2026: the UI does everything the CLI does.**
+Every CLI command gets a UI equivalent, for the end user and for the demo. Two
+rules carry over unchanged:
+
+- **No easier path.** A UI action calls the same function as its CLI command and
+  passes the same guard. An approval is bound to the parked parameters, exactly as
+  `crucible approve` is (§19.4, assertion 13.1). The UI never offers a value field.
+- **Anything that touches the target says so first.** `preflight --apply-probe`
+  restarts the target, and `capture` and `run` drive it. In the UI each of them
+  shows a confirmation naming the target and environment before it runs.
+
 | # | Screen | Exists because |
 |---|---|---|
 | 1 | Home | one install, several services — needs a `Service` entity above campaigns |
@@ -500,7 +519,8 @@ else is exposed through the CLI.
 Four weeks, 7 September – 4 October 2026, fixed, will not be extended. Scope
 line is **capability in, UI polish out** — every adapter gets built and
 proven; the UI covers only the campaign path; the CLI exposes everything
-else. A screen is expensive; a CLI command is cheap.
+else. A screen is expensive; a CLI command is cheap. *(The UI line was widened to
+full CLI parity on 11 October 2026 — see §15.)*
 
 **Capability matrix — all free tier**
 

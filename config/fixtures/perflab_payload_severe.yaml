@@ -41,8 +41,7 @@ trap_properties: []
 
 task_classes: [D]
 
-validated_at: ""
-
+validated_at: "2026-10-03"
 notes: >
   The payload family exercises the agent's ability to distinguish CPU-bound
   serialisation from everything else. The distinguishing evidence: threads busy

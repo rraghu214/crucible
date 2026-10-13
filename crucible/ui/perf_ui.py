@@ -1283,10 +1283,15 @@ def screen_history(ctx: PerfContext, q: dict[str, str]) -> dict[str, Any]:
             cb = next((c for c in campaigns if c.get("run_id") == b), None)
             if ca and cb:
                 result = compare(ca, cb)
-                compare_children.append(s.notice(
-                    "Setup matches: these two measured the same thing." if result.comparable else
-                    "NOT COMPARABLE -- setup moved:\n" + "\n".join(f"- {d}" for d in result.differences),
-                    "good" if result.comparable else "warn"))
+                if result.identical_setup:
+                    message, tone = "Setup matches: these two measured the same thing.", "good"
+                elif result.comparable:
+                    message, tone = ("Compared with differences:\n"
+                                     + "\n".join(f"- {d}" for d in result.differences)), "warn"
+                else:
+                    message, tone = ("NOT COMPARABLE -- setup moved:\n"
+                                     + "\n".join(f"- {d}" for d in result.differences)), "warn"
+                compare_children.append(s.notice(message, tone))
                 compare_children.append(s.table(["", "A", "B"], [
                     {"": "run", "A": result.run_a, "B": result.run_b},
                     {"": "outcome", "A": result.outcome_a, "B": result.outcome_b},

@@ -161,6 +161,17 @@ def _build_campaign(
     return campaign, measurements_taken
 
 
+def _with_fake_git(campaign):
+    """Applying a change commits it; these workspaces are not git repositories."""
+    from crucible.perf.applicator import Applicator
+
+    campaign.applicator = Applicator(
+        profile=campaign.profile, workspace=campaign.applicator.workspace,
+        _git=lambda argv: (0, "abc1234"),
+    )
+    return campaign
+
+
 # ---------------------------------------------------------------------------
 # Marker round-trips
 # ---------------------------------------------------------------------------
@@ -337,6 +348,40 @@ class TestResume:
             f"got {len(measurements)} total measurements: {measurements}"
         )
 
+    def test_resume_keeps_experiments_completed_before_the_pause(
+        self, profile, sla, workspace, tmp_path
+    ):
+        """The resumed run rewrites results/<run_id>.json. Experiments measured
+        before the pause must still be in it, or the manifest describes a campaign
+        that never happened (principle 1)."""
+        from crucible.perf.approval import PreapprovedGate
+
+        campaign, _ = _build_campaign(
+            profile, sla, workspace, p99s=[300.0, 250.0, 300.0, 300.0], max_experiments=3
+        )
+        campaign.state_dir = tmp_path / "state"
+        campaign.approval_gate = PreapprovedGate()
+        _with_fake_git(campaign)
+
+        class _PauseAfterFirst:
+            def __init__(self, inner):
+                self.inner, self.calls = inner, 0
+
+            async def diagnose(self, *a, **k):
+                self.calls += 1
+                if self.calls == 2:
+                    request_pause(campaign.state_dir, campaign.run_id, "lunch")
+                return await self.inner.diagnose(*a, **k)
+
+        campaign.diagnoser = _PauseAfterFirst(_DenyingDiagnoser())
+        first = asyncio.run(campaign.run())
+        assert first.paused and [e.experiment for e in first.experiments] == [1, 2]
+
+        resumed = asyncio.run(campaign.resume())
+
+        assert [e.experiment for e in resumed.experiments][:2] == [1, 2]
+        assert resumed.experiments[0].verdict == "IMPROVED"
+
     def test_resumed_result_baseline_matches_the_paused_state(
         self, profile, sla, workspace, tmp_path
     ):
@@ -352,3 +397,94 @@ class TestResume:
         resumed_result = asyncio.run(campaign.resume())
 
         assert resumed_result.baseline == paused_baseline
+
+
+# ---------------------------------------------------------------------------
+# A missed approval pauses; it does not abort (DESIGN.md 7, assertion 13.4)
+# ---------------------------------------------------------------------------
+
+
+class _CountingDiagnoser(_DenyingDiagnoser):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def diagnose(self, *a, **k):
+        self.calls += 1
+        return await super().diagnose(*a, **k)
+
+
+def _timing_out_gate(state_dir: Path, run_id: str):
+    """A file gate that gives up immediately unless a decision is already there."""
+    from crucible.perf.approval import FileApprovalGate
+
+    return FileApprovalGate(
+        run_id=run_id, state_dir=state_dir, timeout_s=0.0, poll_interval_s=0.0,
+        _sleep=lambda _s: None,
+    )
+
+
+class TestAMissedApprovalPauses:
+    def _campaign(self, profile, sla, workspace, tmp_path, p99s):
+        campaign, measurements = _build_campaign(profile, sla, workspace, p99s=p99s)
+        campaign.state_dir = tmp_path / "state"
+        campaign.diagnoser = _CountingDiagnoser()
+        campaign.approval_gate = _timing_out_gate(campaign.state_dir, campaign.run_id)
+        return campaign, measurements
+
+    def test_a_timeout_pauses_without_applying_or_redeploying(
+        self, profile, sla, workspace, tmp_path
+    ):
+        """An operator who was asleep has not destroyed the run. Before this the
+        campaign aborted: nothing was lost, but the baseline had to be measured
+        again from scratch."""
+        campaign, measurements = self._campaign(profile, sla, workspace, tmp_path, [300.0] * 4)
+        deploys: list[str] = []
+        campaign.deployer = type("D", (), {"deploy": lambda self, c: deploys.append(c)})()
+
+        result = asyncio.run(campaign.run())
+
+        assert result.paused is True and result.aborted is False
+        assert "crucible resume" in result.stopped_reason
+        assert result.experiments == [], "an experiment nobody approved did not happen"
+        assert (workspace / "application.properties").read_text(encoding="utf-8") == PROPERTIES
+        assert deploys == []
+        assert len(measurements) == 1
+        state = json.loads(paused_state_path(campaign.state_dir, campaign.run_id).read_text())
+        assert state["pending_manifest"]["proposal"]["changes"][0]["value"] == 5
+        assert state["number_prev"] == 0
+
+    def test_resume_reparks_the_same_proposal_and_honours_a_late_approval(
+        self, profile, sla, workspace, tmp_path
+    ):
+        """The approval written after the timeout answers exactly what was shown.
+        Re-diagnosing on resume could propose something else, and the late
+        approval would then be refused by the binding check."""
+        from crucible.perf.approval import write_decision
+
+        campaign, measurements = self._campaign(
+            profile, sla, workspace, tmp_path, [300.0, 100.0]
+        )
+        _with_fake_git(campaign)
+        asyncio.run(campaign.run())
+        assert campaign.diagnoser.calls == 1
+        write_decision(campaign.state_dir, campaign.run_id, 1, action="approve", responder="raghu")
+
+        resumed = asyncio.run(campaign.resume())
+
+        assert campaign.diagnoser.calls == 1, "resume must not ask the model again"
+        (experiment,) = resumed.experiments
+        assert experiment.approval["state"] == "approved"
+        assert experiment.approval["responder"] == "raghu"
+        assert experiment.verdict == "IMPROVED" and experiment.kept
+        assert "maximum-pool-size=5" in (workspace / "application.properties").read_text(encoding="utf-8")
+        assert len(measurements) == 2, "baseline once, then the re-measurement"
+
+    def test_resuming_without_an_answer_pauses_again(self, profile, sla, workspace, tmp_path):
+        campaign, _ = self._campaign(profile, sla, workspace, tmp_path, [300.0] * 4)
+        asyncio.run(campaign.run())
+
+        again = asyncio.run(campaign.resume())
+
+        assert again.paused is True
+        assert campaign.diagnoser.calls == 1
+        assert paused_state_path(campaign.state_dir, campaign.run_id).exists()

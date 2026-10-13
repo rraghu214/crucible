@@ -56,9 +56,12 @@ summing non-heap along with heap reports a number that is not the thing its name
 claims, and nothing but a cross-provider disagreement would show it.
 
 Both also exercise the unit conventions that cost the most to get wrong: the same
-Micrometer timer is **seconds** under Prometheus and **nanoseconds** under Datadog
+Micrometer timer is **seconds** under Prometheus and **milliseconds** under Datadog
 (see the `promql:` and `datadog:` blocks in `config/profiles/spring-boot.yaml`,
-and §4.1 for what reading one as the other did to the K3 spike).
+and §4.1 for what reading one as the other did to the K3 spike). The profile said
+nanoseconds until the first three-provider capture of `perflab_pool_starved` on
+11 October 2026 read Datadog's pool wait a million times too small. That
+disagreement is what this fixture exists to surface.
 
 `perflab_thread_starved` is the intended third — pool, JVM and Tomcat being three
 families — and is blocked behind the same missing gauges that stop it being

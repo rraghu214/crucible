@@ -9,13 +9,13 @@ that proves the seam holds against a backend whose API shape, naming convention
 
 **The unit difference is the whole reason this file is dangerous.** Micrometer
 reports timers in seconds, and both existing adapters hand the collector seconds
-because that is what their backends natively publish. Datadog does not: a timer
-submitted through Micrometer's ``DatadogMeterRegistry`` (or through DogStatsD)
-lands with a base unit of **nanoseconds**. An adapter that passed those through
-unchanged would have the collector multiply nanoseconds by 1000 as though they
-were seconds, and ``acquire`` would read 2.4 billion milliseconds instead of
-2406 -- the K3 failure again, a million times louder but in exactly the same
-place.
+because that is what their backends natively publish. Datadog does not. This
+file was written assuming **nanoseconds**; the first live check (11 October 2026)
+showed Micrometer's ``DatadogMeterRegistry`` publishes **milliseconds**, and the
+nanoseconds declaration made the pool wait read 0.001 ms instead of ~1024 -- the
+K3 failure again, a million times off, caught because the same load was captured
+through Actuator and PromQL at the same time. The unit is declared per series in
+the profile for exactly this reason: correcting it was one line of config.
 
 So this adapter normalises to the collector's contract: ``fetch`` returns
 ``{"COUNT": .., "TOTAL_TIME": .., "MAX": ..}`` **in seconds**, like every other
@@ -50,13 +50,16 @@ import httpx
 SUPPORTS_SERVICE_WIDE_PERCENTILES = True
 
 #: Source units this adapter will convert into the collector's seconds contract.
-#: ``nanoseconds`` is here because it is what Datadog's Micrometer registry and
-#: DogStatsD actually publish timers in; the conversion is exact for a DECLARED
-#: unit. Anything not on this list is refused, not guessed (``DESIGN.md`` 4.8).
-KNOWN_TIMER_UNITS = ("seconds", "nanoseconds")
+#: The conversion is exact for a DECLARED unit; anything not on this list is
+#: refused, not guessed (``DESIGN.md`` 4.8). ``milliseconds`` is what Micrometer's
+#: DatadogMeterRegistry actually publishes: checked against Box A's live Datadog
+#: on 11 October 2026, where the API itself labels the series `millisecond` and
+#: acquire.max read 2243 against Actuator's ~2400 ms. The module docstring's
+#: nanoseconds claim was the provisional guess that check overturned.
+KNOWN_TIMER_UNITS = ("seconds", "milliseconds", "nanoseconds")
 
 #: Exact, and therefore safe once the unit has been declared rather than assumed.
-_NANOSECONDS_TO_SECONDS = 1e-9
+_TO_SECONDS = {"seconds": 1.0, "milliseconds": 1e-3, "nanoseconds": 1e-9}
 
 #: ``DESIGN.md`` section 16: Datadog free is one host and one day of retention.
 #: Carried as constants so a campaign can state the limits it ran under instead
@@ -387,9 +390,7 @@ class DatadogMetricsProvider:
         without a client: this one multiplication is the difference between a
         2406 ms connection wait and a 2.4-billion-millisecond one.
         """
-        if declared_unit == "nanoseconds":
-            return value * _NANOSECONDS_TO_SECONDS
-        return value
+        return value * _TO_SECONDS.get(declared_unit, 1.0)
 
     def endpoint_breakdown(self, requests_series: str = "", *, tag: str = "resource_name") -> dict[str, Any] | None:
         """Per-endpoint request statistics, or ``None`` when they cannot be had.

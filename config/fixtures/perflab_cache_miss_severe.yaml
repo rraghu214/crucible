@@ -36,8 +36,7 @@ trap_properties: []
 
 task_classes: [A]
 
-validated_at: ""
-
+validated_at: "2026-10-03"
 notes: >
   The cache_miss diagnosis requires the agent to identify that pool pressure
   is SECONDARY (more connections are held longer because each read is slower)

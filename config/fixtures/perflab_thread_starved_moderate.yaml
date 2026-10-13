@@ -32,8 +32,7 @@ trap_properties: []
 
 task_classes: [A, B]
 
-validated_at: ""
-
+validated_at: "2026-10-03"
 notes: >
   The moderate severity has two uses. First, it proves the discrimination pair
   (T11) works at a signal strength that is not just the dramatic obvious case.

@@ -1453,11 +1453,10 @@ def cmd_diff(
 ) -> int:
     """Compare two campaigns, leading with what differs about their SETUP.
 
-    DESIGN.md 8: History flags a diff across environments rather than silently
-    allowing comparison across them. Generalised here to every input
-    EVALUATION.md's claim format names, because environment is only the one that
-    bites first -- a different collector or a different model makes two campaigns
-    just as incomparable, and far less visibly.
+    DESIGN.md 8: a diff across environments is flagged, not silently allowed.
+    Every claim input is checked. Only a different scenario or load profile
+    refuses (non-zero exit), because only those make the compared figures
+    measure different things; every other difference is listed above them.
     """
     import json as _json
 
@@ -1473,14 +1472,24 @@ def cmd_diff(
     result = compare(a, b)
     print(_rule(f"diff | {result.run_a} vs {result.run_b}"))
 
-    if result.comparable:
+    if result.identical_setup:
         print("\n  Same environment, SLA, profile, scenario, collector, noise floor and")
         print("  model. These two campaigns measured the same thing.")
-    else:
-        print("\n  NOT COMPARABLE. These campaigns did not measure the same thing:\n")
+    elif result.comparable:
+        print("\n  COMPARABLE, WITH DIFFERENCES. Same scenario and load; the setup differs:\n")
         for difference in result.differences:
             print(f"  - {difference}")
-        print(f"\n  {result.as_dict()['warning']}")
+        print(f"\n  {result.warning()}")
+    else:
+        print("\n  NOT COMPARABLE. These campaigns did not measure the same thing:\n")
+        for difference in result.blocking:
+            print(f"  - {difference}")
+        others = [d for d in result.differences if d not in result.blocking]
+        if others:
+            print("\n  Also different:")
+            for difference in others:
+                print(f"  - {difference}")
+        print(f"\n  {result.warning()}")
 
     for label, run, measurement, outcome in (
         ("A", result.run_a, result.measurement_a, result.outcome_a),

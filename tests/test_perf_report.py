@@ -111,6 +111,23 @@ def kept_experiment(**overrides):
 # ---------------------------------------------------------------------------
 
 
+def test_a_human_approval_is_counted_from_the_state_the_manifest_stores():
+    """Found on the live runs of 10 October 2026: every experiment was approved
+    by an operator, and the report said `approvals: 0`, because it read a
+    property that is never serialised. Reporting a human-approved run as
+    unapproved understates principle 4; the reverse would overstate it."""
+    from crucible.perf.report import reproduction
+
+    human = kept_experiment(approval={"state": "approved", "responder": "raghu"})
+    auto = kept_experiment(experiment=2, approval={"state": "approved", "responder": "preapproved"})
+    refused = kept_experiment(experiment=3, approval={"state": "rejected", "responder": "raghu"})
+
+    repro = reproduction(campaign(experiments=[human, auto, refused]))
+
+    assert repro["approvals"] == 1
+    assert repro["preapproved"] == 1
+
+
 def test_a_replay_result_is_refused_rather_than_rendered_as_an_empty_campaign(tmp_path):
     path = tmp_path / "replay.json"
     path.write_text(json.dumps({"cases": [], "task_set": "v1"}), encoding="utf-8")
@@ -350,8 +367,61 @@ def test_a_different_load_profile_is_flagged():
 
 def test_every_claim_input_is_checked():
     """EVALUATION.md: change any one input and it is a different claim."""
-    checked = {name for name, _why in COMPARABILITY_FIELDS}
-    assert {"environment", "sla", "collector_version", "model", "at_load"} <= checked
+    checked = {name for name, _blocks, _why in COMPARABILITY_FIELDS}
+    assert {"environment", "sla", "collector_version", "model", "at_load", "scenario"} <= checked
+
+
+def test_only_scenario_and_load_profile_block_a_comparison():
+    """Operator decision, 11 October 2026. The diff compares the load generator's
+    figures. Only a different scenario or load profile changes what those
+    figures measure; the rest change the circumstances and are flagged."""
+    blocking = {name for name, blocks, _why in COMPARABILITY_FIELDS if blocks}
+    assert blocking == {"scenario", "at_load"}
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"collector_version": "1.1.0"},
+        {"models_used": ["gemini-2.0-flash"]},
+        {"profile": "fastapi"},
+    ],
+)
+def test_a_non_blocking_difference_is_compared_and_named(change):
+    """A collector bump that only added fields, a different model, a different
+    profile: the latency figures still measure the same endpoints at the same
+    load, so they are shown, with the difference stated above them."""
+    result = compare(campaign(), campaign(run_id="run-B", **change))
+
+    assert result.comparable is True
+    assert result.identical_setup is False
+    assert result.differences and not result.blocking
+    assert "Compared with differences" in result.as_dict()["warning"]
+
+
+def test_a_different_environment_is_compared_and_named():
+    other = campaign(run_id="run-B")
+    other["sla"] = dict(other["sla"], environment_name="hetzner-cx32")
+    result = compare(campaign(), other)
+    assert result.comparable is True
+    assert any("environment differs" in d for d in result.differences)
+
+
+def test_a_collector_difference_says_the_compared_figures_do_not_depend_on_it():
+    """The figures compared are load-generator figures (report._load_of). If
+    the diff ever starts comparing snapshot fields, this reason becomes false
+    and collector_version has to block again."""
+    other = campaign(run_id="run-B", collector_version="1.1.0")
+    (line,) = comparability(campaign(), other)
+    assert "load generator" in line
+    assert set(final_measurement(campaign())) <= {"p50_ms", "p95_ms", "p99_ms", "rps", "error_rate_pct"}
+
+
+def test_a_different_scenario_blocks():
+    other = campaign(run_id="run-B", scenario="slow-endpoint")
+    result = compare(campaign(), other)
+    assert result.comparable is False
+    assert any("scenario differs" in d for d in result.blocking)
 
 
 def test_no_delta_is_computed_even_when_the_setups_match():
@@ -362,7 +432,8 @@ def test_no_delta_is_computed_even_when_the_setups_match():
 
 
 def test_an_incomparable_diff_carries_an_explicit_warning():
-    other = campaign(run_id="run-B", collector_version="0.9.0")
+    other = campaign(run_id="run-B")
+    other["sla"] = dict(other["sla"], at_load={"users": 10})
     result = compare(campaign(), other).as_dict()
     assert result["comparable"] is False
     assert "MUST NOT be read as a before/after pair" in result["warning"]

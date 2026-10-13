@@ -199,9 +199,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     # `diff` leads with what differs about the SETUP of two campaigns. DESIGN.md 8
     # requires a diff across environments to be flagged rather than silently
-    # allowed; every other input to EVALUATION.md's claim format gets the same
-    # treatment, because a changed collector or model is just as disqualifying and
-    # far less visible. Exits non-zero when the two are not comparable.
+    # allowed. Exits non-zero only when the scenario or load profile differs,
+    # since only those make the compared figures measure different things.
     diff = sub.add_parser("diff", help="compare two campaigns, refusing an unsafe comparison")
     diff.add_argument("--journal", default="results", help="directory of campaign manifests")
     diff.add_argument("--a", required=True, dest="run_a", help="first run id")
@@ -315,11 +314,9 @@ def main() -> int:
 
     if args.command == "serve-ui":
         os.environ.setdefault("CRUCIBLE_ROOT", str(Path(args.root).resolve()))
-        from nicegui import ui  # noqa: PLC0415
+        from .ui import nicegui_app  # noqa: PLC0415
 
-        from .ui import nicegui_app as _nicegui_app  # noqa: PLC0415,F401
-        ui.run(host=args.host, port=args.port, title="Crucible", favicon="🔥",
-               reload=False, show=False)
+        nicegui_app.run(args.host, args.port)
         return 0
 
     from .perf import commands

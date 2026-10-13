@@ -205,6 +205,45 @@ class TestActiveRuns:
 
 
 # ---------------------------------------------------------------------------
+# What the Campaign page waits on
+# ---------------------------------------------------------------------------
+
+class TestWaitingState:
+    def test_a_parked_approval_is_listed_with_the_cli_rendering(self, tmp_path):
+        from crucible.ui.perf_data import pending_decisions
+
+        ctx = _ctx(tmp_path)
+        _write(ctx.state / "approvals" / "r1" / "001.request.json",
+               {"run_id": "r1", "experiment": 1, "summary": "s", "params": {"p": 20},
+                "cause_family": "connection_pool_exhaustion"})
+        (request,) = pending_decisions(ctx)
+        assert request["run_id"] == "r1"
+        assert "p -> 20" in request["rendered"]
+
+    def test_an_answered_approval_and_a_manual_step_are_not_pending_approvals(self, tmp_path):
+        from crucible.ui.perf_data import pending_decisions, pending_manual
+
+        ctx = _ctx(tmp_path)
+        run_dir = ctx.state / "approvals" / "r1"
+        _write(run_dir / "001.request.json", {"run_id": "r1", "experiment": 1, "summary": "s", "params": {}})
+        _write(run_dir / "001.decision.json", {"action": "approve"})
+        _write(run_dir / "002.manual.request.json", {"run_id": "r1", "experiment": 2, "instructions": "restart"})
+        assert pending_decisions(ctx) == []
+        assert [s["experiment"] for s in pending_manual(ctx)] == [2]
+
+    def test_markers_and_paused_runs_are_read_by_run_id(self, tmp_path):
+        from crucible.ui.perf_data import abort_markers, pause_markers, paused_runs
+
+        ctx = _ctx(tmp_path)
+        _write(ctx.state / "aborts" / "r1.abort", {"reason": "wrong box"})
+        _write(ctx.state / "pauses" / "r2.pause", {"reason": "lunch"})
+        _write(ctx.state / "pauses" / "r3.paused.json", {"experiment": 2})
+        assert abort_markers(ctx) == [{"run_id": "r1", "reason": "wrong box"}]
+        assert [m["run_id"] for m in pause_markers(ctx)] == ["r2"]
+        assert paused_runs(ctx) == [{"run_id": "r3"}]
+
+
+# ---------------------------------------------------------------------------
 # list_replay_runs
 # ---------------------------------------------------------------------------
 

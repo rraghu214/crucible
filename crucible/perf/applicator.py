@@ -122,6 +122,24 @@ class Proposal:
             "abstain_reason": self.abstain_reason,
         }
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Proposal:
+        """The inverse of :meth:`as_dict`, for a proposal parked across a pause."""
+        return cls(
+            cause_family=str(data.get("cause_family") or ""),
+            changes=tuple(
+                Change(prop=c["prop"], value=c.get("value"), previous=c.get("previous"),
+                       unit=c.get("unit", ""))
+                for c in data.get("changes") or []
+            ),
+            reasoning=str(data.get("reasoning") or ""),
+            confidence=data.get("confidence"),
+            predicted_p99_ms=data.get("predicted_p99_ms"),
+            evidence_cited=tuple(data.get("evidence_cited") or ()),
+            abstained=bool(data.get("abstained")),
+            abstain_reason=str(data.get("abstain_reason") or ""),
+        )
+
     def summary(self) -> str:
         """One line for the approval card and the CLI."""
         if self.abstained:

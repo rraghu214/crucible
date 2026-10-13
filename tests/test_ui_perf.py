@@ -223,16 +223,18 @@ class TestAfterwardsScreensReadTheJournal:
         assert "93" in shown
         assert "trace" in shown.lower(), "limits_of_this_result must say traces were never checked"
 
-    def test_history_refuses_a_comparison_across_environments(self, ctx):
+    def test_history_flags_a_comparison_across_environments(self, ctx):
         """DESIGN.md section 8, through report.compare -- the UI adds no second
-        comparability rule of its own."""
+        comparability rule of its own. A different environment is flagged and
+        named; it does not block (operator decision, 11 October 2026)."""
         Path(ctx.results_dir, "run-A.json").write_text(json.dumps(_campaign("run-A")))
         Path(ctx.results_dir, "run-B.json").write_text(
             json.dumps(_campaign("run-B", environment="local", started_at_epoch_s=1_759_100_000.0)))
 
         shown = _texts(build_screen(17, ctx, {"a": "run-A", "b": "run-B"}))
 
-        assert "NOT COMPARABLE" in shown
+        assert "Compared with differences" in shown
+        assert "environment differs" in shown
 
     def test_a_replay_file_in_results_is_named_not_rendered_as_a_campaign(self, ctx):
         Path(ctx.results_dir, "replay.json").write_text(json.dumps({"cases": []}))

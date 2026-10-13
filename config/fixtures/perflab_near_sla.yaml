@@ -37,8 +37,7 @@ trap_properties: []
 
 task_classes: [D, E]
 
-validated_at: ""
-
+validated_at: "2026-10-03"
 notes: >
   The near-SLA fixture is the class E companion to perflab_healthy. Where the
   healthy fixture has a wide margin, this one has a narrow one. In class D the

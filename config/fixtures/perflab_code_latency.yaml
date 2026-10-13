@@ -51,8 +51,7 @@ trap_properties: []
 
 task_classes: [D]
 
-validated_at: ""
-
+validated_at: "2026-10-03"
 notes: >
   RESOLVED 26 September 2026. `application_code` is now declared in
   config/profiles/spring-boot.yaml and described in its SKILL.md, so this

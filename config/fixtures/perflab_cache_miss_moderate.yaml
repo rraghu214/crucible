@@ -37,8 +37,7 @@ trap_properties: []
 
 task_classes: [A]
 
-validated_at: ""
-
+validated_at: "2026-10-03"
 notes: >
   The moderate severity tests whether the agent reads the cache hit ratio
   rather than the cache_enabled flag. Both are "cache enabled=true" at the

@@ -40,8 +40,7 @@ trap_properties:
 
 task_classes: [A, C]
 
-validated_at: ""
-
+validated_at: "2026-10-03"
 notes: >
   The fix -- raising batch_fetch_size and batch_size to 25-100 -- is available
   on the allowed_properties list. It reduces the per-request query count from
