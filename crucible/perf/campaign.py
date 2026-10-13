@@ -111,6 +111,18 @@ class CampaignPaused(RuntimeError):
         self.state = state
 
 
+class _AwaitingApproval(Exception):
+    """Internal: nobody answered a parked approval in time.
+
+    Raised out of ``_one_experiment`` so ``_run_locked``, which holds the loop
+    counters, can turn it into a resumable pause. Never escapes the campaign.
+    """
+
+    def __init__(self, msg: str, manifest: "ExperimentManifest") -> None:
+        super().__init__(msg)
+        self.manifest = manifest
+
+
 # ---------------------------------------------------------------------------
 # The SLA, read-only
 # ---------------------------------------------------------------------------
@@ -889,11 +901,22 @@ class Campaign:
         result: CampaignResult,
         _resume_state: "dict[str, Any] | None" = None,
     ) -> None:
+        pending: ExperimentManifest | None = None
         if _resume_state:
             # Resuming from a pause: skip the baseline and restore loop state.
-            # The baseline was already measured and is on disk in the paused run's
-            # result JSON; we carry it on this result for the report to read.
+            # Everything the paused run had already recorded comes back with it --
+            # completed experiments, what was ruled out, which models answered --
+            # because the resumed run rewrites results/<run_id>.json, and a manifest
+            # that lost a kept experiment would describe a campaign that never ran.
             result.baseline = _resume_state.get("baseline", {})
+            result.experiments = [
+                ExperimentManifest(**e) for e in _resume_state.get("experiments") or []
+            ]
+            result.ruled_out = list(_resume_state.get("ruled_out") or [])
+            result.models_used = list(_resume_state.get("models_used") or [])
+            result.started_at_epoch_s = float(
+                _resume_state.get("started_at_epoch_s") or result.started_at_epoch_s
+            )
             current_snapshot = _resume_state["current_snapshot"]
             current_load = _load_from_summary(
                 _resume_state["current_load"],
@@ -902,6 +925,8 @@ class Campaign:
             number = _resume_state.get("number_prev", 0)
             charged = _resume_state.get("charged_prev", 0)
             consecutive_refusals = _resume_state.get("consecutive_refusals", 0)
+            if _resume_state.get("pending_manifest"):
+                pending = ExperimentManifest(**_resume_state["pending_manifest"])
         else:
             baseline_load, baseline_snapshot = self.measure(self.scenario, f"{self.run_id}-baseline")
             if baseline_load.aborted:
@@ -918,6 +943,8 @@ class Campaign:
                 "snapshot": baseline_snapshot,
                 "sla_met": self.sla.met_by(baseline_load.p99_ms, baseline_load.error_rate_pct),
             }
+            if baseline_load.watchdog:
+                result.baseline["watchdog"] = baseline_load.watchdog
             self._emit(
                 "baseline_done",
                 p99_ms=baseline_load.p99_ms,
@@ -973,18 +1000,17 @@ class Campaign:
                 # reflect only completed experiments, not the one we're about to run.
                 raise CampaignPaused(
                     f"paused by operator before experiment {number}: {pause_reason}",
-                    {
-                        "run_id": self.run_id,
-                        "paused_at_epoch_s": time.time(),
-                        "paused_reason": pause_reason,
-                        "number_prev": number - 1,
-                        "charged_prev": charged - 1,
-                        "consecutive_refusals": consecutive_refusals,
-                        "current_snapshot": current_snapshot,
-                        "current_load": current_load.as_load_summary(),
-                        "baseline": result.baseline,
-                        "experiments_count": len(result.experiments),
-                    },
+                    self._pause_state(
+                        result,
+                        reason=pause_reason,
+                        number_prev=number - 1,
+                        charged_prev=charged - 1,
+                        consecutive_refusals=consecutive_refusals,
+                        current_snapshot=current_snapshot,
+                        current_load=current_load,
+                        # A proposal still waiting from an earlier pause stays parked.
+                        pending=pending,
+                    ),
                 )
 
             manifest = ExperimentManifest(
@@ -1030,7 +1056,33 @@ class Campaign:
                     manifest.verdict_reason = str(timeout)
                     raise CampaignAborted(str(timeout)) from timeout
 
-            keep_going = await self._one_experiment(result, manifest, current_snapshot)
+            try:
+                keep_going = await self._one_experiment(
+                    result, manifest, current_snapshot, pending=pending
+                )
+            except _AwaitingApproval as waiting:
+                # Section 7: an operator who did not answer has not destroyed the
+                # run. Nothing was applied, so this experiment did not happen; its
+                # proposal is kept so resume re-parks the SAME change rather than
+                # asking the model again -- an approval written after the timeout
+                # then answers exactly what the operator was shown.
+                result.experiments.remove(manifest)
+                raise CampaignPaused(
+                    f"paused waiting for a decision on experiment {number}: {waiting} "
+                    f"Answer it with `crucible approve {self.run_id} --experiment {number} "
+                    f"--as <you>` (add --reject to decline), then `crucible resume {self.run_id}`.",
+                    self._pause_state(
+                        result,
+                        reason=f"no decision on experiment {number}",
+                        number_prev=number - 1,
+                        charged_prev=charged - 1,
+                        consecutive_refusals=consecutive_refusals,
+                        current_snapshot=current_snapshot,
+                        current_load=current_load,
+                        pending=waiting.manifest,
+                    ),
+                ) from waiting
+            pending = None
 
             if self.hooks.has_hooks() and not manifest.refused_by_guard:
                 try:
@@ -1077,13 +1129,53 @@ class Campaign:
 
         result.stopped_reason = f"reached the experiment ceiling of {self.max_experiments}"
 
+    def _pause_state(
+        self,
+        result: CampaignResult,
+        *,
+        reason: str,
+        number_prev: int,
+        charged_prev: int,
+        consecutive_refusals: int,
+        current_snapshot: dict[str, Any],
+        current_load: LoadResult,
+        pending: ExperimentManifest | None = None,
+    ) -> dict[str, Any]:
+        """Everything ``resume`` needs to carry on as if the pause never happened."""
+        return {
+            "run_id": self.run_id,
+            "paused_at_epoch_s": time.time(),
+            "paused_reason": reason,
+            "number_prev": number_prev,
+            "charged_prev": charged_prev,
+            "consecutive_refusals": consecutive_refusals,
+            "current_snapshot": current_snapshot,
+            "current_load": current_load.as_load_summary(),
+            "baseline": result.baseline,
+            "experiments": [e.as_dict() for e in result.experiments],
+            "experiments_count": len(result.experiments),
+            "ruled_out": list(result.ruled_out),
+            "models_used": list(result.models_used),
+            "started_at_epoch_s": result.started_at_epoch_s,
+            "pending_manifest": pending.as_dict() if pending is not None else None,
+        }
+
     async def _one_experiment(
         self,
         result: CampaignResult,
         manifest: ExperimentManifest,
         snapshot: dict[str, Any],
+        pending: ExperimentManifest | None = None,
     ) -> bool:
-        """One diagnose/approve/apply/verify cycle. Returns whether to continue."""
+        """One diagnose/approve/apply/verify cycle. Returns whether to continue.
+
+        ``pending`` is a proposal that was parked when an earlier run paused for
+        want of a decision. It is re-parked as it was, without a new diagnosis.
+        """
+        if pending is not None and pending.proposal:
+            return await self._approve_apply_verify(
+                result, manifest, self._restore_pending(manifest, pending)
+            )
         # Section 14. The filter is on exact tokens -- this profile, this
         # scenario -- because a finding about a FastAPI target says nothing about
         # a JVM one, and feeding it across would have the agent eliminate a cause
@@ -1136,6 +1228,27 @@ class Campaign:
             )
             return False
 
+        return await self._approve_apply_verify(result, manifest, proposal)
+
+    def _restore_pending(self, manifest: ExperimentManifest, pending: ExperimentManifest) -> Proposal:
+        """Carry a parked proposal, and what produced it, onto this experiment."""
+        manifest.diagnosis = pending.diagnosis
+        manifest.proposal = pending.proposal
+        manifest.prior_findings = pending.prior_findings
+        manifest.cause_family = pending.cause_family
+        manifest.cause_family_declared = pending.cause_family_declared
+        manifest.predicted_p99_ms = pending.predicted_p99_ms
+        manifest.notes = [
+            *pending.notes,
+            "resumed after a pause for a decision: the same proposal was re-parked, "
+            "not re-diagnosed",
+        ]
+        return Proposal.from_dict(pending.proposal or {})
+
+    async def _approve_apply_verify(
+        self, result: CampaignResult, manifest: ExperimentManifest, proposal: Proposal
+    ) -> bool:
+        """Guard, approval, apply, deploy, re-measure, verdict."""
         refusal = guard_proposal(self.profile, proposal)
         if refusal:
             # Recorded and fed back. The next diagnosis sees it in ruled_out, so
@@ -1165,7 +1278,7 @@ class Campaign:
         try:
             decision = self.approval_gate.request(request)
         except ApprovalTimeout as timeout:
-            raise CampaignAborted(str(timeout)) from timeout
+            raise _AwaitingApproval(str(timeout), manifest) from timeout
         manifest.approval = decision.as_dict()
         self.audit_log.approval(manifest.experiment, approved=decision.approved, reason=decision.reason)  # type: ignore[union-attr]
         self._emit("approval", experiment=manifest.experiment, approved=decision.approved, reason=decision.reason)
@@ -1284,6 +1397,8 @@ class Campaign:
             )
 
         manifest.after = {"load": after_load.as_load_summary(), "snapshot": after_snapshot}
+        if after_load.watchdog:
+            manifest.watchdog = after_load.watchdog
         manifest.sla_met_after = self.sla.met_by(after_load.p99_ms, after_load.error_rate_pct)
 
         before_p99 = manifest.before.get("load", {}).get("p99_ms")

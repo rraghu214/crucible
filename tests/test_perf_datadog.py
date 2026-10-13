@@ -155,6 +155,32 @@ class TestNanosecondsAreConvertedNotPassedThrough:
 
         assert raw == {"COUNT": 3186.0}
 
+    def test_the_k3_numbers_survive_millisecond_timers_through_the_shipped_profile(self):
+        """What Micrometer's Datadog registry actually publishes (checked live,
+        11 October 2026): milliseconds. Through the SHIPPED profile, not a
+        hand-built mapping, so a wrong unit in spring-boot.yaml fails here and
+        not in a capture that reads a 1024 ms pool wait as 0.001 ms."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            query = request.url.params["query"]
+            if "acquire.count" in query:
+                return httpx.Response(200, json=_one_series(3186))
+            if "acquire.sum" in query:
+                return httpx.Response(200, json=_one_series(3_499_070))
+            return httpx.Response(200, json=_one_series(2405.6))
+
+        provider = DatadogMetricsProvider.from_profile(
+            "https://api.datadoghq.com",
+            TargetProfile.named("spring-boot"),
+            api_key="dd-api",
+            application_key="dd-app",
+            client=httpx.Client(transport=httpx.MockTransport(handler)),
+        )
+        derived = derive_timer_ms(provider.fetch("hikaricp.connections.acquire"), "acquire")
+
+        assert derived["acquire_mean_ms"] == pytest.approx(1098, rel=0.01)
+        assert derived["acquire_max_recent_ms"] == pytest.approx(2406, rel=0.01)
+
     def test_seconds_declared_are_left_alone(self):
         """A target that submits seconds is not double-converted just because
         the backend is Datadog. The unit is a property of the metric, declared
@@ -211,16 +237,19 @@ class TestTheQueryItSends:
     def test_credentials_and_a_time_window_are_sent_on_every_query(self):
         """Datadog's v1 query API has no instant form: a query without from/to
         is a 400, and a query without both keys is a 403 that reads exactly
-        like an empty metric. Keys are in headers (never URL params) so they
-        do not appear in proxy logs or the journal (DESIGN.md 19.8)."""
+        like an empty metric. Keys are in headers (never URL params and never
+        in the URL path) so they do not appear in proxy logs or the journal
+        (DESIGN.md §19.8)."""
         params_captured: dict[str, str] = {}
         headers_captured: dict[str, str] = {}
         paths: list[str] = []
+        full_urls: list[str] = []
 
         def handler(request: httpx.Request) -> httpx.Response:
             params_captured.update(dict(request.url.params))
             headers_captured.update(dict(request.headers))
             paths.append(request.url.path)
+            full_urls.append(str(request.url))
             return httpx.Response(200, json=_one_series(1.0))
 
         _provider(handler).fetch("hikaricp.connections.acquire")
@@ -232,6 +261,10 @@ class TestTheQueryItSends:
         assert headers_captured.get("dd-api-key") == "dd-api"
         assert headers_captured.get("dd-application-key") == "dd-app"
         assert int(params_captured["to"]) - int(params_captured["from"]) == 300
+        # Key VALUES must not appear anywhere in the URL (path or query string).
+        # A URL ending up in a proxy log or stack trace must not leak credentials.
+        assert all("dd-api" not in u for u in full_urls), "API key value must not appear in the URL"
+        assert all("dd-app" not in u for u in full_urls), "application key value must not appear in the URL"
 
     def test_the_scope_pins_the_query_to_one_host(self):
         """The free tier has one host, but a query without a scope starts
@@ -294,6 +327,30 @@ class TestAnUnreachableBackendDegradesToUnknown:
             return httpx.Response(502, text="bad gateway")
 
         assert _provider(handler).fetch("hikaricp.connections.acquire") is None
+
+    @pytest.mark.parametrize("status", [401, 403])
+    def test_an_auth_failure_is_declared_not_read_as_no_data(self, status):
+        """A rejected key and a metric with no data both yield no series. Only
+        the first is something an operator can fix, and if it surfaced as plain
+        nulls every metric would read 'never measured' with no reason given."""
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(status, json={"errors": ["Forbidden"]})
+
+        provider = _provider(handler)
+
+        assert provider.fetch("hikaricp.connections.acquire") is None
+        assert str(status) in provider.auth_error
+        assert "DD-API-KEY" in provider.auth_error
+
+    def test_a_plain_outage_is_not_reported_as_an_auth_failure(self):
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(502, text="bad gateway")
+
+        provider = _provider(handler)
+        provider.fetch("hikaricp.connections.acquire")
+
+        assert provider.auth_error == ""
 
     def test_malformed_json_is_none_not_an_exception(self):
         def handler(_request: httpx.Request) -> httpx.Response:
@@ -373,7 +430,8 @@ class TestConstruction:
         )
 
         acquire = provider.series["hikaricp.connections.acquire"]
-        assert acquire.unit == "nanoseconds"
+        # Was "nanoseconds" until the live check on 11 October 2026 (19.1).
+        assert acquire.unit == "milliseconds"
         assert acquire.is_timer
         assert provider.series["hikaricp.connections.pending"].is_gauge
 
