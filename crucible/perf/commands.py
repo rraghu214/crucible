@@ -1706,6 +1706,7 @@ def cmd_capture(
         warmup_s=warmup_s,
         measure_s=measure_s,
         tags=(spec.scenario_tag,),
+        expect_possible_failure=spec.expect_possible_failure,
     )
 
     if all_providers:

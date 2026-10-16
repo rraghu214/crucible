@@ -32,6 +32,10 @@ setup: >
 
 scenario_tag: downstream
 
+# Locust exits 1 when ANY request fails. This fixture drives ~100% timeouts
+# by design, so a non-zero locust exit is expected — not a capture error.
+expect_possible_failure: true
+
 providers:
   - actuator
 

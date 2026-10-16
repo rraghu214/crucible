@@ -121,6 +121,12 @@ class FixtureSpec:
     #: snapshots"). Multi-provider capture is what makes provider independence a
     #: measured claim rather than an architectural one.
     providers: tuple[str, ...] = ("actuator",)
+    #: When True, a non-zero locust exit code is NOT a capture error. Some
+    #: fixtures intentionally produce ~100% request failures (e.g.
+    #: downstream_latency_severe drives every call to timeout). Locust exits 1
+    #: on any request failure, so without this flag the capture would raise
+    #: LoadRunnerError even though the load ran correctly.
+    expect_possible_failure: bool = False
     notes: str = ""
 
     def as_dict(self) -> dict[str, Any]:
@@ -168,6 +174,7 @@ class FixtureSpec:
                 if data.get("providers") is None
                 else tuple(str(p) for p in data["providers"])
             ),
+            expect_possible_failure=bool(data.get("expect_possible_failure", False)),
             notes=str(data.get("notes", "")),
         )
 
