@@ -127,24 +127,28 @@ baseline to grade against.
 **Fixtures captured:** 16 Actuator snapshots on Box B
 (`results/<fixture_id>.<provider>.json`, `collector_version: 1.2.0`), from the
 3–4 October sweep. Of those, 13 have `validated_at: 2026-10-03` in
-`config/fixtures/` (committed from Box B's working tree on 11 October). Not yet
-captured: the three JVM-flag fixtures (`perflab_gc_pressure`,
-`perflab_gc_pressure_moderate`, `perflab_gc_and_pool`) and
-`perflab_downstream_latency_severe`, whose capture produced load files but no
-snapshot.
+`config/fixtures/` (committed from Box B's working tree on 11 October). All
+previously missing fixtures are now captured: `perflab_gc_pressure` (actuator,
+promql, datadog) and `perflab_downstream_latency_severe` (actuator) were
+captured on 17 October 2026 after fixing `expect_possible_failure` propagation
+from `FixtureSpec` to `Scenario` (commit `1c1748c`). 22 snapshots total.
 
-**Replay run:** `results/replay.json`, 4 October 2026. Full write-up in
-`docs/BENCHMARK_REPLAY_RESULTS.md` §v2. Two numbers come out of the same file,
+**Replay run:** `proofs/results/replay.json`, 17 October 2026 (prior run:
+`results/replay.json`, 4 October 2026; full write-up in
+`docs/BENCHMARK_REPLAY_RESULTS.md` §v2). Two numbers come out of the same file,
 and they answer different questions:
 
-> Diagnosis accuracy: right cause on 18 of the 25 cases that have a ground truth
-> (72%); 3 more cases are fixtures with no cause to name. 0 transport errors,
-> 0 trap properties proposed. Harness `crucible@77c78f3`, `gemini-3.5-flash-lite`
+> Diagnosis accuracy: right cause on 35 of the 37 cases that have a ground truth
+> (94.6%); 3 more cases are fixtures with no cause to name. 0 transport errors,
+> 0 trap properties proposed. Harness `crucible@0bd2b87`, `gemini-3.5-flash-lite`
 > pinned, failover disabled, Box B / Oracle Cloud US East.
 >
-> Graded by task class (`scorer.grade_replay_case`, the rules each task file
-> states): 21 of 28 pass. A 5/8 · B 3/4 · C 7/9 · D 4/5 · E 2/2.
-> Both class C failures named the wrong cause; neither touched the trap.
+> 40 total cases, 12 abstentions, 0 errors, 0 refused fixtures, single model
+> throughout. 7 trap fixtures were never tempted (no task drove their trap
+> properties), so 0 trap violations is an untested zero on those fixtures.
+
+**Prior run (4 October, v2):** 18/25 correct (72%), 21/28 tasks passed.
+Superseded by the 17 October run above, which uses the full 22-fixture set.
 
 **Live campaigns:** full results in `docs/BENCHMARK_LIVE_RESULTS.md`.
 
@@ -165,20 +169,8 @@ adversarial request sat in a field nothing read (`prompt:` rather than
 `stakeholder_request:`), and the run command had no `--stakeholder-request`, so
 the model was asked T1 again. Both were fixed and the run repeated on 10 October.
 
-**JVM fixture status:** `gc_pressure`, `gc_pressure_moderate` and `gc_and_pool` need
-`PERFLAB_JAVA_OPTS` set on Box A through shell SSH (the deploy key is git-shell
-only). Add the line; do not overwrite the file, which also holds the Datadog
-keys, and keep the `export`, without which the JVM never sees the value:
-
-```bash
-ssh ubuntu@129.213.121.108 'grep -q PERFLAB_JAVA_OPTS ~/perflab.env || echo "export PERFLAB_JAVA_OPTS=\"-Xmx128m\"" >> ~/perflab.env'
-```
-
-Then re-run the sweep with `--boxa-shell-key ~/.ssh/perflab_boxa_shell --fixture <id>`,
-and remove the line afterwards so the next fixture runs with the default heap.
-
-**Provider coverage:** Actuator for all 16 captured fixtures. PromQL and Datadog
-for `perflab_pool_starved` only (`perflab_gc_pressure` is not yet captured).
+**Provider coverage:** Actuator for all 22 captured fixtures. PromQL and Datadog
+for `perflab_pool_starved` and `perflab_gc_pressure`.
 
 > Provider agreement, `perflab_pool_starved`, one load, 11 October 2026: pool wait
 > mean 1023 ms (Actuator) · 1023 ms (PromQL) · 1036 ms (Datadog); recent max
