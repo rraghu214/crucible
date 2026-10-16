@@ -166,7 +166,14 @@ def path_is_protected(candidate: str | Path, protected_paths: tuple[str, ...] | 
     ``tests/perf/test_x.py``, whereas ``PurePath.match`` would not. A guard that
     under-matches is worse than one that over-matches.
     """
-    text = str(candidate).replace("\\", "/").lstrip("./")
+    text = str(candidate).replace("\\", "/")
+    # Strip leading "./" (relative notation), but never strip leading "/" so
+    # that absolute Linux paths (/tmp/foo) are not reduced to (tmp/foo) and
+    # therefore fail to match an absolute-path pattern in protected_paths.
+    # lstrip("./") strips individual characters, not the two-char prefix, which
+    # was the original bug: "/tmp/foo".lstrip("./") → "tmp/foo".
+    while text.startswith("./"):
+        text = text[2:]
     for pattern in protected_paths:
         clean = pattern.replace("\\", "/")
         if fnmatch.fnmatch(text, clean):
