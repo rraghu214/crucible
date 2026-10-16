@@ -1757,7 +1757,34 @@ def cmd_capture(
             )
         return OK
 
-    measure = build_measure(profile, sla)
+    if provider_name == "actuator":
+        measure = build_measure(profile, sla)
+    else:
+        # build_measure always wires ActuatorMetricsProvider. For a non-Actuator
+        # capture the snapshot must come from the requested provider, so use
+        # build_multi_measure (which still drives gauge sampling through Actuator
+        # during the load window) and select only the requested provider's snapshot.
+        # Refusing early if that provider is unreachable is better than writing a
+        # fixture labelled "promql" that contains Actuator numbers.
+        _multi = build_multi_measure(
+            profile,
+            sla,
+            promql_url=promql_url if provider_name == "promql" else "",
+            datadog_base_url=datadog_base_url if provider_name == "datadog" else "",
+            datadog_api_key=datadog_api_key if provider_name == "datadog" else "",
+            datadog_application_key=datadog_application_key if provider_name == "datadog" else "",
+        )
+        _pname = provider_name
+
+        def measure(scn: Any, rid: str) -> Any:
+            load, snapshots = _multi(scn, rid)
+            if _pname not in snapshots:
+                raise FixtureError(
+                    f"provider {_pname!r} was not reachable at capture time. "
+                    f"Check URL and credentials, then retry."
+                )
+            return load, snapshots[_pname]
+
     try:
         captured = capture_fixture(
             spec,
