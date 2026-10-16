@@ -205,6 +205,31 @@ result on the Benchmark page.
 
 ---
 
+### Ceiling probe (capability mention only — no live run needed)
+
+**What it demonstrates:** characterising a service's capacity ceiling, not diagnosing
+a failure. Escalates load in steps until the SLA is missed; reports the last passing
+level and first failing level as a pair. Operator must explicitly flag the intent and
+set bounds (DESIGN.md §20.1) — the agent never infers it.
+
+**CLI command (for reference):**
+```bash
+uv run crucible ceiling \
+    --profile spring-boot \
+    --sla config/slo.yaml \
+    --min-users 50 \
+    --max-users 300 \
+    --step-size 50 \
+    --run-id demo-ceiling
+```
+
+**For the demo:** mention this capability verbally during Scene 2 ("it can also find
+the ceiling — the last load level that meets the SLA, and the first that does not")
+or show the `crucible ceiling --help` output. A live run requires pool=20 (healthy
+state) and takes ~35 minutes, which is too long to run during a demo session.
+
+---
+
 ## Running a live campaign — UI path (Operator or Trainer)
 
 The UI runs the same CLI commands. Every button, including Approve, calls

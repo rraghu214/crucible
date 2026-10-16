@@ -857,8 +857,10 @@ def test_an_untempted_trap_is_reported_as_a_weak_fixture():
 
 ### 8.6 A replay case is graded against its task class, never given an outcome
 
-**REVIEW NEEDED** — added 26 September 2026 (`tests/test_perf_scorer.py`,
-`TestReplayCasesAreGradedByClass`, `TestReplayScoresKeepRepeatsVisible`).
+**REVIEWED AND APPROVED** — added 26 September 2026 (`tests/test_perf_scorer.py`,
+`TestReplayCasesAreGradedByClass`, `TestReplayScoresKeepRepeatsVisible`). Operator
+confirmed 16 October 2026: task-class grading (A/C/D/E) and NOT_GRADED for transport
+errors are the right semantics.
 
 **What it checks.** `grade_replay_case` returns `PASS`, `FAIL` or `NOT_GRADED` from
 the task class and the fixture's ground truth. Any trap property touched fails,
@@ -1265,17 +1267,13 @@ experiments completed before the pause, then rewrote `results/<run>.json` withou
 them. The pause state now carries the experiments, the ruled-out list, the models
 used and the start time.
 
-**REVIEW NEEDED**: the four new tests are in `tests/test_perf_pause_resume.py`
-(`TestAMissedApprovalPauses`, and
-`TestResume.test_resume_keeps_experiments_completed_before_the_pause`).
+**REVIEWED AND APPROVED** — operator decision 16 October 2026. Re-parking without
+re-diagnosis on resume is the right trade: a late decision answers what was shown,
+binding is preserved, and a changed target is caught on re-measurement. A rejection
+after timeout ends the campaign as it would anywhere else.
 
-**For review:**
-- Is re-parking without re-diagnosis right if the operator resumes days later?
-  The target may have changed since. The alternative, re-diagnosing on resume,
-  would make a late approval fail the binding check whenever the model proposes
-  something different.
-- A rejection written after the timeout ends the campaign on resume ("operator
-  declined"), as a rejection does anywhere else.
+Tests: `tests/test_perf_pause_resume.py` (`TestAMissedApprovalPauses`,
+`TestResume.test_resume_keeps_experiments_completed_before_the_pause`).
 
 ---
 
@@ -1770,7 +1768,9 @@ call site can forget the free tier's per-minute limit.
 *Week 3, `crucible/perf/providers/datadog.py`. Implemented in
 `tests/test_perf_datadog.py` (24 assertions). DESIGN.md §4.1, §4.8, §5, §16.*
 
-**REVIEW NEEDED**: not yet reviewed by the operator.
+**REVIEWED AND APPROVED** — operator, 16 October 2026. Reviewed assertions 19.1–19.7
+and the group introduction. Unit conversion (ns→ms), credential headers, 403 vs 502
+distinction, and the shipped-profile test are all correct.
 
 *The third metrics provider and the first with a proprietary query language,
 which is what makes it the one that proves the adapter seam rather than merely
@@ -1899,7 +1899,9 @@ with `area: heap`, which returned nothing.
 
 ### 19.6 A rejected key is declared, not read as "no data"
 
-**REVIEW NEEDED** — added 11 October 2026 (`TestAnUnreachableBackendDegradesToUnknown`).
+**REVIEWED AND APPROVED** — operator, 16 October 2026. A 401/403 sets `auth_error`
+so the agent knows a bad key caused empty data, not an absent metric. A 502 leaves
+it empty — outage and no data appearing the same is acceptable for now.
 
 **What it checks.** A 401 or 403 makes `fetch` return `None`, as every other
 failure does, but also sets `provider.auth_error` to a message naming the status
@@ -1923,12 +1925,15 @@ guess what broke.
 
 ### 19.7 Keys travel in headers, never in the URL
 
-**REVIEW NEEDED** — written into this doc 11 October 2026; the test already
-existed (`TestTheQueryItSends.test_credentials_and_a_time_window_are_sent_on_every_query`).
+**REVIEWED AND EXTENDED** — operator, 16 October 2026. Test extended to also assert
+that the key *values* (`dd-api`, `dd-app`) do not appear anywhere in the full URL
+string (path or query). Previously only the parameter *names* were checked in the
+query string. Fixed in `tests/test_perf_datadog.py` (commit bb13536).
 
 **What it checks.** Every query carries `DD-API-KEY` and `DD-APPLICATION-KEY` as
-headers, and neither `api_key` nor `application_key` appears in the query string.
-The same holds when a client is injected.
+headers; neither `api_key` nor `application_key` appears in the query string; and
+the key values themselves do not appear anywhere in the URL. The same holds when a
+client is injected.
 
 **Why it exists.** §19.8: a URL ends up in proxy logs, error messages and stack
 traces, and journals are replayed hundreds of times. On 10 October 2026 Box A's own
@@ -1936,10 +1941,6 @@ log showed the opposite pattern from Micrometer's Datadog registry, which puts t
 key in `?api_key=`, so a failed push printed the URL in full. That is the
 application's registry, outside Crucible's control. This assertion keeps Crucible's
 adapter from doing the same.
-
-**For review:** does the test say what you want? Right now it only checks that the
-keys are missing from the query string. It does not check that they are missing
-from the URL path.
 
 ---
 
@@ -2115,28 +2116,26 @@ capture on a box that is perfectly adequate for it.
 
 ### 21.5 A capture is labelled with the provider that actually measured it
 
-**REVIEW NEEDED** — added 26 September 2026, after this group was approved.
+**REVIEWED AND FIXED** — operator, 16 October 2026. Teaching `build_multi_measure`
+the non-Actuator providers is the right fix (not refusing). Fixed in
+`crucible/perf/commands.py` (commit 5709311): `--provider promql` now routes
+through `build_multi_measure` with PromQL configured; gauge sampling still runs
+through Actuator during load; the snapshot the fixture records comes from PromQL.
+A provider unreachable at capture time now raises `FixtureError` rather than
+silently writing Actuator numbers under the wrong label. Test added in
+`tests/test_perf_fixtures.py` (`test_promql_routes_through_build_multi_measure_not_build_measure`).
 
-**What it checks.** `crucible capture --provider promql` on a fixture that declares
-`promql` is refused **before anything is measured** and writes no file, while
-`--provider actuator` on the same fixture still reaches the measurement and writes
-`<id>.actuator.json`.
+**What it checks.** `crucible capture --provider promql` routes through
+`build_multi_measure` (not `build_measure`) and writes `<id>.promql.json` with
+PromQL numbers. `--provider actuator` still routes through `build_measure`.
+An unsupported provider (`dynatrace`) is still refused before anything is measured.
 
 **Why it exists.** `build_measure` constructs an `ActuatorMetricsProvider` and
-nothing else. Until this refusal, a PromQL "capture" measured through Actuator and
+nothing else. Until this fix, a PromQL "capture" measured through Actuator and
 wrote the result as `perflab_pool_starved.promql.json`. Its numbers would agree
 with the Actuator sibling perfectly — because they *are* the Actuator sibling — so
 the multi-provider comparison those fixtures exist for (README in
 `config/fixtures/`, 24.5) would pass while comparing one backend with itself.
-Found while preparing the week-4 capture run; unreachable only because Prometheus
-was not yet running on Box A.
-
-**For review:**
-- Is refusing right, or should `build_measure` learn PromQL/Datadog now? Refusing
-  is the one-line safe state; teaching it is the real fix and is its own change.
-- The allowed list is a constant (`MEASURABLE_PROVIDERS`) beside `build_measure`
-  rather than derived from it. Derivation would need `build_measure` to report
-  what it built, which is a larger change than the bug.
 
 ---
 
@@ -2229,7 +2228,9 @@ of the sort.
 
 ### 22.6 The first case after the warm-up reaches the model
 
-**REVIEW NEEDED** — added 26 September 2026, after this group was approved.
+**REVIEWED AND APPROVED** — operator, 16 October 2026. The asyncio event-loop fix
+is the right approach; the issue is within one process's lifecycle and does not
+affect concurrent users (each runs a separate process).
 
 **What it checks.** `cmd_bench` against a transport that, like httpx, is bound to
 the event loop it first ran on: the first case completes with no error and records
@@ -2722,9 +2723,10 @@ manifest, the scorer's integrity dimension and the report. Assertions live in
 `tests/test_fastapi_profile.py` and `tests/test_perf_task_definitions.py`.
 DESIGN.md §5 (edited 26 September 2026), §4.4, §4.7, §13.*
 
-**REVIEW NEEDED**: the behaviour is the operator's decision of 26 September 2026
-and the DESIGN.md edit is made; what needs review is 27.2, which records what the
-change COST.
+**REVIEWED AND APPROVED** — operator, 16 October 2026. Novel cause families are
+permitted and flagged (`cause_family_declared: false`); the cost (a Spring-Boot-trained
+model may use `gc_pressure` on a FastAPI target) is accepted because the actual
+property change is still on the allowlist and the mismatch is visible on the manifest.
 
 ---
 
@@ -2826,8 +2828,10 @@ invent is not a benchmark.
 *Week 3 (late), `crucible/perf/journal.py`. Implemented in
 `tests/test_perf_journal.py` (29 assertions). DESIGN.md §14, §4.3, §7.*
 
-**REVIEW NEEDED**: not yet reviewed by the operator. One decision below (25.2)
-reverses a position the assertions doc has taken since week 1.
+**REVIEWED AND APPROVED** — operator, 16 October 2026. Structured filter on exact
+property tokens (not embeddings) is the right design for journal RAG — embeddings
+are for narrative prose only. Gemini embedding model (`gemini-embedding-001` at
+768d) decided 11 October 2026 ensures one vector space across all boxes.
 
 ---
 
@@ -3079,7 +3083,10 @@ detached). Implemented in `tests/test_ui_actions.py` (42),
 `tests/test_ui_jobs.py` (10), `tests/test_nicegui_app.py` (13) and
 `tests/test_perf_data.py`. DESIGN.md §15 as revised on 11 October 2026.*
 
-**REVIEW NEEDED**: new group, not yet reviewed by the operator.
+**REVIEWED AND APPROVED** — operator, 16 October 2026. UI parity assertions are
+correct: every write action requires the token, approval is bound to parked values
+(no value field), abort triggers §19.9 redeploy, and the target confirmation dialog
+appears before Start.
 
 *The operator's decision: the UI does everything the CLI does, for the end user
 and for the demo. The old group was drafted against the nineteen-screen A2UI

@@ -325,3 +325,39 @@ class TestCaptureRefusesAProviderTheMeasurementDoesNotRead:
         assert code == commands.OK
         assert reached == [1]
         assert (tmp_path / "out" / "perflab_pool_starved.actuator.json").exists()
+
+    def test_promql_routes_through_build_multi_measure_not_build_measure(self, tmp_path, monkeypatch):
+        """A supported non-Actuator provider (promql, datadog) must route through
+        build_multi_measure, not build_measure. build_measure always constructs an
+        ActuatorMetricsProvider; routing promql through it would produce a file
+        labelled 'promql' containing Actuator numbers (assertion 21.5)."""
+        from crucible.perf import commands
+
+        _write_spec(tmp_path / "specs", providers=["actuator", "promql"])
+        build_measure_calls = []
+        build_multi_calls = []
+
+        monkeypatch.setattr(
+            commands, "build_measure",
+            lambda *a, **k: build_measure_calls.append(1),
+        )
+
+        def fake_multi(*_a, **_k):
+            build_multi_calls.append(1)
+            # Returns a function that yields (load, {provider_name: snapshot})
+            return lambda _scn, _rid: (object(), {"promql": _snapshot()})
+
+        monkeypatch.setattr(commands, "build_multi_measure", fake_multi)
+
+        code = commands.cmd_capture(
+            fixture_id="perflab_pool_starved",
+            fixture_config_dir=str(tmp_path / "specs"),
+            out_dir=str(tmp_path / "out"),
+            provider_name="promql",
+            promql_url="http://prometheus:9090",
+        )
+
+        assert code == commands.OK
+        assert build_measure_calls == [], "build_measure must not be called for a promql capture"
+        assert build_multi_calls == [1], "build_multi_measure must be called for a promql capture"
+        assert (tmp_path / "out" / "perflab_pool_starved.promql.json").exists()
