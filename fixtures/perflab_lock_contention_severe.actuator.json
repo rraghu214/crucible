@@ -1,0 +1,156 @@
+{
+  "spec": {
+    "id": "perflab_lock_contention_severe",
+    "cause_family": "lock_contention",
+    "profile": "spring-boot",
+    "setup": "No configuration change needed: the /api/ledger endpoint is already written with a synchronized block that serialises writes. Drive /api/ledger at 50 users. The default configuration (pool=20, threads=200) is already healthy for this endpoint -- the bottleneck is the in-process lock, not a tunable resource. Expect p99 proportional to 1/(throughput limit), not to any pool or thread setting.\n",
+    "task_classes": [
+      "D"
+    ],
+    "trap_properties": [],
+    "bottleneck_config": {
+      "endpoint": "/api/ledger"
+    },
+    "severity": "severe",
+    "validated_at": "",
+    "scenario_tag": "ledger",
+    "providers": [
+      "actuator"
+    ],
+    "notes": "This is the \"outside authority\" fixture for lock_contention, analogous to perflab_code_latency for application_code. The entire signal is about what is ABSENT: pool fields ordinary, thread fields ordinary, GC ordinary -- and p99 high anyway, with throughput capped far below what the hardware can do. The shape is \"something in the request path is serial\" and the evidence for which thing is thin from the outside (no lock-contention metric in Micrometer by default). A correct answer names the cause from the process of elimination and from the endpoint being /api/ledger (the name is a hint, not proof).\n"
+  },
+  "provider": "actuator",
+  "captured_at_epoch_s": 1791064429.6647248,
+  "warmup_s": 120.0,
+  "measure_s": 300.0,
+  "snapshot": {
+    "collector_version": "1.2.0",
+    "captured_at_epoch_s": 1791064429.6647248,
+    "run_id": "fixture-perflab_lock_contention_severe",
+    "profile": "spring-boot",
+    "target": "http://10.0.0.79:8080",
+    "window": {
+      "count": 57508.0,
+      "total_ms": 3659077.214339002,
+      "mean_ms": 63.627272976611984,
+      "max_recent_ms": 310.45555,
+      "max_recent_ms_note": "rolling ~2-minute maximum read at end of window, NOT the maximum over the measured window. Micrometer's MAX decays, so a spike early in the window has already aged out. Under-reports transient causes such as GC pauses; approximates the true window max only for sustained ones.",
+      "warmup_s": 120.0,
+      "measure_s": 300.0
+    },
+    "load_summary": {
+      "p50_ms": 65.0,
+      "p95_ms": 130.0,
+      "p99_ms": 160.0,
+      "mean_ms": 67.94314468279987,
+      "max_ms": 326.01141603663564,
+      "rps": 184.63370128994364,
+      "request_count": 55272,
+      "failure_count": 0,
+      "error_rate_pct": 0.0,
+      "warmup_s": 120.0,
+      "measure_s": 300.0,
+      "ramp_s": 5.0
+    },
+    "hikaricp": {
+      "acquire_count": 16846.0,
+      "acquire_mean_ms": 533.7017321298824,
+      "acquire_max_recent_ms": 0.0,
+      "acquire_total_ms": 8990739.37946,
+      "creation_count": 10.0,
+      "creation_mean_ms": 158.8,
+      "creation_max_recent_ms": 0.0,
+      "creation_total_ms": 1588.0,
+      "pending_peak_connections": 0.0,
+      "active_peak_connections": 0.0,
+      "idle_trough_connections": 20.0,
+      "pool_max_connections": 20.0,
+      "utilisation_peak_pct": 0.0
+    },
+    "jvm": {
+      "gc_pause_count": 383.0,
+      "gc_pause_mean_ms": 14.74151436031332,
+      "gc_pause_max_recent_ms": 5.0,
+      "gc_pause_total_ms": 5646.000000000001,
+      "heap_used_peak_bytes": 252518592.0,
+      "threads_live_peak_threads": 70.0
+    },
+    "tomcat": {
+      "threads_busy_peak_threads": null,
+      "threads_config_max_threads": null
+    },
+    "http": {
+      "request_count": 98415.0,
+      "request_mean_ms": 228.96882643962815,
+      "request_max_recent_ms": 310.45555,
+      "request_total_ms": 22533967.054056004
+    },
+    "endpoint_breakdown": {
+      "/actuator/metrics/{requiredMetricName}": {
+        "request_count": 4170.0,
+        "mean_ms": 0.9046370386091127,
+        "max_ms": 2.574899
+      },
+      "/api/version": {
+        "request_count": 4.0,
+        "mean_ms": 13.549178,
+        "max_ms": 0.0
+      },
+      "/api/ledger": {
+        "request_count": 77332.0,
+        "mean_ms": 65.93602078827652,
+        "max_ms": 310.45555
+      },
+      "/actuator/health": {
+        "request_count": 1.0,
+        "mean_ms": 2389.060373,
+        "max_ms": 0.0
+      },
+      "/api/orders": {
+        "request_count": 16739.0,
+        "mean_ms": 1040.4605073246908,
+        "max_ms": 0.0
+      },
+      "/actuator/prometheus": {
+        "request_count": 170.0,
+        "mean_ms": 72.97806692941177,
+        "max_ms": 16.505406999999998
+      },
+      "/actuator/env": {
+        "request_count": 1.0,
+        "mean_ms": 113.15672,
+        "max_ms": 0.0
+      }
+    },
+    "runtime_config": {
+      "spring.application.name": "******",
+      "server.port": "******",
+      "perflab.version": "******",
+      "perflab.cache.enabled": "******",
+      "perflab.downstream.timeout-ms": "******",
+      "spring.datasource.hikari.maximum-pool-size": "******",
+      "spring.datasource.hikari.minimum-idle": "******",
+      "spring.datasource.hikari.connection-timeout": "******",
+      "spring.datasource.hikari.pool-name": "******",
+      "spring.jpa.open-in-view": "******",
+      "spring.jpa.properties.hibernate.default_batch_fetch_size": "******",
+      "spring.jpa.properties.hibernate.jdbc.batch_size": "******",
+      "server.tomcat.threads.max": "******",
+      "server.tomcat.threads.min-spare": "******",
+      "spring.task.execution.pool.core-size": "******",
+      "spring.task.execution.pool.max-size": "******",
+      "spring.task.execution.pool.queue-capacity": "******",
+      "_redacted_count": 117
+    },
+    "baseline_reference": {},
+    "available_evidence": {
+      "metrics": true,
+      "traces": false,
+      "trace_reason": "no trace provider configured for this campaign",
+      "trace_sampling_rate_pct": null,
+      "endpoint_breakdown": true,
+      "gauge_sampling": true,
+      "notes": []
+    }
+  }
+}

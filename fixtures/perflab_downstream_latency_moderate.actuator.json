@@ -1,0 +1,149 @@
+{
+  "spec": {
+    "id": "perflab_downstream_latency_moderate",
+    "cause_family": "downstream_latency",
+    "profile": "spring-boot",
+    "setup": "Set perflab.downstream.timeout-ms to 1000ms. Configure httpbin to respond in ~600ms. Drive /api/downstream at 50 users. Requests complete but slowly: each Tomcat thread blocks for 600ms per request. Thread utilisation is elevated, p99 is dominated by the external wait, and local DB metrics look healthy (DB is never reached on this path).\n",
+    "task_classes": [
+      "A"
+    ],
+    "trap_properties": [
+      "spring.datasource.hikari.maximum-pool-size"
+    ],
+    "bottleneck_config": {
+      "perflab.downstream.timeout-ms": 1000,
+      "endpoint": "/api/downstream"
+    },
+    "severity": "moderate",
+    "validated_at": "",
+    "scenario_tag": "downstream",
+    "providers": [
+      "actuator"
+    ],
+    "notes": "The \"correct\" action here is bounded: either fail-fast (reduce timeout to 200ms, accept higher error rate but lower p99 for surviving requests) or document that this is an external dependency issue outside config. An agent that proposes raising the pool is confusing thread wait with DB wait. An agent that raises thread count could genuinely help (more threads can be waiting in parallel) -- server.tomcat.threads.max is not a trap here because it addresses the actual queueing, though it is a mitigation rather than a fix. This case is intentionally ambiguous.\n"
+  },
+  "provider": "actuator",
+  "captured_at_epoch_s": 1791062150.2908971,
+  "warmup_s": 120.0,
+  "measure_s": 300.0,
+  "snapshot": {
+    "collector_version": "1.2.0",
+    "captured_at_epoch_s": 1791062150.2908971,
+    "run_id": "fixture-perflab_downstream_latency_moderate",
+    "profile": "spring-boot",
+    "target": "http://10.0.0.79:8080",
+    "window": {
+      "count": 26766.0,
+      "total_ms": 9901130.552072,
+      "mean_ms": 369.91446432309647,
+      "max_recent_ms": 410.986135,
+      "max_recent_ms_note": "rolling ~2-minute maximum read at end of window, NOT the maximum over the measured window. Micrometer's MAX decays, so a spike early in the window has already aged out. Under-reports transient causes such as GC pauses; approximates the true window max only for sustained ones.",
+      "warmup_s": 120.0,
+      "measure_s": 300.0
+    },
+    "load_summary": {
+      "p50_ms": 400.0,
+      "p95_ms": 410.0,
+      "p99_ms": 410.0,
+      "mean_ms": 403.8718664059299,
+      "max_ms": 628.6299200728536,
+      "rps": 82.07272634623895,
+      "request_count": 24564,
+      "failure_count": 0,
+      "error_rate_pct": 0.0,
+      "warmup_s": 120.0,
+      "measure_s": 300.0,
+      "ramp_s": 5.0
+    },
+    "hikaricp": {
+      "acquire_count": 107.0,
+      "acquire_mean_ms": 0.05108636448598131,
+      "acquire_max_recent_ms": 0.0,
+      "acquire_total_ms": 5.466241,
+      "creation_count": 0.0,
+      "creation_mean_ms": null,
+      "creation_max_recent_ms": 0.0,
+      "creation_total_ms": 0.0,
+      "pending_peak_connections": 0.0,
+      "active_peak_connections": 0.0,
+      "idle_trough_connections": 10.0,
+      "pool_max_connections": 20.0,
+      "utilisation_peak_pct": 0.0
+    },
+    "jvm": {
+      "gc_pause_count": 114.0,
+      "gc_pause_mean_ms": 8.043859649122806,
+      "gc_pause_max_recent_ms": 6.0,
+      "gc_pause_total_ms": 916.9999999999999,
+      "heap_used_peak_bytes": 242936048.0,
+      "threads_live_peak_threads": 67.0
+    },
+    "tomcat": {
+      "threads_busy_peak_threads": null,
+      "threads_config_max_threads": null
+    },
+    "http": {
+      "request_count": 36550.0,
+      "request_mean_ms": 378.41789492730504,
+      "request_max_recent_ms": 410.986135,
+      "request_total_ms": 13831174.059593
+    },
+    "endpoint_breakdown": {
+      "/actuator/metrics/{requiredMetricName}": {
+        "request_count": 2086.0,
+        "mean_ms": 0.760928343240652,
+        "max_ms": 3.4643859999999997
+      },
+      "/api/version": {
+        "request_count": 2.0,
+        "mean_ms": 14.625607500000001,
+        "max_ms": 0.0
+      },
+      "/actuator/health": {
+        "request_count": 1.0,
+        "mean_ms": 2443.728328,
+        "max_ms": 0.0
+      },
+      "/actuator/prometheus": {
+        "request_count": 85.0,
+        "mean_ms": 23.91855195294118,
+        "max_ms": 26.182714999999998
+      },
+      "/api/downstream": {
+        "request_count": 34378.0,
+        "mean_ms": 402.14909859843505,
+        "max_ms": 410.986135
+      }
+    },
+    "runtime_config": {
+      "spring.application.name": "******",
+      "server.port": "******",
+      "perflab.version": "******",
+      "perflab.cache.enabled": "******",
+      "perflab.downstream.timeout-ms": "******",
+      "spring.datasource.hikari.maximum-pool-size": "******",
+      "spring.datasource.hikari.minimum-idle": "******",
+      "spring.datasource.hikari.connection-timeout": "******",
+      "spring.datasource.hikari.pool-name": "******",
+      "spring.jpa.open-in-view": "******",
+      "spring.jpa.properties.hibernate.default_batch_fetch_size": "******",
+      "spring.jpa.properties.hibernate.jdbc.batch_size": "******",
+      "server.tomcat.threads.max": "******",
+      "server.tomcat.threads.min-spare": "******",
+      "spring.task.execution.pool.core-size": "******",
+      "spring.task.execution.pool.max-size": "******",
+      "spring.task.execution.pool.queue-capacity": "******",
+      "_redacted_count": 117
+    },
+    "baseline_reference": {},
+    "available_evidence": {
+      "metrics": true,
+      "traces": false,
+      "trace_reason": "no trace provider configured for this campaign",
+      "trace_sampling_rate_pct": null,
+      "endpoint_breakdown": true,
+      "gauge_sampling": true,
+      "notes": []
+    }
+  }
+}

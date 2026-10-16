@@ -1,0 +1,146 @@
+{
+  "spec": {
+    "id": "perflab_payload_severe",
+    "cause_family": "payload_serialization",
+    "profile": "spring-boot",
+    "setup": "No configuration change needed: /api/payload is already written to return a large, uncompressed JSON body. Default configuration. Drive /api/payload at 50 users. Expect threads_busy_peak to be elevated (CPU-bound serialisation holds threads), DB fields quiet (no DB involvement on this path), GC possibly elevated from object allocation, p99 dominated by serialisation time.\n",
+    "task_classes": [
+      "D"
+    ],
+    "trap_properties": [],
+    "bottleneck_config": {
+      "endpoint": "/api/payload"
+    },
+    "severity": "severe",
+    "validated_at": "",
+    "scenario_tag": "payload",
+    "providers": [
+      "actuator"
+    ],
+    "notes": "The payload family exercises the agent's ability to distinguish CPU-bound serialisation from everything else. The distinguishing evidence: threads busy (serialisation holds them), pool quiet (no DB), GC possibly elevated (string allocation), and /api/payload in the endpoint breakdown as the slow one. Without a serialisation-time metric in the snapshot, the agent must reason from absence (no pool pressure, no GC explosion, slow CPU-heavy endpoint) rather than from a direct signal. That is legitimate diagnosis, and the correct abstention afterwards shows the agent knows the boundary.\n"
+  },
+  "provider": "actuator",
+  "captured_at_epoch_s": 1791065341.4323845,
+  "warmup_s": 120.0,
+  "measure_s": 300.0,
+  "snapshot": {
+    "collector_version": "1.2.0",
+    "captured_at_epoch_s": 1791065341.4323845,
+    "run_id": "fixture-perflab_payload_severe",
+    "profile": "spring-boot",
+    "target": "http://10.0.0.79:8080",
+    "window": {
+      "count": 26224.0,
+      "total_ms": 8538275.971624002,
+      "mean_ms": 325.5901453486883,
+      "max_recent_ms": 1026.173542,
+      "max_recent_ms_note": "rolling ~2-minute maximum read at end of window, NOT the maximum over the measured window. Micrometer's MAX decays, so a spike early in the window has already aged out. Under-reports transient causes such as GC pauses; approximates the true window max only for sustained ones.",
+      "warmup_s": 120.0,
+      "measure_s": 300.0
+    },
+    "load_summary": {
+      "p50_ms": 360.0,
+      "p95_ms": 690.0,
+      "p99_ms": 820.0,
+      "mean_ms": 401.08688699255447,
+      "max_ms": 1469.5891151204705,
+      "rps": 82.46698187213994,
+      "request_count": 24699,
+      "failure_count": 0,
+      "error_rate_pct": 0.0,
+      "warmup_s": 120.0,
+      "measure_s": 300.0,
+      "ramp_s": 5.0
+    },
+    "hikaricp": {
+      "acquire_count": 107.0,
+      "acquire_mean_ms": 0.04691593457943925,
+      "acquire_max_recent_ms": 0.0,
+      "acquire_total_ms": 5.020005,
+      "creation_count": 0.0,
+      "creation_mean_ms": null,
+      "creation_max_recent_ms": 0.0,
+      "creation_total_ms": 0.0,
+      "pending_peak_connections": 0.0,
+      "active_peak_connections": 0.0,
+      "idle_trough_connections": 10.0,
+      "pool_max_connections": 20.0,
+      "utilisation_peak_pct": 0.0
+    },
+    "jvm": {
+      "gc_pause_count": 1393.0,
+      "gc_pause_mean_ms": 59.16798277099784,
+      "gc_pause_max_recent_ms": 288.0,
+      "gc_pause_total_ms": 82420.99999999999,
+      "heap_used_peak_bytes": 358228200.0,
+      "threads_live_peak_threads": 71.0
+    },
+    "tomcat": {
+      "threads_busy_peak_threads": null,
+      "threads_config_max_threads": null
+    },
+    "http": {
+      "request_count": 35138.0,
+      "request_mean_ms": 344.8712292136718,
+      "request_max_recent_ms": 1026.173542,
+      "request_total_ms": 12118085.25211
+    },
+    "endpoint_breakdown": {
+      "/actuator/metrics/{requiredMetricName}": {
+        "request_count": 1421.0,
+        "mean_ms": 24.60588571006333,
+        "max_ms": 497.408662
+      },
+      "/api/version": {
+        "request_count": 3.0,
+        "mean_ms": 21.533137999999997,
+        "max_ms": 0.0
+      },
+      "/actuator/health": {
+        "request_count": 1.0,
+        "mean_ms": 2476.31703,
+        "max_ms": 0.0
+      },
+      "/api/payload": {
+        "request_count": 33630.0,
+        "mean_ms": 357.773963414273,
+        "max_ms": 1026.173542
+      },
+      "/actuator/prometheus": {
+        "request_count": 85.0,
+        "mean_ms": 572.2578679647058,
+        "max_ms": 831.649181
+      }
+    },
+    "runtime_config": {
+      "spring.application.name": "******",
+      "server.port": "******",
+      "perflab.version": "******",
+      "perflab.cache.enabled": "******",
+      "perflab.downstream.timeout-ms": "******",
+      "spring.datasource.hikari.maximum-pool-size": "******",
+      "spring.datasource.hikari.minimum-idle": "******",
+      "spring.datasource.hikari.connection-timeout": "******",
+      "spring.datasource.hikari.pool-name": "******",
+      "spring.jpa.open-in-view": "******",
+      "spring.jpa.properties.hibernate.default_batch_fetch_size": "******",
+      "spring.jpa.properties.hibernate.jdbc.batch_size": "******",
+      "server.tomcat.threads.max": "******",
+      "server.tomcat.threads.min-spare": "******",
+      "spring.task.execution.pool.core-size": "******",
+      "spring.task.execution.pool.max-size": "******",
+      "spring.task.execution.pool.queue-capacity": "******",
+      "_redacted_count": 117
+    },
+    "baseline_reference": {},
+    "available_evidence": {
+      "metrics": true,
+      "traces": false,
+      "trace_reason": "no trace provider configured for this campaign",
+      "trace_sampling_rate_pct": null,
+      "endpoint_breakdown": true,
+      "gauge_sampling": true,
+      "notes": []
+    }
+  }
+}

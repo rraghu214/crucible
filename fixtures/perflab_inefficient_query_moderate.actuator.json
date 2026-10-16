@@ -1,0 +1,150 @@
+{
+  "spec": {
+    "id": "perflab_inefficient_query_moderate",
+    "cause_family": "inefficient_query",
+    "profile": "spring-boot",
+    "setup": "As perflab_inefficient_query_severe with batch sizes at 5. Drive /api/orders at 50 users. ~21 SQL round trips per request rather than 101; latency is elevated but not catastrophic. The fix is the same (raise batch sizes); the severity tests whether the agent reads the arithmetic rather than the headline number.\n",
+    "task_classes": [
+      "A"
+    ],
+    "trap_properties": [
+      "perflab.cache.enabled"
+    ],
+    "bottleneck_config": {
+      "spring.jpa.properties.hibernate.default_batch_fetch_size": 5,
+      "spring.jpa.properties.hibernate.jdbc.batch_size": 5,
+      "endpoint": "/api/orders"
+    },
+    "severity": "moderate",
+    "validated_at": "",
+    "scenario_tag": "orders",
+    "providers": [
+      "actuator"
+    ],
+    "notes": "A second severity for the batch-size pair. The moderate setting (5) proves the agent reads the per-request query count from the DB metrics rather than just the absolute latency number. At batch=5, latency is manageable but the cause is still the same.\n"
+  },
+  "provider": "actuator",
+  "captured_at_epoch_s": 1791063552.057633,
+  "warmup_s": 120.0,
+  "measure_s": 300.0,
+  "snapshot": {
+    "collector_version": "1.2.0",
+    "captured_at_epoch_s": 1791063552.057633,
+    "run_id": "fixture-perflab_inefficient_query_moderate",
+    "profile": "spring-boot",
+    "target": "http://10.0.0.79:8080",
+    "window": {
+      "count": 37016.0,
+      "total_ms": 7779648.741971999,
+      "mean_ms": 210.16989253220228,
+      "max_recent_ms": 406.624317,
+      "max_recent_ms_note": "rolling ~2-minute maximum read at end of window, NOT the maximum over the measured window. Micrometer's MAX decays, so a spike early in the window has already aged out. Under-reports transient causes such as GC pauses; approximates the true window max only for sustained ones.",
+      "warmup_s": 120.0,
+      "measure_s": 300.0
+    },
+    "load_summary": {
+      "p50_ms": 210.0,
+      "p95_ms": 370.0,
+      "p99_ms": 480.0,
+      "mean_ms": 226.13352508413845,
+      "max_ms": 960.8210430014879,
+      "rps": 116.38028622963428,
+      "request_count": 34842,
+      "failure_count": 0,
+      "error_rate_pct": 0.0,
+      "warmup_s": 120.0,
+      "measure_s": 300.0,
+      "ramp_s": 5.0
+    },
+    "hikaricp": {
+      "acquire_count": 44293.0,
+      "acquire_mean_ms": 69.18672910516334,
+      "acquire_max_recent_ms": 262.089672,
+      "acquire_total_ms": 3064487.7922549997,
+      "creation_count": 10.0,
+      "creation_mean_ms": 120.0,
+      "creation_max_recent_ms": 0.0,
+      "creation_total_ms": 1200.0,
+      "pending_peak_connections": 17.0,
+      "active_peak_connections": 20.0,
+      "idle_trough_connections": 0.0,
+      "pool_max_connections": 20.0,
+      "utilisation_peak_pct": 100.0
+    },
+    "jvm": {
+      "gc_pause_count": 587.0,
+      "gc_pause_mean_ms": 17.3236797274276,
+      "gc_pause_max_recent_ms": 29.0,
+      "gc_pause_total_ms": 10169.0,
+      "heap_used_peak_bytes": 252295088.0,
+      "threads_live_peak_threads": 70.0
+    },
+    "tomcat": {
+      "threads_busy_peak_threads": null,
+      "threads_config_max_threads": null
+    },
+    "http": {
+      "request_count": 46323.0,
+      "request_mean_ms": 249.1909473330743,
+      "request_max_recent_ms": 406.624317,
+      "request_total_ms": 11543272.25331
+    },
+    "endpoint_breakdown": {
+      "/actuator/metrics/{requiredMetricName}": {
+        "request_count": 2051.0,
+        "mean_ms": 1.8319246455387614,
+        "max_ms": 33.489829
+      },
+      "/api/version": {
+        "request_count": 2.0,
+        "mean_ms": 24.2118015,
+        "max_ms": 0.0
+      },
+      "/actuator/health": {
+        "request_count": 1.0,
+        "mean_ms": 2462.714199,
+        "max_ms": 0.0
+      },
+      "/api/orders": {
+        "request_count": 44186.0,
+        "mean_ms": 260.53901603172955,
+        "max_ms": 406.624317
+      },
+      "/actuator/prometheus": {
+        "request_count": 85.0,
+        "mean_ms": 292.09292010588234,
+        "max_ms": 87.064666
+      }
+    },
+    "runtime_config": {
+      "spring.application.name": "******",
+      "server.port": "******",
+      "perflab.version": "******",
+      "perflab.cache.enabled": "******",
+      "perflab.downstream.timeout-ms": "******",
+      "spring.datasource.hikari.maximum-pool-size": "******",
+      "spring.datasource.hikari.minimum-idle": "******",
+      "spring.datasource.hikari.connection-timeout": "******",
+      "spring.datasource.hikari.pool-name": "******",
+      "spring.jpa.open-in-view": "******",
+      "spring.jpa.properties.hibernate.default_batch_fetch_size": "******",
+      "spring.jpa.properties.hibernate.jdbc.batch_size": "******",
+      "server.tomcat.threads.max": "******",
+      "server.tomcat.threads.min-spare": "******",
+      "spring.task.execution.pool.core-size": "******",
+      "spring.task.execution.pool.max-size": "******",
+      "spring.task.execution.pool.queue-capacity": "******",
+      "_redacted_count": 117
+    },
+    "baseline_reference": {},
+    "available_evidence": {
+      "metrics": true,
+      "traces": false,
+      "trace_reason": "no trace provider configured for this campaign",
+      "trace_sampling_rate_pct": null,
+      "endpoint_breakdown": true,
+      "gauge_sampling": true,
+      "notes": []
+    }
+  }
+}

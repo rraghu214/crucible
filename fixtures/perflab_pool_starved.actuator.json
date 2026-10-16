@@ -15,7 +15,7 @@
       "spring.datasource.hikari.maximum-pool-size": 2
     },
     "severity": "severe",
-    "validated_at": "",
+    "validated_at": "2026-09-26",
     "scenario_tag": "db",
     "providers": [
       "actuator",
@@ -25,20 +25,20 @@
     "notes": "The signal was observed on this configuration during K1/K3 (docs/K1_RESULT.md, docs/K3_RESULT.md), but on the pre-split repository layout and before the collector's unit conversion existed. It is recorded as unvalidated until it has been re-confirmed on the current box with the current collector -- a previous observation of the same state is evidence, not validation.\n"
   },
   "provider": "actuator",
-  "captured_at_epoch_s": 1790416138.8076463,
+  "captured_at_epoch_s": 1791722043.9339635,
   "warmup_s": 120.0,
   "measure_s": 300.0,
   "snapshot": {
-    "collector_version": "1.1.0",
-    "captured_at_epoch_s": 1790416138.8076463,
+    "collector_version": "1.2.0",
+    "captured_at_epoch_s": 1791722043.9339635,
     "run_id": "fixture-perflab_pool_starved",
     "profile": "spring-boot",
     "target": "http://10.0.0.79:8080",
     "window": {
-      "count": 13182.0,
-      "total_ms": 12561947.678065,
-      "mean_ms": 952.9621967884236,
-      "max_recent_ms": 2206.216703,
+      "count": 13801.0,
+      "total_ms": 12562246.152516996,
+      "mean_ms": 910.2417326655312,
+      "max_recent_ms": 2237.007204,
       "max_recent_ms_note": "rolling ~2-minute maximum read at end of window, NOT the maximum over the measured window. Micrometer's MAX decays, so a spike early in the window has already aged out. Under-reports transient causes such as GC pauses; approximates the true window max only for sustained ones.",
       "warmup_s": 120.0,
       "measure_s": 300.0
@@ -47,10 +47,10 @@
       "p50_ms": 1100.0,
       "p95_ms": 1100.0,
       "p99_ms": 1200.0,
-      "mean_ms": 1082.030016571357,
-      "max_ms": 2222.487675026059,
-      "rps": 38.66443356717633,
-      "request_count": 11574,
+      "mean_ms": 1079.440769824487,
+      "max_ms": 2239.2385471612215,
+      "rps": 38.749598795932755,
+      "request_count": 11598,
       "failure_count": 0,
       "error_rate_pct": 0.0,
       "warmup_s": 120.0,
@@ -58,62 +58,90 @@
       "ramp_s": 5.0
     },
     "hikaricp": {
-      "acquire_count": 16299.0,
-      "acquire_mean_ms": 1022.577103663599,
-      "acquire_max_recent_ms": 2156.825312,
-      "acquire_total_ms": 16666984.212613,
+      "acquire_count": 32623.0,
+      "acquire_mean_ms": 1022.6677085465776,
+      "acquire_max_recent_ms": 2185.506451,
+      "acquire_total_ms": 33362488.655915003,
       "creation_count": 0.0,
       "creation_mean_ms": null,
       "creation_max_recent_ms": 0.0,
       "creation_total_ms": 0.0,
-      "pending_peak_connections": 43.0,
+      "pending_peak_connections": 44.0,
       "active_peak_connections": 2.0,
       "idle_trough_connections": 0.0,
       "pool_max_connections": 2.0,
       "utilisation_peak_pct": 100.0
     },
     "jvm": {
-      "gc_pause_count": 41.0,
-      "gc_pause_mean_ms": 7.414634146341464,
-      "gc_pause_max_recent_ms": 9.0,
-      "gc_pause_total_ms": 304.0,
-      "heap_used_peak_bytes": 237145200.0,
-      "threads_live_peak_threads": 66.0
+      "gc_pause_count": 109.0,
+      "gc_pause_mean_ms": 8.082568807339449,
+      "gc_pause_max_recent_ms": 12.0,
+      "gc_pause_total_ms": 881.0,
+      "heap_used_peak_bytes": 248577752.0,
+      "threads_live_peak_threads": 68.0
+    },
+    "tomcat": {
+      "threads_busy_peak_threads": null,
+      "threads_config_max_threads": null
     },
     "http": {
-      "request_count": 17784.0,
-      "request_mean_ms": 984.8995468530702,
-      "request_max_recent_ms": 2206.216703,
-      "request_total_ms": 17515453.541235
+      "request_count": 36949.0,
+      "request_mean_ms": 948.8098006820212,
+      "request_max_recent_ms": 2237.007204,
+      "request_total_ms": 35057573.3254
     },
     "endpoint_breakdown": {
-      "/api/version": {
-        "request_count": 3.0,
-        "mean_ms": 32.491244333333334,
-        "max_ms": 0.0
-      },
       "/actuator/metrics/{requiredMetricName}": {
-        "request_count": 1505.0,
-        "mean_ms": 0.7590125455149502,
-        "max_ms": 5.473922
+        "request_count": 4194.0,
+        "mean_ms": 0.5164236828803052,
+        "max_ms": 6.129207
+      },
+      "/api/version": {
+        "request_count": 1.0,
+        "mean_ms": 35.258367,
+        "max_ms": 0.0
       },
       "/actuator/health": {
         "request_count": 1.0,
-        "mean_ms": 2359.742535,
+        "mean_ms": 2406.7541600000004,
         "max_ms": 0.0
       },
       "/actuator/prometheus": {
-        "request_count": 88.0,
-        "mean_ms": 21.04576311363636,
-        "max_ms": 29.170742
+        "request_count": 239.0,
+        "mean_ms": 16.448962380753137,
+        "max_ms": 23.55142
       },
       "/api/db": {
-        "request_count": 16192.0,
-        "mean_ms": 1081.5344674876483,
-        "max_ms": 2206.216703
+        "request_count": 32514.0,
+        "mean_ms": 1077.9662365020913,
+        "max_ms": 2237.007204
+      },
+      "/actuator/env": {
+        "request_count": 2.0,
+        "mean_ms": 20.8223215,
+        "max_ms": 9.305150999999999
       }
     },
-    "runtime_config": {},
+    "runtime_config": {
+      "spring.application.name": "******",
+      "server.port": "******",
+      "perflab.version": "******",
+      "perflab.cache.enabled": "******",
+      "perflab.downstream.timeout-ms": "******",
+      "spring.datasource.hikari.maximum-pool-size": "******",
+      "spring.datasource.hikari.minimum-idle": "******",
+      "spring.datasource.hikari.connection-timeout": "******",
+      "spring.datasource.hikari.pool-name": "******",
+      "spring.jpa.open-in-view": "******",
+      "spring.jpa.properties.hibernate.default_batch_fetch_size": "******",
+      "spring.jpa.properties.hibernate.jdbc.batch_size": "******",
+      "server.tomcat.threads.max": "******",
+      "server.tomcat.threads.min-spare": "******",
+      "spring.task.execution.pool.core-size": "******",
+      "spring.task.execution.pool.max-size": "******",
+      "spring.task.execution.pool.queue-capacity": "******",
+      "_redacted_count": 119
+    },
     "baseline_reference": {},
     "available_evidence": {
       "metrics": true,

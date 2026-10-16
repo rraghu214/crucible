@@ -1,0 +1,110 @@
+{
+  "spec": {
+    "id": "perflab_gc_pressure",
+    "cause_family": "gc_pressure",
+    "profile": "spring-boot",
+    "setup": "Start perf-lab with -Xmx128m and drive /api/churn, the allocation-heavy endpoint, at 50 users. The small heap plus sustained allocation keeps the collector busy: gc_pause_count climbs steadily and heap_used_peak_bytes sits near the ceiling, while the HikariCP fields stay entirely ordinary.\n",
+    "task_classes": [
+      "A",
+      "B"
+    ],
+    "trap_properties": [],
+    "bottleneck_config": {
+      "jvm.Xmx": "128m",
+      "endpoint": "/api/churn"
+    },
+    "severity": "severe",
+    "validated_at": "",
+    "scenario_tag": "churn",
+    "providers": [
+      "actuator",
+      "promql",
+      "datadog"
+    ],
+    "expect_possible_failure": false,
+    "notes": "Watch the collector's max_recent_ms caveat on this fixture specifically. Micrometer's MAX is a rolling ~2-minute maximum that decays, so a GC pause early in a 300 s window has aged out by the time the window ends -- the collector names the field max_recent_ms rather than max_ms for exactly this reason, and GC is the cause where the under-reporting bites hardest. The count and the mean over the window are the fields that carry the signal here; the max is the one that will look smaller than the run felt.\n"
+  },
+  "provider": "promql",
+  "captured_at_epoch_s": 1792173836.574874,
+  "warmup_s": 120.0,
+  "measure_s": 300.0,
+  "snapshot": {
+    "collector_version": "1.2.0",
+    "captured_at_epoch_s": 1792173836.574874,
+    "run_id": "fixture-perflab_gc_pressure",
+    "profile": "spring-boot",
+    "target": "http://10.0.0.79:8080",
+    "window": {
+      "count": 39576.0,
+      "total_ms": 3949143.465724,
+      "mean_ms": 99.78632165261774,
+      "max_recent_ms": 2495.322624,
+      "max_recent_ms_note": "rolling ~2-minute maximum read at end of window, NOT the maximum over the measured window. Micrometer's MAX decays, so a spike early in the window has already aged out. Under-reports transient causes such as GC pauses; approximates the true window max only for sustained ones.",
+      "warmup_s": 120.0,
+      "measure_s": 300.0
+    },
+    "load_summary": {
+      "p50_ms": 140.0,
+      "p95_ms": 580.0,
+      "p99_ms": 930.0,
+      "mean_ms": 186.3061007196556,
+      "max_ms": 2543.293167836964,
+      "rps": 128.46239052585364,
+      "request_count": 38450,
+      "failure_count": 0,
+      "error_rate_pct": 0.0,
+      "warmup_s": 120.0,
+      "measure_s": 300.0,
+      "ramp_s": 5.0
+    },
+    "hikaricp": {
+      "acquire_count": 107.0,
+      "acquire_mean_ms": 0.03953376635514018,
+      "acquire_max_recent_ms": 0.0,
+      "acquire_total_ms": 4.230112999999999,
+      "creation_count": 0.0,
+      "creation_mean_ms": null,
+      "creation_max_recent_ms": 0.0,
+      "creation_total_ms": 0.0,
+      "pending_peak_connections": null,
+      "active_peak_connections": null,
+      "idle_trough_connections": null,
+      "pool_max_connections": 2.0,
+      "utilisation_peak_pct": null,
+      "note": "not sampled during load: pending, active, idle. null means the sampler never ran, not that the value was zero."
+    },
+    "jvm": {
+      "gc_pause_count": null,
+      "gc_pause_mean_ms": null,
+      "gc_pause_max_recent_ms": null,
+      "gc_pause_total_ms": null,
+      "heap_used_peak_bytes": null,
+      "threads_live_peak_threads": null
+    },
+    "tomcat": {
+      "threads_busy_peak_threads": null,
+      "threads_config_max_threads": null
+    },
+    "http": {
+      "request_count": 55163.0,
+      "request_mean_ms": 95.15092696378008,
+      "request_max_recent_ms": 2495.322624,
+      "request_total_ms": 5248810.584103
+    },
+    "endpoint_breakdown": null,
+    "runtime_config": {},
+    "baseline_reference": {},
+    "available_evidence": {
+      "metrics": true,
+      "traces": false,
+      "trace_reason": "no trace provider configured for this campaign",
+      "trace_sampling_rate_pct": null,
+      "endpoint_breakdown": false,
+      "gauge_sampling": false,
+      "notes": [
+        "gauge peaks for 'promql' are post-run point reads, not mid-run samples; peaks may understate pressure during the window",
+        "gauges were not sampled during load; every gauge peak is null, not zero"
+      ]
+    }
+  }
+}

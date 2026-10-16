@@ -1,0 +1,158 @@
+{
+  "spec": {
+    "id": "perflab_cache_miss_moderate",
+    "cause_family": "cache_miss",
+    "profile": "spring-boot",
+    "setup": "Enable the cache but set TTL to 5 seconds. Drive /api/catalog at 50 users for 300 seconds (the full measured window). Most cache entries expire before being reused: the hit ratio is low and the DB sees nearly as many reads as with no cache. The pool fields show moderate pressure; the diagnosis is that cache is configured but not effective.\nNote: this requires perflab.cache.ttl-seconds to be an exposed property. If it is not, use the severe fixture (cache disabled outright) instead.\n",
+    "task_classes": [
+      "A"
+    ],
+    "trap_properties": [],
+    "bottleneck_config": {
+      "perflab.cache.enabled": true,
+      "perflab.cache.ttl-seconds": 5,
+      "endpoint": "/api/catalog"
+    },
+    "severity": "moderate",
+    "validated_at": "",
+    "scenario_tag": "catalog",
+    "providers": [
+      "actuator"
+    ],
+    "notes": "The moderate severity tests whether the agent reads the cache hit ratio rather than the cache_enabled flag. Both are \"cache enabled=true\" at the config level; the difference is visible only in the hit rate metric if the collector samples it, or in the DB roundtrip count per request.\n"
+  },
+  "provider": "actuator",
+  "captured_at_epoch_s": 1791060292.2393823,
+  "warmup_s": 120.0,
+  "measure_s": 300.0,
+  "snapshot": {
+    "collector_version": "1.2.0",
+    "captured_at_epoch_s": 1791060292.2393823,
+    "run_id": "fixture-perflab_cache_miss_moderate",
+    "profile": "spring-boot",
+    "target": "http://10.0.0.79:8080",
+    "window": {
+      "count": 75346.0,
+      "total_ms": 71045.95208000137,
+      "mean_ms": 0.9429293138322057,
+      "max_recent_ms": 67.113436,
+      "max_recent_ms_note": "rolling ~2-minute maximum read at end of window, NOT the maximum over the measured window. Micrometer's MAX decays, so a spike early in the window has already aged out. Under-reports transient causes such as GC pauses; approximates the true window max only for sustained ones.",
+      "warmup_s": 120.0,
+      "measure_s": 300.0
+    },
+    "load_summary": {
+      "p50_ms": 3.0,
+      "p95_ms": 5.0,
+      "p99_ms": 7.0,
+      "mean_ms": 2.910428358079768,
+      "max_ms": 93.51652301847935,
+      "rps": 244.19385530262872,
+      "request_count": 73094,
+      "failure_count": 0,
+      "error_rate_pct": 0.0,
+      "warmup_s": 120.0,
+      "measure_s": 300.0,
+      "ramp_s": 5.0
+    },
+    "hikaricp": {
+      "acquire_count": 82076.0,
+      "acquire_mean_ms": 0.022111749610117453,
+      "acquire_max_recent_ms": 3.1873050000000003,
+      "acquire_total_ms": 1814.843961,
+      "creation_count": 10.0,
+      "creation_mean_ms": 24.6,
+      "creation_max_recent_ms": 0.0,
+      "creation_total_ms": 246.0,
+      "pending_peak_connections": 0.0,
+      "active_peak_connections": 0.0,
+      "idle_trough_connections": 15.0,
+      "pool_max_connections": 20.0,
+      "utilisation_peak_pct": 0.0
+    },
+    "jvm": {
+      "gc_pause_count": 347.0,
+      "gc_pause_mean_ms": 4.573487031700288,
+      "gc_pause_max_recent_ms": 6.0,
+      "gc_pause_total_ms": 1587.0,
+      "heap_used_peak_bytes": 249214840.0,
+      "threads_live_peak_threads": 43.0
+    },
+    "tomcat": {
+      "threads_busy_peak_threads": null,
+      "threads_config_max_threads": null
+    },
+    "http": {
+      "request_count": 188293.0,
+      "request_mean_ms": 22.997549234836132,
+      "request_max_recent_ms": 67.113436,
+      "request_total_ms": 4330277.538075
+    },
+    "endpoint_breakdown": {
+      "/actuator/metrics/{requiredMetricName}": {
+        "request_count": 4184.0,
+        "mean_ms": 0.5198322177342256,
+        "max_ms": 7.630139
+      },
+      "/api/version": {
+        "request_count": 3.0,
+        "mean_ms": 15.839265333333335,
+        "max_ms": 0.0
+      },
+      "/api/db": {
+        "request_count": 81708.0,
+        "mean_ms": 51.57356861330591,
+        "max_ms": 0.0
+      },
+      "/actuator/health": {
+        "request_count": 1.0,
+        "mean_ms": 2443.434717,
+        "max_ms": 0.0
+      },
+      "/api/catalog": {
+        "request_count": 102153.0,
+        "mean_ms": 1.055028837253923,
+        "max_ms": 67.113436
+      },
+      "/actuator/prometheus": {
+        "request_count": 245.0,
+        "mean_ms": 15.629851187755103,
+        "max_ms": 16.90917
+      },
+      "/actuator/env": {
+        "request_count": 1.0,
+        "mean_ms": 35.535560000000004,
+        "max_ms": 0.0
+      }
+    },
+    "runtime_config": {
+      "spring.application.name": "******",
+      "server.port": "******",
+      "perflab.version": "******",
+      "perflab.cache.enabled": "******",
+      "perflab.downstream.timeout-ms": "******",
+      "spring.datasource.hikari.maximum-pool-size": "******",
+      "spring.datasource.hikari.minimum-idle": "******",
+      "spring.datasource.hikari.connection-timeout": "******",
+      "spring.datasource.hikari.pool-name": "******",
+      "spring.jpa.open-in-view": "******",
+      "spring.jpa.properties.hibernate.default_batch_fetch_size": "******",
+      "spring.jpa.properties.hibernate.jdbc.batch_size": "******",
+      "server.tomcat.threads.max": "******",
+      "server.tomcat.threads.min-spare": "******",
+      "spring.task.execution.pool.core-size": "******",
+      "spring.task.execution.pool.max-size": "******",
+      "spring.task.execution.pool.queue-capacity": "******",
+      "_redacted_count": 117
+    },
+    "baseline_reference": {},
+    "available_evidence": {
+      "metrics": true,
+      "traces": false,
+      "trace_reason": "no trace provider configured for this campaign",
+      "trace_sampling_rate_pct": null,
+      "endpoint_breakdown": true,
+      "gauge_sampling": true,
+      "notes": []
+    }
+  }
+}

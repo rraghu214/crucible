@@ -1,0 +1,147 @@
+{
+  "spec": {
+    "id": "perflab_thread_starved",
+    "cause_family": "thread_pool_saturation",
+    "profile": "spring-boot",
+    "setup": "Set server.tomcat.threads.max to 4 (the profile's own minimum bound) and leave the connection pool at its healthy 20. Drive /api/db at 50 users. Fifty users against four request threads queues at the connector, so the datasource never sees pressure.\n",
+    "task_classes": [
+      "A",
+      "B"
+    ],
+    "trap_properties": [],
+    "bottleneck_config": {
+      "server.tomcat.threads.max": 4
+    },
+    "severity": "severe",
+    "validated_at": "",
+    "scenario_tag": "db",
+    "providers": [
+      "actuator"
+    ],
+    "notes": "UNBLOCKED 3 October 2026. The collector (1.2.0) now samples tomcat.threads.busy and tomcat.threads.config.max as mid-run gauges, so threads_busy_peak_threads and threads_config_max_threads travel in every snapshot. The fixture is ready to capture against a 1.2.0 collector.\nThe distinguishing evidence is specific and small: with four request threads, requests queue BEFORE they ever reach the datasource, so pending_peak_connections stays near zero and acquire_mean_ms stays tiny while threads_busy_peak_threads is pinned at 4 (100% utilisation) and p99 is dreadful. That combination -- terrible latency, healthy-looking pool, saturated thread counter -- is what separates thread saturation from pool exhaustion.\nPREVIOUSLY BLOCKED: The gap was documented in docs/ref/DEBT.md. The thread metrics existed in the profile's metric_map but not in snapshot_metrics or gauges, so snapshots carried no thread fields and capturing would have baked the absence in for all replay built on it.\n"
+  },
+  "provider": "actuator",
+  "captured_at_epoch_s": 1791067272.7494364,
+  "warmup_s": 120.0,
+  "measure_s": 300.0,
+  "snapshot": {
+    "collector_version": "1.2.0",
+    "captured_at_epoch_s": 1791067272.7494364,
+    "run_id": "fixture-perflab_thread_starved",
+    "profile": "spring-boot",
+    "target": "http://10.0.0.79:8080",
+    "window": {
+      "count": 23710.0,
+      "total_ms": 1193977.91614,
+      "mean_ms": 50.357567108393084,
+      "max_recent_ms": 58.320239,
+      "max_recent_ms_note": "rolling ~2-minute maximum read at end of window, NOT the maximum over the measured window. Micrometer's MAX decays, so a spike early in the window has already aged out. Under-reports transient causes such as GC pauses; approximates the true window max only for sustained ones.",
+      "warmup_s": 120.0,
+      "measure_s": 300.0
+    },
+    "load_summary": {
+      "p50_ms": 450.0,
+      "p95_ms": 490.0,
+      "p99_ms": 510.0,
+      "mean_ms": 445.6581350284692,
+      "max_ms": 670.0458261184394,
+      "rps": 76.85523525416619,
+      "request_count": 23004,
+      "failure_count": 0,
+      "error_rate_pct": 0.0,
+      "warmup_s": 120.0,
+      "measure_s": 300.0,
+      "ramp_s": 5.0
+    },
+    "hikaricp": {
+      "acquire_count": 32029.0,
+      "acquire_mean_ms": 0.0035611053108120768,
+      "acquire_max_recent_ms": 0.08116,
+      "acquire_total_ms": 114.058642,
+      "creation_count": 4.0,
+      "creation_mean_ms": 21.25,
+      "creation_max_recent_ms": 0.0,
+      "creation_total_ms": 85.0,
+      "pending_peak_connections": 0.0,
+      "active_peak_connections": 4.0,
+      "idle_trough_connections": 10.0,
+      "pool_max_connections": 20.0,
+      "utilisation_peak_pct": 20.0
+    },
+    "jvm": {
+      "gc_pause_count": 58.0,
+      "gc_pause_mean_ms": 9.327586206896552,
+      "gc_pause_max_recent_ms": 199.0,
+      "gc_pause_total_ms": 541.0,
+      "heap_used_peak_bytes": 231619544.0,
+      "threads_live_peak_threads": 23.0
+    },
+    "tomcat": {
+      "threads_busy_peak_threads": null,
+      "threads_config_max_threads": null
+    },
+    "http": {
+      "request_count": 32594.0,
+      "request_mean_ms": 51.22463186172302,
+      "request_max_recent_ms": 58.320239,
+      "request_total_ms": 1669615.650901
+    },
+    "endpoint_breakdown": {
+      "/actuator/metrics/{requiredMetricName}": {
+        "request_count": 588.0,
+        "mean_ms": 1.454659161564626,
+        "max_ms": 9.28259
+      },
+      "/api/version": {
+        "request_count": 2.0,
+        "mean_ms": 23.145154,
+        "max_ms": 0.0
+      },
+      "/actuator/health": {
+        "request_count": 1.0,
+        "mean_ms": 2461.891324,
+        "max_ms": 0.0
+      },
+      "/actuator/prometheus": {
+        "request_count": 85.0,
+        "mean_ms": 24.35450950588235,
+        "max_ms": 19.317226
+      },
+      "/api/db": {
+        "request_count": 31920.0,
+        "mean_ms": 52.13605675504387,
+        "max_ms": 58.320239
+      }
+    },
+    "runtime_config": {
+      "spring.application.name": "******",
+      "server.port": "******",
+      "perflab.version": "******",
+      "perflab.cache.enabled": "******",
+      "perflab.downstream.timeout-ms": "******",
+      "spring.datasource.hikari.maximum-pool-size": "******",
+      "spring.datasource.hikari.minimum-idle": "******",
+      "spring.datasource.hikari.connection-timeout": "******",
+      "spring.datasource.hikari.pool-name": "******",
+      "spring.jpa.open-in-view": "******",
+      "spring.jpa.properties.hibernate.default_batch_fetch_size": "******",
+      "spring.jpa.properties.hibernate.jdbc.batch_size": "******",
+      "server.tomcat.threads.max": "******",
+      "server.tomcat.threads.min-spare": "******",
+      "spring.task.execution.pool.core-size": "******",
+      "spring.task.execution.pool.max-size": "******",
+      "spring.task.execution.pool.queue-capacity": "******",
+      "_redacted_count": 117
+    },
+    "baseline_reference": {},
+    "available_evidence": {
+      "metrics": true,
+      "traces": false,
+      "trace_reason": "no trace provider configured for this campaign",
+      "trace_sampling_rate_pct": null,
+      "endpoint_breakdown": true,
+      "gauge_sampling": true,
+      "notes": []
+    }
+  }
+}
