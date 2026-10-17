@@ -231,6 +231,14 @@ class FileApprovalGate:
         path = self.request_path(request.experiment)
         path.write_text(json.dumps(request.as_dict(), indent=2), encoding="utf-8")
 
+        print(
+            f"\n[approval] experiment {request.experiment} proposal ready — "
+            f"run: crucible approve {self.run_id} --experiment {request.experiment}\n"
+            f"           written to: {path}\n"
+            "[approval] waiting for operator decision …",
+            flush=True,
+        )
+
         decision_file = self.decision_path(request.experiment)
         started = now()
         while True:
