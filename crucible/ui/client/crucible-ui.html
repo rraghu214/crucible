@@ -530,14 +530,62 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
 <!-- ══ LIBRARY ══ -->
 <section class="pg" id="pg-library">
   <div class="ph">
-    <div class="ph-left"><div class="ph-eyebrow">Collections</div><div class="ph-title">Library</div><div class="ph-sub">Services, collections, and all test runs</div></div>
+    <div class="ph-left"><div class="ph-eyebrow">Workspace</div><div class="ph-title">Services</div><div class="ph-sub">Every service you've instrumented — click in to see its collections and runs</div></div>
     <div class="ph-actions">
       <button class="btn btn-ghost btn-sm" onclick="importYaml()">↑ Import YAML</button>
       <button class="btn btn-primary btn-sm" onclick="go('new-test')">+ New Test Run</button>
     </div>
   </div>
+
+  <!-- Service cards grid (Postman-style workspace overview) -->
+  <div class="grid3" style="margin-bottom:20px;">
+    <!-- PerfLab — active, has data -->
+    <div class="card" style="cursor:pointer;border-color:rgba(59,171,140,.3);" onclick="libExpand('svc-perflab')">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <div style="width:36px;height:36px;border-radius:10px;background:var(--ok-d);border:1px solid rgba(59,171,140,.3);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">🚀</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:14px;font-weight:700;">PerfLab</div>
+          <div style="font-size:11px;color:var(--lo);font-family:var(--f-mono);">Spring Boot · HikariCP</div>
+        </div>
+        <span class="pill running" style="font-size:10px;">1 active</span>
+      </div>
+      <div style="display:flex;gap:16px;margin-bottom:10px;">
+        <div><div style="font-size:10px;color:var(--lo);text-transform:uppercase;letter-spacing:.06em;">Collections</div><div style="font-size:18px;font-weight:700;">3</div></div>
+        <div><div style="font-size:10px;color:var(--lo);text-transform:uppercase;letter-spacing:.06em;">Runs</div><div style="font-size:18px;font-weight:700;">12</div></div>
+        <div><div style="font-size:10px;color:var(--lo);text-transform:uppercase;letter-spacing:.06em;">Best p99</div><div style="font-size:18px;font-weight:700;color:var(--ok);">58ms</div></div>
+      </div>
+      <div style="font-size:11px;color:var(--mid);">Oracle Free · 129.213.121.108:8080 · staging</div>
+    </div>
+
+    <!-- FastAPI app — configured, no runs yet -->
+    <div class="card" style="cursor:pointer;opacity:.8;" onclick="libExpand('svc-fastapi')">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <div style="width:36px;height:36px;border-radius:10px;background:var(--blue-d);border:1px solid rgba(91,155,213,.3);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">⚡</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:14px;font-weight:700;">RecoAPI</div>
+          <div style="font-size:11px;color:var(--lo);font-family:var(--f-mono);">FastAPI · asyncpg</div>
+        </div>
+        <span class="pill idle" style="font-size:10px;">no runs</span>
+      </div>
+      <div style="display:flex;gap:16px;margin-bottom:10px;">
+        <div><div style="font-size:10px;color:var(--lo);text-transform:uppercase;letter-spacing:.06em;">Collections</div><div style="font-size:18px;font-weight:700;">1</div></div>
+        <div><div style="font-size:10px;color:var(--lo);text-transform:uppercase;letter-spacing:.06em;">Runs</div><div style="font-size:18px;font-weight:700;">0</div></div>
+        <div><div style="font-size:10px;color:var(--lo);text-transform:uppercase;letter-spacing:.06em;">Best p99</div><div style="font-size:18px;font-weight:700;color:var(--lo);">—</div></div>
+      </div>
+      <div style="font-size:11px;color:var(--mid);">Hetzner · 116.202.18.44:8000 · staging</div>
+    </div>
+
+    <!-- Add new service -->
+    <div class="card" style="display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;border-style:dashed;min-height:160px;cursor:pointer;opacity:.6;" onclick="go('new-test')">
+      <div style="font-size:28px;">＋</div>
+      <div style="font-size:13px;font-weight:600;color:var(--mid);">Add a service</div>
+      <div style="font-size:11px;color:var(--lo);text-align:center;max-width:180px;">Spring Boot, FastAPI, Express, .NET — any service with an HTTP endpoint</div>
+    </div>
+  </div>
+
+  <!-- Expanded tree (shows on service card click) -->
   <div id="libTree">
-    <div class="lib-service">
+    <div class="lib-service" id="svc-perflab">
       <div class="lib-svc-head" onclick="toggleLib(this)">
         <span style="font-size:18px;width:28px;text-align:center;">🚀</span>
         <div style="flex:1;"><div style="font-size:14px;font-weight:700;">PerfLab</div><div style="font-size:11px;color:var(--lo);">Spring Boot · hikaricp · 129.213.121.108:8080</div></div>
@@ -548,22 +596,52 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
         <div class="lib-col-head" onclick="toggleLibCol(this)">
           <span style="color:var(--purple);">📁</span>
           <span style="font-size:13px;font-weight:600;flex:1;">Connection Pool Investigation</span>
-          <span style="font-size:11px;color:var(--lo);">8 runs</span>
+          <span style="font-size:11px;color:var(--lo);">8 runs · best p99 58ms</span>
           <span style="color:var(--lo);font-size:14px;transition:transform .2s;" class="lib-col-chev">›</span>
         </div>
         <div class="lib-col-body on" style="padding-left:28px;">
-          <div class="lib-run-row" onclick="go('results')"><span style="font-size:12px;">✅</span><span style="font-size:12px;flex:1;">TR-003 · pool=20 verification</span><span class="pill ok" style="font-size:10px;padding:2px 7px;">IMPROVED</span><span style="font-size:11px;color:var(--lo);margin-left:8px;">2h ago</span></div>
-          <div class="lib-run-row"><span style="font-size:12px;">↩️</span><span style="font-size:12px;flex:1;">TR-002 · pool=10 attempt</span><span class="pill err" style="font-size:10px;padding:2px 7px;">REVERTED</span><span style="font-size:11px;color:var(--lo);margin-left:8px;">1d ago</span></div>
-          <div class="lib-run-row"><span style="font-size:12px;">📊</span><span style="font-size:12px;flex:1;">TR-001 · baseline</span><span class="pill idle" style="font-size:10px;padding:2px 7px;">BASELINE</span><span style="font-size:11px;color:var(--lo);margin-left:8px;">2d ago</span></div>
+          <div class="lib-run-row" onclick="go('active')"><span style="font-size:12px;">🔄</span><span style="font-size:12px;flex:1;">TR-004 · /cache/get</span><span class="pill running" style="font-size:10px;padding:2px 7px;">RUNNING</span><span style="font-size:11px;color:var(--lo);margin-left:8px;">now</span></div>
+          <div class="lib-run-row" onclick="go('results')"><span style="font-size:12px;">✅</span><span style="font-size:12px;flex:1;">TR-003 · pool=20 · /transfer</span><span class="pill ok" style="font-size:10px;padding:2px 7px;">IMPROVED</span><span style="font-size:11px;color:var(--lo);margin-left:8px;">2h ago</span></div>
+          <div class="lib-run-row"><span style="font-size:12px;">↩️</span><span style="font-size:12px;flex:1;">TR-002 · pool=10 · /transfer</span><span class="pill err" style="font-size:10px;padding:2px 7px;">REVERTED</span><span style="font-size:11px;color:var(--lo);margin-left:8px;">1d ago</span></div>
+          <div class="lib-run-row"><span style="font-size:12px;">📊</span><span style="font-size:12px;flex:1;">TR-001 · baseline · /transfer</span><span class="pill idle" style="font-size:10px;padding:2px 7px;">BASELINE</span><span style="font-size:11px;color:var(--lo);margin-left:8px;">2d ago</span></div>
         </div>
         <div class="lib-col-head" onclick="toggleLibCol(this)">
-          <span style="color:var(--purple);">📁</span>
+          <span style="color:var(--blue);">📁</span>
           <span style="font-size:13px;font-weight:600;flex:1;">Cache Endpoint Tests</span>
-          <span style="font-size:11px;color:var(--lo);">1 run</span>
+          <span style="font-size:11px;color:var(--lo);">2 runs</span>
           <span style="color:var(--lo);font-size:14px;transition:transform .2s;" class="lib-col-chev">›</span>
         </div>
         <div class="lib-col-body" style="padding-left:28px;">
-          <div class="lib-run-row"><span style="font-size:12px;">🔄</span><span style="font-size:12px;flex:1;">TR-004 · /cache/get</span><span class="pill running" style="font-size:10px;padding:2px 7px;">RUNNING</span></div>
+          <div class="lib-run-row"><span style="font-size:12px;">📊</span><span style="font-size:12px;flex:1;">TR-005 · /cache/get baseline</span><span class="pill idle" style="font-size:10px;padding:2px 7px;">BASELINE</span><span style="font-size:11px;color:var(--lo);margin-left:8px;">3d ago</span></div>
+        </div>
+        <div class="lib-col-head" onclick="toggleLibCol(this)">
+          <span style="color:var(--warn);">📁</span>
+          <span style="font-size:13px;font-weight:600;flex:1;">Ceiling Discovery</span>
+          <span style="font-size:11px;color:var(--lo);">1 ceiling probe</span>
+          <span style="color:var(--lo);font-size:14px;transition:transform .2s;" class="lib-col-chev">›</span>
+        </div>
+        <div class="lib-col-body" style="padding-left:28px;">
+          <div class="lib-run-row" onclick="switchHistTab('ceiling');go('history')"><span style="font-size:12px;">⚡</span><span style="font-size:12px;flex:1;">CP-001 · ceiling: 200–225 users</span><span class="pill" style="font-size:10px;padding:2px 7px;background:var(--warn-d);color:var(--warn);">CEILING</span><span style="font-size:11px;color:var(--lo);margin-left:8px;">13 Sep</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="lib-service" id="svc-fastapi" style="display:none;">
+      <div class="lib-svc-head" onclick="toggleLib(this)">
+        <span style="font-size:18px;width:28px;text-align:center;">⚡</span>
+        <div style="flex:1;"><div style="font-size:14px;font-weight:700;">RecoAPI</div><div style="font-size:11px;color:var(--lo);">FastAPI · asyncpg · 116.202.18.44:8000</div></div>
+        <span style="font-size:11px;color:var(--lo);margin-right:8px;">1 collection · 0 runs</span>
+        <span style="color:var(--lo);font-size:16px;transition:transform .2s;" class="lib-chev">›</span>
+      </div>
+      <div class="lib-svc-body">
+        <div class="lib-col-head" onclick="toggleLibCol(this)">
+          <span style="color:var(--blue);">📁</span>
+          <span style="font-size:13px;font-weight:600;flex:1;">Recommendation Latency</span>
+          <span style="font-size:11px;color:var(--lo);">0 runs — ready to start</span>
+          <span style="color:var(--lo);font-size:14px;transition:transform .2s;" class="lib-col-chev">›</span>
+        </div>
+        <div class="lib-col-body" style="padding-left:28px;">
+          <div class="lib-run-row" onclick="go('new-test')" style="color:var(--lo);font-style:italic;"><span style="font-size:12px;">＋</span><span style="font-size:12px;flex:1;">Start first run…</span></div>
         </div>
       </div>
     </div>
@@ -605,8 +683,8 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
 
     <div class="card">
       <div class="card-h">
-        <div><div class="card-title">GitHub Repository Connection</div><div class="card-sub">Required for Semi-Automated and Fully Automated modes — Crucible checks out the target repo to apply config changes</div></div>
-        <span class="pill idle">Not connected</span>
+        <div><div class="card-title">GitHub Repository Connection</div><div class="card-sub">Required for Semi-Auto and Fully Automated · <strong style="color:var(--ok);">Optional for Advisory</strong> — Advisory mode only reports findings; it never pushes a change</div></div>
+        <span class="pill idle" id="ghConnBadge">Not connected</span>
       </div>
       <div class="form-grid2">
         <div class="form-row">
@@ -1107,37 +1185,115 @@ scenarios:
 <!-- ══ BENCHMARKS ══ -->
 <section class="pg" id="pg-benchmarks">
   <div class="ph">
-    <div class="ph-left"><div class="ph-eyebrow">AI Evaluation</div><div class="ph-title">Benchmarks</div><div class="ph-sub">37 fixtures · Gemini 1.5 Pro · glc_v5</div></div>
-    <div class="ph-actions"><button class="btn btn-ghost btn-sm" onclick="go('new-test')">Capture Fixture</button><button class="btn btn-primary btn-sm">▶ Re-run</button></div>
+    <div class="ph-left"><div class="ph-eyebrow">AI Evaluation</div><div class="ph-title">Benchmarks</div><div class="ph-sub">20 fixtures · 22 snapshots · 9 cause families · gemini-3.5-flash-lite via glc_v5</div></div>
+    <div class="ph-actions"><button class="btn btn-ghost btn-sm" onclick="go('new-test')">Capture Fixture</button><button class="btn btn-primary btn-sm">▶ Re-run replay</button></div>
   </div>
   <div class="info-banner" id="ib-benchmarks">
     <span class="info-banner-icon">🧪</span>
-    <div class="info-banner-body"><strong>Replay eval separates diagnosis quality from luck.</strong> Each fixture is a recorded metric snapshot — the AI diagnoses it without running a live experiment. A result landing in the "LUCKY" quadrant (wrong diagnosis, fix worked anyway) scores differently from a genuinely correct one. Click any row to expand fixture-level detail. Use "Capture Fixture" to add new snapshots from a running campaign.</div>
+    <div class="info-banner-body"><strong>Replay eval separates diagnosis quality from luck.</strong> Each fixture is a recorded metric snapshot captured from a real Box A/B campaign — the AI diagnoses it without running anything live. "35/37 cases" means 18 tasks run against 20 fixtures; not every task applies to every fixture, giving 37 evaluable task-cases with ground truth. 2 fixtures also captured through PromQL and Datadog for cross-provider agreement. Full results: <code style="font-family:var(--f-mono);font-size:10px;">docs/BENCHMARK_REPLAY_RESULTS.md</code></div>
     <button class="info-banner-close" onclick="dismissBanner('ib-benchmarks')">✕</button>
   </div>
   <div class="grid4" style="margin-bottom:16px;">
-    <div class="kpi"><div class="kpi-label">Overall</div><div class="kpi-val ok">94.6%</div><div class="kpi-meta">35/37</div></div>
-    <div class="kpi"><div class="kpi-label">Fixtures</div><div class="kpi-val">37</div><div class="kpi-meta">22 captured</div></div>
-    <div class="kpi"><div class="kpi-label">Avg latency</div><div class="kpi-val">1.8s</div><div class="kpi-meta">per diagnosis</div></div>
-    <div class="kpi"><div class="kpi-label">Model</div><div class="kpi-val" style="font-size:14px;">Gemini 1.5</div><div class="kpi-meta">pinned per campaign</div></div>
+    <div class="kpi"><div class="kpi-label">Task accuracy</div><div class="kpi-val ok">94.6%</div><div class="kpi-meta">35/37 cases with ground truth</div></div>
+    <div class="kpi"><div class="kpi-label">Fixtures</div><div class="kpi-val">20</div><div class="kpi-meta">22 snapshots · 2 multi-provider</div></div>
+    <div class="kpi"><div class="kpi-label">Avg latency</div><div class="kpi-val">1.8s</div><div class="kpi-meta">per replay diagnosis</div></div>
+    <div class="kpi"><div class="kpi-label">Model</div><div class="kpi-val" style="font-size:11px;font-family:var(--f-mono);">gemini-3.5-flash-lite</div><div class="kpi-meta">pinned · failover disabled · via glc_v5</div></div>
   </div>
+  <div style="font-size:11px;color:var(--mid);margin-bottom:10px;padding:8px 12px;background:var(--s2);border-radius:var(--rs);border:1px solid var(--bd);">
+    <strong style="color:var(--hi);">What these fixtures are:</strong> each is a recorded metric snapshot captured from a real Box A/B PerfLab campaign. The AI is given the snapshot and asked to identify the cause family and propose the correct property change — without running anything live. 18 tasks are evaluated across the 20 fixtures, yielding 37 task-cases that have a ground truth. Full per-task breakdown: <code style="font-family:var(--f-mono);font-size:10px;">docs/BENCHMARK_REPLAY_RESULTS.md</code>. Fixtures marked <strong>multi-provider</strong> were captured through Actuator, PromQL, and Datadog to verify cross-provider agreement.
+  </div>
+  <!-- connection_pool_exhaustion -->
   <div class="bench-row" onclick="toggleBench(this)">
-    <div class="bench-head"><div class="bench-icon" style="background:var(--err-d);">🏊</div><div class="bench-info"><div class="bench-name">Connection Pool Saturation</div><div class="bench-desc">HikariCP exhaustion · acquire wait · pending threads</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:100%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--ok);">100% · 8/8</div></div><span class="bench-chevron">›</span></div>
+    <div class="bench-head"><div class="bench-icon" style="background:var(--err-d);">🏊</div><div class="bench-info"><div class="bench-name">connection_pool_exhaustion</div><div class="bench-desc">HikariCP acquire wait · pool starved · pending threads — 3 fixtures · 5 snapshots</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:100%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--lo);">3 fixtures</div></div><span class="bench-chevron">›</span></div>
     <div class="bench-body">
-      <div class="bench-fix-row hdr"><span>Fixture</span><span>Provider/Model</span><span>Outcome</span><span>Diagnosis</span></div>
-      <div class="bench-fix-row"><span class="fix-name">pool_2_transfer_p99_1206</span><span style="color:var(--blue);">Gemini 1.5 Pro</span><span class="fix-out ok">CORRECT</span><span class="fix-diag">pool_saturation → pool_size</span></div>
-      <div class="bench-fix-row"><span class="fix-name">pool_2_burst_100u</span><span style="color:var(--blue);">Gemini 1.5 Pro</span><span class="fix-out ok">CORRECT</span><span class="fix-diag">pool_saturation → pool_size</span></div>
-      <div class="bench-fix-row"><span class="fix-name">pool_5_borderline</span><span style="color:var(--blue);">Gemini 1.5 Pro</span><span class="fix-out ok">CORRECT</span><span class="fix-diag">pool_saturation → pool_size</span></div>
-      <div class="bench-fix-row"><span class="fix-name">pool_10_healthy</span><span style="color:var(--blue);">Gemini 1.5 Pro</span><span class="fix-out ok">CORRECT</span><span class="fix-diag">no_bottleneck</span></div>
+      <div class="bench-fix-row hdr"><span>Fixture ID</span><span>Providers</span><span>Severity</span><span>Cause family</span></div>
+      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_pool_starved</span><span><span class="pill ok" style="font-size:9px;">actuator</span> <span class="pill ok" style="font-size:9px;">promql</span> <span class="pill ok" style="font-size:9px;">datadog</span></span><span style="color:var(--err);">severe</span><span class="fix-diag">connection_pool_exhaustion</span></div>
+      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_pool_starved_mild</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--warn);">mild</span><span class="fix-diag">connection_pool_exhaustion</span></div>
+      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_pool_starved_moderate</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--warn);">moderate</span><span class="fix-diag">connection_pool_exhaustion</span></div>
     </div>
   </div>
+  <!-- gc_pressure -->
   <div class="bench-row" onclick="toggleBench(this)">
-    <div class="bench-head"><div class="bench-icon" style="background:var(--warn-d);">⚙️</div><div class="bench-info"><div class="bench-name">GC Pressure</div><div class="bench-desc">JVM GC overhead · STW pauses · heap exhaustion</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:85%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--ok);">85% · 6/7</div></div><span class="bench-chevron">›</span></div>
+    <div class="bench-head"><div class="bench-icon" style="background:var(--warn-d);">♻️</div><div class="bench-info"><div class="bench-name">gc_pressure</div><div class="bench-desc">JVM GC overhead · STW pauses · heap exhaustion — 3 fixtures · 5 snapshots · includes co-occurring pool</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:100%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--lo);">3 fixtures</div></div><span class="bench-chevron">›</span></div>
     <div class="bench-body">
-      <div class="bench-fix-row hdr"><span>Fixture</span><span>Provider/Model</span><span>Outcome</span><span>Diagnosis</span></div>
-      <div class="bench-fix-row"><span class="fix-name">gc_overhead_30pct</span><span style="color:var(--blue);">Gemini 1.5 Pro</span><span class="fix-out ok">CORRECT</span><span class="fix-diag">gc_pressure → heap_size</span></div>
-      <div class="bench-fix-row"><span class="fix-name">gc_g1_region_overflow</span><span style="color:var(--blue);">Gemini 1.5 Pro</span><span class="fix-out err">WRONG</span><span class="fix-diag">Expected gc_pressure, got pool_saturation</span></div>
+      <div class="bench-fix-row hdr"><span>Fixture ID</span><span>Providers</span><span>Severity</span><span>Cause family</span></div>
+      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_gc_pressure</span><span><span class="pill ok" style="font-size:9px;">actuator</span> <span class="pill ok" style="font-size:9px;">promql</span> <span class="pill ok" style="font-size:9px;">datadog</span></span><span style="color:var(--err);">severe</span><span class="fix-diag">gc_pressure</span></div>
+      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_gc_pressure_moderate</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--warn);">moderate</span><span class="fix-diag">gc_pressure</span></div>
+      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_gc_and_pool</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--err);">severe</span><span class="fix-diag">gc_pressure + connection_pool_exhaustion (co-occurring)</span></div>
     </div>
+  </div>
+  <!-- thread_pool_saturation -->
+  <div class="bench-row" onclick="toggleBench(this)">
+    <div class="bench-head"><div class="bench-icon" style="background:var(--blue-d);">🧵</div><div class="bench-info"><div class="bench-name">thread_pool_saturation</div><div class="bench-desc">Tomcat thread pool full · active threads at max · request queuing — 2 fixtures</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:100%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--lo);">2 fixtures</div></div><span class="bench-chevron">›</span></div>
+    <div class="bench-body">
+      <div class="bench-fix-row hdr"><span>Fixture ID</span><span>Providers</span><span>Severity</span><span>Cause family</span></div>
+      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_thread_starved</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--err);">severe</span><span class="fix-diag">thread_pool_saturation</span></div>
+      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_thread_starved_moderate</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--warn);">moderate</span><span class="fix-diag">thread_pool_saturation</span></div>
+    </div>
+  </div>
+  <!-- inefficient_query -->
+  <div class="bench-row" onclick="toggleBench(this)">
+    <div class="bench-head"><div class="bench-icon" style="background:var(--purple-d);">🐌</div><div class="bench-info"><div class="bench-name">inefficient_query</div><div class="bench-desc">Postgres sequential scan · missing index · slow DB response time — 2 fixtures</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:100%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--lo);">2 fixtures</div></div><span class="bench-chevron">›</span></div>
+    <div class="bench-body">
+      <div class="bench-fix-row hdr"><span>Fixture ID</span><span>Providers</span><span>Severity</span><span>Cause family</span></div>
+      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_inefficient_query_severe</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--err);">severe</span><span class="fix-diag">inefficient_query</span></div>
+      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_inefficient_query_moderate</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--warn);">moderate</span><span class="fix-diag">inefficient_query</span></div>
+    </div>
+  </div>
+  <!-- cache_miss -->
+  <div class="bench-row" onclick="toggleBench(this)">
+    <div class="bench-head"><div class="bench-icon" style="background:var(--ok-d);">📦</div><div class="bench-info"><div class="bench-name">cache_miss</div><div class="bench-desc">Redis miss rate spike · cache eviction · cold cache latency — 2 fixtures</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:100%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--lo);">2 fixtures</div></div><span class="bench-chevron">›</span></div>
+    <div class="bench-body">
+      <div class="bench-fix-row hdr"><span>Fixture ID</span><span>Providers</span><span>Severity</span><span>Cause family</span></div>
+      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_cache_miss_severe</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--err);">severe</span><span class="fix-diag">cache_miss</span></div>
+      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_cache_miss_moderate</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--warn);">moderate</span><span class="fix-diag">cache_miss</span></div>
+    </div>
+  </div>
+  <!-- downstream_latency -->
+  <div class="bench-row" onclick="toggleBench(this)">
+    <div class="bench-head"><div class="bench-icon" style="background:var(--warn-d);">🌐</div><div class="bench-info"><div class="bench-name">downstream_latency</div><div class="bench-desc">httpbin dependency slow · connection timeout propagation — 2 fixtures</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:100%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--lo);">2 fixtures</div></div><span class="bench-chevron">›</span></div>
+    <div class="bench-body">
+      <div class="bench-fix-row hdr"><span>Fixture ID</span><span>Providers</span><span>Severity</span><span>Cause family</span></div>
+      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_downstream_latency_severe</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--err);">severe</span><span class="fix-diag">downstream_latency</span></div>
+      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_downstream_latency_moderate</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--warn);">moderate</span><span class="fix-diag">downstream_latency</span></div>
+    </div>
+  </div>
+  <!-- lock_contention -->
+  <div class="bench-row" onclick="toggleBench(this)">
+    <div class="bench-head"><div class="bench-icon" style="background:var(--fire-d);">🔒</div><div class="bench-info"><div class="bench-name">lock_contention</div><div class="bench-desc">Postgres row-level lock · transaction serialisation wait — 1 fixture</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:100%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--lo);">1 fixture</div></div><span class="bench-chevron">›</span></div>
+    <div class="bench-body">
+      <div class="bench-fix-row hdr"><span>Fixture ID</span><span>Providers</span><span>Severity</span><span>Cause family</span></div>
+      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_lock_contention_severe</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--err);">severe</span><span class="fix-diag">lock_contention</span></div>
+    </div>
+  </div>
+  <!-- payload_serialization -->
+  <div class="bench-row" onclick="toggleBench(this)">
+    <div class="bench-head"><div class="bench-icon" style="background:var(--blue-d);">📋</div><div class="bench-info"><div class="bench-name">payload_serialization</div><div class="bench-desc">Large JSON response · serialisation CPU cost · response size overhead — 1 fixture</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:100%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--lo);">1 fixture</div></div><span class="bench-chevron">›</span></div>
+    <div class="bench-body">
+      <div class="bench-fix-row hdr"><span>Fixture ID</span><span>Providers</span><span>Severity</span><span>Cause family</span></div>
+      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_payload_severe</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--err);">severe</span><span class="fix-diag">payload_serialization</span></div>
+    </div>
+  </div>
+  <!-- application_code -->
+  <div class="bench-row" onclick="toggleBench(this)">
+    <div class="bench-head"><div class="bench-icon" style="background:var(--purple-d);">💻</div><div class="bench-info"><div class="bench-name">application_code</div><div class="bench-desc">Deliberate code-level latency injection · business logic bottleneck — 2 fixtures</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:100%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--lo);">2 fixtures</div></div><span class="bench-chevron">›</span></div>
+    <div class="bench-body">
+      <div class="bench-fix-row hdr"><span>Fixture ID</span><span>Providers</span><span>Severity</span><span>Cause family</span></div>
+      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_code_latency</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--err);">severe</span><span class="fix-diag">application_code</span></div>
+      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_code_latency_moderate</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--warn);">moderate</span><span class="fix-diag">application_code</span></div>
+    </div>
+  </div>
+  <!-- healthy baseline -->
+  <div class="bench-row" onclick="toggleBench(this)">
+    <div class="bench-head"><div class="bench-icon" style="background:var(--ok-d);">✅</div><div class="bench-info"><div class="bench-name">healthy / near-SLA baseline</div><div class="bench-desc">No bottleneck present · correctly abstain from proposing a change — 2 fixtures</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:100%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--lo);">2 fixtures</div></div><span class="bench-chevron">›</span></div>
+    <div class="bench-body">
+      <div class="bench-fix-row hdr"><span>Fixture ID</span><span>Providers</span><span>Profile</span><span>Cause family</span></div>
+      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_near_sla</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--warn);">borderline</span><span class="fix-diag">none (within SLA, no actionable bottleneck)</span></div>
+      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_healthy</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--ok);">healthy</span><span class="fix-diag">none (all metrics nominal)</span></div>
+    </div>
+  </div>
+  <div style="font-size:11px;color:var(--mid);margin-top:10px;padding:8px 12px;background:var(--s2);border-radius:var(--rs);border:1px solid var(--bd);">
+    <strong style="color:var(--hi);">Aggregate score: 35/37 task-cases correct (94.6%).</strong> 2 task-cases misdiagnosed — specific fixture and task detail in <code style="font-family:var(--f-mono);">docs/BENCHMARK_REPLAY_RESULTS.md</code>. 12 abstentions (model declined to name a cause) across 40 total evaluated cases. Harness: <code style="font-family:var(--f-mono);">crucible@0bd2b87</code>.
   </div>
 </section>
 
@@ -1467,9 +1623,9 @@ function go(p){
   }
 }
 
-// Init: hide everything, then show overview
+// Init: hide everything, then show library (workspace home)
 Object.values(PAGES).forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
-go('overview');
+go('library');
 
 /* ── Wizard ──────────────────────────────────────────────────────────── */
 const WZ_MSGS=[
@@ -1481,6 +1637,7 @@ const WZ_MSGS=[
 ];
 // Init wizard pane visibility on first call
 let wzInited=false;
+const wzStepShown={};
 function wzGo(n){
   const panes=document.querySelectorAll('.wz-pane');
   if(!wzInited){wzInited=true;panes.forEach(p=>p.style.display='none');}
@@ -1490,9 +1647,10 @@ function wzGo(n){
     if(i===n) s.classList.add('on');
     else if(i<n) s.classList.add('done');
   });
-  // Only fire AI tip for wizard steps when chat is open, and only once per step
+  // Only fire AI tip once per step (not on every back/forward), and only when chat is open
   const chatCollapsed=document.getElementById('chatPane').classList.contains('collapsed');
-  if(!chatCollapsed&&WZ_MSGS[n]){
+  if(!chatCollapsed&&WZ_MSGS[n]&&!wzStepShown[n]){
+    wzStepShown[n]=true;
     setTimeout(()=>addChatMsg('ai',WZ_MSGS[n]),300);
   }
 }
@@ -1527,7 +1685,17 @@ function handleDocDrop(e){e.preventDefault();document.getElementById('docDrop').
 function handleDocInput(inp){Array.from(inp.files).forEach(f=>addDoc(f.name));}
 
 /* ── GitHub test ─────────────────────────────────────────────────────── */
-function testGithubConn(){const r=document.getElementById('gh-conn-result');r.style.display='block';r.textContent='Testing…';r.style.color='var(--mid)';setTimeout(()=>{r.textContent='✓ Connected · perf-lab · perftest_sandbox branch exists · config file found';r.style.color='var(--ok)';},1200);}
+function testGithubConn(){
+  const r=document.getElementById('gh-conn-result');
+  const badge=document.getElementById('ghConnBadge');
+  r.style.display='block';r.textContent='Testing…';r.style.color='var(--mid)';
+  if(badge){badge.textContent='Connecting…';badge.className='pill idle';}
+  setTimeout(()=>{
+    r.textContent='✓ Connected · perf-lab · perftest_sandbox branch exists · config file found';
+    r.style.color='var(--ok)';
+    if(badge){badge.textContent='Connected';badge.className='pill ok';}
+  },1200);
+}
 
 /* ── YAML ────────────────────────────────────────────────────────────── */
 function copyYaml(){const box=document.getElementById('yamlBox');if(navigator.clipboard){navigator.clipboard.writeText(box.textContent).then(()=>{addChatMsg('ai','YAML copied to clipboard!')}).catch(()=>{});}else{const sel=window.getSelection();const range=document.createRange();range.selectNodeContents(box);sel.removeAllRanges();sel.addRange(range);}}
@@ -1537,6 +1705,13 @@ function showYamlExport(){alert('YAML exported — see the Export YAML button on
 /* ── Library ─────────────────────────────────────────────────────────── */
 function toggleLib(head){const body=head.nextElementSibling;const chev=head.querySelector('.lib-chev');const on=body.classList.toggle('on');if(chev)chev.style.transform=on?'rotate(90deg)':'';}
 function toggleLibCol(head){const body=head.nextElementSibling;const chev=head.querySelector('.lib-col-chev');const on=body.classList.toggle('on');if(chev)chev.style.transform=on?'rotate(90deg)':'';}
+function libExpand(id){
+  // Show the tree panel for the clicked service, hide others
+  document.querySelectorAll('#libTree .lib-service').forEach(s=>{
+    s.style.display=s.id===id?'block':'none';
+  });
+  document.getElementById('libTree').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
 
 /* ── Trial expand ────────────────────────────────────────────────────── */
 function toggleTrial(id){const d=document.getElementById('td-'+id);const c=document.getElementById('tc-'+id);const on=d.classList.toggle('on');if(c)c.classList.toggle('open',on);}
