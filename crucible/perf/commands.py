@@ -935,6 +935,86 @@ def build_multi_measure(
     return multi_measure
 
 
+def _check_workspace_sync(workspace: Path, profile: "TargetProfile") -> None:
+    """Verify workspace is in a clean, synced state before starting a campaign.
+
+    Raises CampaignRefused for uncommitted changes (hard blocker).
+    Prints a warning for sandbox drift vs. remote or vs. base_branch so the
+    operator can decide whether to reset before proceeding.
+    """
+    import subprocess
+
+    deploy = profile.deploy
+
+    # --- 1. Uncommitted changes in the workspace → hard refuse ---
+    r = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=workspace,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if r.returncode == 0 and r.stdout.strip():
+        raise CampaignRefused(
+            f"workspace has uncommitted changes — commit or stash before starting:\n"
+            f"{r.stdout.rstrip()}"
+        )
+
+    # --- 2. Fetch remote deploy branch to get its current state ---
+    subprocess.run(
+        ["git", "fetch", deploy.remote],
+        cwd=workspace,
+        capture_output=True,
+        timeout=30,
+    )
+
+    # --- 3. Warn if local HEAD differs from remote sandbox branch ---
+    r = subprocess.run(
+        ["git", "rev-parse", "HEAD", f"{deploy.remote}/{deploy.branch}"],
+        cwd=workspace,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if r.returncode == 0:
+        shas = r.stdout.strip().splitlines()
+        if len(shas) == 2 and shas[0] != shas[1]:
+            local_sha, remote_sha = shas[0], shas[1]
+            print(
+                f"\n[workspace] WARNING: local branch ({local_sha[:8]}) is out of sync "
+                f"with remote {deploy.remote}/{deploy.branch} ({remote_sha[:8]}).\n"
+                f"  Sync: git -C {workspace} reset --hard "
+                f"{deploy.remote}/{deploy.branch}\n",
+                flush=True,
+            )
+
+    # --- 4. Fetch origin and warn if config_file differs from base_branch ---
+    subprocess.run(
+        ["git", "fetch", "origin"],
+        cwd=workspace,
+        capture_output=True,
+        timeout=30,
+    )
+    base_ref = f"origin/{deploy.base_branch}"
+    config_path = str(profile.config_file)
+    r = subprocess.run(
+        ["git", "diff", "--stat", f"{base_ref}..HEAD", "--", config_path],
+        cwd=workspace,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if r.returncode == 0 and r.stdout.strip():
+        print(
+            f"\n[workspace] WARNING: {config_path} has diverged from {base_ref} — "
+            f"previous experiment changes may still be applied.\n"
+            f"  To reset: git -C {workspace} checkout {base_ref} -- {config_path} "
+            f"&& git -C {workspace} commit -m 'sync: reset to {deploy.base_branch}' "
+            f"&& git -C {workspace} push {deploy.remote} {deploy.branch}\n",
+            flush=True,
+        )
+
+
 def build_campaign(
     *,
     profile_name: str,
@@ -969,6 +1049,9 @@ def build_campaign(
 
     profile = TargetProfile.named(profile_name)
     sla = Sla.load(sla_path)
+
+    if profile.deploy.automated and workspace:
+        _check_workspace_sync(Path(workspace), profile)
 
     scenario = Scenario(
         name=scenario_name,
