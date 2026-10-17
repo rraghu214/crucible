@@ -1,0 +1,1795 @@
+<title>Crucible</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:#0c0c13; --s1:#12121c; --s2:#1a1a26; --s3:#232334;
+  --bd:rgba(255,255,255,0.06); --bd2:rgba(255,255,255,0.12);
+  --hi:#eeeef8; --mid:#8888a8; --lo:#4e4e62;
+  --fire:#ef6b2f; --fire-d:rgba(239,107,47,0.12);
+  --ok:#3bab8c; --ok-d:rgba(59,171,140,0.11);
+  --warn:#e8a630; --warn-d:rgba(232,166,48,0.11);
+  --err:#e05252; --err-d:rgba(224,82,82,0.11);
+  --blue:#5b9bd5; --blue-d:rgba(91,155,213,0.11);
+  --purple:#9b7fe8; --purple-d:rgba(155,127,232,0.11);
+  --f-head:'Plus Jakarta Sans',ui-sans-serif,sans-serif;
+  --f-body:'Inter',ui-sans-serif,sans-serif;
+  --f-mono:'JetBrains Mono',ui-monospace,monospace;
+  --r:10px; --rs:6px; --rail:228px; --chat-w:340px;
+  color-scheme:dark;
+}
+@media(prefers-color-scheme:light){:root:not([data-theme="dark"]){
+  --bg:#f5f2ed;--s1:#ffffff;--s2:#ede9e2;--s3:#e3ddd5;
+  --bd:rgba(0,0,0,0.07);--bd2:rgba(0,0,0,0.14);
+  --hi:#1a1510;--mid:#6b5d4f;--lo:#b0a08e;
+  --fire-d:rgba(239,107,47,0.10);--ok-d:rgba(59,171,140,0.10);
+  --warn-d:rgba(232,166,48,0.10);--err-d:rgba(224,82,82,0.10);
+  --blue-d:rgba(91,155,213,0.10);--purple-d:rgba(155,127,232,0.10);
+  color-scheme:light;
+}}
+:root[data-theme="light"]{
+  --bg:#f5f2ed;--s1:#ffffff;--s2:#ede9e2;--s3:#e3ddd5;
+  --bd:rgba(0,0,0,0.07);--bd2:rgba(0,0,0,0.14);
+  --hi:#1a1510;--mid:#6b5d4f;--lo:#b0a08e;
+  --fire-d:rgba(239,107,47,0.10);--ok-d:rgba(59,171,140,0.10);
+  --warn-d:rgba(232,166,48,0.10);--err-d:rgba(224,82,82,0.10);
+  --blue-d:rgba(91,155,213,0.10);--purple-d:rgba(155,127,232,0.10);
+  color-scheme:light;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--hi);font-family:var(--f-body);font-size:14px;line-height:1.6;display:flex;min-height:100%;}
+
+/* ── Rail ── */
+.rail{width:var(--rail);min-width:var(--rail);background:var(--s1);border-right:1px solid var(--bd);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:20;padding-left:max(0px,env(safe-area-inset-left,0px));}
+.rail-brand{padding:20px 18px 14px;border-bottom:1px solid var(--bd);flex-shrink:0;}
+.brand-name{font-family:var(--f-head);font-weight:800;font-size:20px;letter-spacing:-0.04em;background:linear-gradient(130deg,var(--fire) 0%,var(--warn) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.brand-tag{font-size:10px;color:var(--lo);letter-spacing:.14em;text-transform:uppercase;margin-top:2px;}
+.nav{flex:1;padding:10px 8px;display:flex;flex-direction:column;gap:1px;overflow-y:auto;}
+.nav-sec{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--lo);padding:13px 10px 4px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:var(--rs);color:var(--mid);font-size:13px;font-weight:500;cursor:pointer;user-select:none;text-decoration:none;transition:background .12s,color .12s;position:relative;}
+.nav-item:hover{background:var(--s2);color:var(--hi);}
+.nav-item.on{background:var(--fire-d);color:var(--fire);}
+.nav-item.on::before{content:'';position:absolute;left:0;top:22%;bottom:22%;width:3px;border-radius:0 2px 2px 0;background:var(--fire);}
+.nav-icon{width:16px;height:16px;opacity:.7;flex-shrink:0;}
+.nav-item.on .nav-icon{opacity:1;}
+.nav-badge{margin-left:auto;background:var(--fire);color:#fff;font-size:10px;font-weight:700;border-radius:10px;padding:1px 6px;}
+.nav-badge.pulse{animation:pulse 2s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.5;}}
+.rail-footer{padding:12px 10px;border-top:1px solid var(--bd);flex-shrink:0;}
+.rail-env{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--s2);border-radius:var(--rs);border:1px solid var(--bd);}
+.env-dot{width:7px;height:7px;border-radius:50%;background:var(--ok);flex-shrink:0;box-shadow:0 0 0 3px var(--ok-d);}
+
+/* ── Layout ── */
+.layout{margin-left:var(--rail);flex:1;display:flex;min-width:0;min-height:100%;}
+.main{flex:1;min-width:0;padding:28px 24px 120px;max-width:none;}
+.resize-handle{
+  width:5px;background:var(--bd);cursor:col-resize;flex-shrink:0;
+  transition:background .15s;position:relative;z-index:30;
+}
+.resize-handle:hover,.resize-handle.dragging{background:var(--fire);}
+.resize-handle::after{
+  content:'⋮';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  color:var(--lo);font-size:14px;pointer-events:none;
+}
+
+/* ── Chat pane ── */
+.chat-pane{
+  width:var(--chat-w);flex-shrink:0;background:var(--s1);border-left:1px solid var(--bd);
+  display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow:hidden;
+  transition:width .2s;
+}
+.chat-pane.collapsed{width:40px;}
+.chat-pane-header{
+  display:flex;align-items:center;gap:10px;padding:14px 14px 10px;
+  border-bottom:1px solid var(--bd);flex-shrink:0;
+}
+.chat-pane-title{font-family:var(--f-head);font-size:13px;font-weight:700;color:var(--hi);flex:1;white-space:nowrap;overflow:hidden;}
+.chat-ai-status{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ok);white-space:nowrap;}
+.chat-collapse-btn{background:none;border:none;color:var(--lo);cursor:pointer;font-size:16px;flex-shrink:0;padding:0;transition:color .12s;}
+.chat-collapse-btn:hover{color:var(--hi);}
+.chat-collapsed-tab{display:none;flex-direction:column;align-items:center;gap:12px;padding:16px 0;flex:1;}
+.chat-pane.collapsed .chat-collapsed-tab{display:flex;}
+.chat-pane.collapsed .chat-pane-body{display:none;}
+.chat-collapsed-icon{
+  width:32px;height:32px;border-radius:50%;
+  background:linear-gradient(135deg,var(--fire),var(--warn));
+  display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer;
+}
+.chat-collapsed-badge{width:18px;height:18px;border-radius:50%;background:var(--err);color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+.chat-pane-body{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.chat-context-bar{padding:8px 14px;background:var(--fire-d);border-bottom:1px solid rgba(239,107,47,.2);font-size:11px;color:var(--fire);display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.chat-messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;}
+.chat-msg{display:flex;gap:8px;align-items:flex-end;}
+.msg-bubble-ai{background:var(--s2);border:1px solid var(--bd);border-radius:12px 12px 12px 3px;padding:9px 12px;font-size:12px;line-height:1.6;color:var(--hi);max-width:260px;}
+.chat-msg.user{flex-direction:row-reverse;}
+.msg-bubble-user{background:var(--fire-d);border:1px solid rgba(239,107,47,.3);border-radius:12px 12px 3px 12px;padding:9px 12px;font-size:12px;line-height:1.6;color:var(--hi);max-width:220px;}
+.msg-av{width:24px;height:24px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,var(--fire),var(--warn));display:flex;align-items:center;justify-content:center;font-size:11px;}
+.suggest-fill-btn{display:inline-flex;align-items:center;gap:5px;background:var(--fire-d);border:1px solid rgba(239,107,47,.3);border-radius:20px;padding:4px 10px;font-size:11px;font-weight:600;color:var(--fire);cursor:pointer;margin-top:6px;transition:background .12s;}
+.suggest-fill-btn:hover{background:rgba(239,107,47,.2);}
+.chat-quick{display:flex;flex-wrap:wrap;gap:5px;padding:0 12px 8px;flex-shrink:0;}
+.quick-chip{background:var(--s2);border:1px solid var(--bd2);border-radius:20px;padding:4px 10px;font-size:11px;font-weight:600;color:var(--hi);cursor:pointer;transition:all .12s;white-space:nowrap;}
+.quick-chip:hover{background:var(--fire-d);border-color:rgba(239,107,47,.4);color:var(--fire);}
+.quick-chip.ok{border-color:rgba(59,171,140,.3);color:var(--ok);}
+.quick-chip.ok:hover{background:var(--ok-d);}
+.chat-input-row{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--bd);flex-shrink:0;}
+.chat-input{flex:1;background:var(--s2);border:1px solid var(--bd2);border-radius:20px;padding:7px 14px;font-size:12px;color:var(--hi);font-family:var(--f-body);outline:none;transition:border .12s;}
+.chat-input:focus{border-color:var(--fire);}
+.chat-send{background:var(--fire);border:none;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;flex-shrink:0;transition:background .12s;}
+.chat-send:hover{background:#f87a42;}
+.typing-dots{display:flex;gap:4px;padding:4px 2px;}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--mid);animation:blink 1.4s infinite;}
+.dot:nth-child(2){animation-delay:.2s;}
+.dot:nth-child(3){animation-delay:.4s;}
+@keyframes blink{0%,80%,100%{opacity:.3;}40%{opacity:1;}}
+
+/* ── Page header ── */
+.ph{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:24px;flex-wrap:wrap;}
+.ph-eyebrow{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--fire);margin-bottom:4px;}
+.ph-title{font-family:var(--f-head);font-size:26px;font-weight:700;letter-spacing:-0.03em;}
+.ph-sub{font-size:13px;color:var(--mid);margin-top:4px;}
+.ph-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;gap:7px;padding:7px 14px;border-radius:var(--rs);border:none;font-family:var(--f-body);font-size:13px;font-weight:600;cursor:pointer;transition:all .12s;user-select:none;line-height:1.4;}
+.btn-primary{background:var(--fire);color:#fff;}
+.btn-primary:hover{background:#f87a42;}
+.btn-ghost{background:var(--s2);color:var(--hi);border:1px solid var(--bd2);}
+.btn-ghost:hover{background:var(--s3);}
+.btn-sm{padding:5px 10px;font-size:12px;}
+.btn-ok{background:var(--ok-d);color:var(--ok);border:1px solid rgba(59,171,140,.3);}
+.btn-ok:hover{background:rgba(59,171,140,.22);}
+.btn-err{background:var(--err-d);color:var(--err);border:1px solid rgba(224,82,82,.3);}
+
+/* ── Cards ── */
+.card{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:20px;margin-bottom:12px;}
+.card-h{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px;}
+.card-title{font-family:var(--f-head);font-size:14px;font-weight:700;}
+.card-sub{font-size:12px;color:var(--mid);margin-top:1px;}
+.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+@media(max-width:700px){.grid2,.grid3,.grid4{grid-template-columns:1fr;}}
+
+/* ── KPI ── */
+.kpi{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:16px 20px;}
+.kpi-label{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--mid);margin-bottom:6px;}
+.kpi-val{font-family:var(--f-head);font-size:28px;font-weight:700;letter-spacing:-0.04em;}
+.kpi-val.ok{color:var(--ok);}
+.kpi-val.fire{color:var(--fire);}
+.kpi-val.warn{color:var(--warn);}
+.kpi-meta{font-size:11px;color:var(--mid);margin-top:3px;}
+
+/* ── Pill ── */
+.pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.04em;}
+.pill::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;}
+.pill.running{background:var(--blue-d);color:var(--blue);}
+.pill.ok{background:var(--ok-d);color:var(--ok);}
+.pill.warn{background:var(--warn-d);color:var(--warn);}
+.pill.err{background:var(--err-d);color:var(--err);}
+.pill.idle{background:var(--s3);color:var(--mid);}
+
+/* ── Tables ── */
+.tbl-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;}
+th{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--lo);padding:8px 12px;text-align:left;border-bottom:1px solid var(--bd2);}
+td{padding:10px 12px;border-bottom:1px solid var(--bd);font-size:13px;color:var(--mid);vertical-align:middle;}
+tr:hover td{background:var(--s2);}
+tr:last-child td{border-bottom:none;}
+td.hi{color:var(--hi);font-weight:500;}
+td.mono{font-family:var(--f-mono);font-size:12px;}
+
+/* ── Forms ── */
+.form-row{display:flex;flex-direction:column;gap:5px;margin-bottom:14px;}
+.form-label{font-size:12px;font-weight:600;color:var(--mid);}
+.form-input,.form-select{background:var(--s2);border:1px solid var(--bd2);border-radius:var(--rs);padding:9px 12px;font-size:13px;color:var(--hi);font-family:var(--f-body);outline:none;width:100%;transition:border .12s;}
+.form-input:focus,.form-select:focus{border-color:var(--fire);}
+.form-hint{font-size:11px;color:var(--lo);}
+.form-grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+@media(max-width:600px){.form-grid2{grid-template-columns:1fr;}}
+
+/* ── Doc drop ── */
+.doc-drop{border:2px dashed var(--bd2);border-radius:var(--r);padding:20px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;background:var(--s2);}
+.doc-drop:hover,.doc-drop.drag{border-color:var(--fire);background:var(--fire-d);}
+.doc-chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px;}
+.doc-chip{display:flex;align-items:center;gap:6px;background:var(--s3);border:1px solid var(--bd2);border-radius:var(--rs);padding:4px 10px;font-size:12px;}
+.doc-chip-rm{cursor:pointer;color:var(--lo);font-size:14px;line-height:1;}
+.doc-chip-rm:hover{color:var(--err);}
+
+/* ── Wizard ── */
+.wizard-steps{display:flex;gap:0;margin-bottom:20px;background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:3px;overflow-x:auto;}
+.ws{display:flex;align-items:center;gap:7px;padding:9px 12px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;color:var(--lo);transition:all .15s;white-space:nowrap;}
+.ws.on{background:var(--fire-d);color:var(--fire);}
+.ws.done{color:var(--ok);}
+.ws-num{width:20px;height:20px;border-radius:50%;border:1px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;}
+.ws.done .ws-num{background:var(--ok);border-color:var(--ok);color:#fff;}
+/* wz-pane display driven by style.display in JS */
+.wz-nav{display:flex;justify-content:space-between;gap:12px;margin-top:20px;padding-top:16px;border-top:1px solid var(--bd);}
+
+/* ── Thermal latency encoding ── */
+.t-ok   {color:var(--ok);}
+.t-warn {color:var(--warn);}
+.t-hot  {color:var(--fire);}
+.t-err  {color:var(--err);}
+.thermal-bar{height:4px;border-radius:2px;margin-top:3px;transition:width .4s;}
+
+/* ── Plan graph (PDMA loop) ── */
+.pgraph{display:flex;flex-direction:column;gap:0;position:relative;}
+.pgraph::before{content:'';position:absolute;left:16px;top:10px;bottom:10px;width:2px;background:var(--bd2);z-index:0;}
+.pgraph-node{display:flex;align-items:center;gap:12px;padding:7px 0;position:relative;z-index:1;}
+.pgraph-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--bd2);background:var(--s2);flex-shrink:0;margin-left:10px;transition:all .2s;}
+.pgraph-dot.done{background:var(--ok);border-color:var(--ok);box-shadow:0 0 0 3px var(--ok-d);}
+.pgraph-dot.active{background:var(--fire);border-color:var(--fire);box-shadow:0 0 0 4px var(--fire-d);animation:pulse 1.4s ease-in-out infinite;}
+.pgraph-dot.waiting{background:var(--warn);border-color:var(--warn);box-shadow:0 0 0 4px var(--warn-d);}
+.pgraph-label{font-size:12px;color:var(--mid);flex:1;}
+.pgraph-label.done{color:var(--hi);}
+.pgraph-label.active{color:var(--fire);font-weight:600;}
+.pgraph-label.waiting{color:var(--warn);font-weight:600;}
+.pgraph-role{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--lo);width:68px;text-align:right;flex-shrink:0;}
+
+/* ── CLI twin ── */
+.cli-twin{font-family:var(--f-mono);font-size:11px;color:var(--lo);background:var(--s2);border:1px solid var(--bd);border-radius:var(--rs);padding:4px 9px;margin-top:6px;display:inline-block;user-select:all;cursor:text;}
+.cli-twin::before{content:'$ ';color:var(--lo);opacity:.6;}
+
+/* ── Test mode cards ── */
+.mode-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
+@media(max-width:700px){.mode-grid{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:400px){.mode-grid{grid-template-columns:1fr;}}
+.mode-card{border:2px solid var(--bd2);border-radius:var(--r);padding:14px 16px;cursor:pointer;transition:border-color .15s,background .15s;background:var(--s2);}
+.mode-card.on{border-color:var(--fire);background:var(--fire-d);}
+.mode-card.ceiling-card{border-color:rgba(232,166,48,.3);}
+.mode-card.ceiling-card.on{border-color:var(--warn);background:var(--warn-d);}
+.ceiling-cfg{background:var(--warn-d);border:1px solid rgba(232,166,48,.22);border-radius:var(--r);padding:14px 16px;margin-bottom:14px;display:none;}
+.ceiling-cfg.show{display:block;}
+.mode-rec{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ok);margin-bottom:3px;}
+.mode-card-name{font-size:13px;font-weight:700;margin-bottom:4px;}
+.mode-card-desc{font-size:11px;color:var(--mid);line-height:1.5;}
+
+/* ── Scenario rows ── */
+.scenario-hdr{display:grid;grid-template-columns:1fr 70px 80px 70px 32px;gap:8px;padding:4px 12px 2px;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--lo);}
+.scenario-row{display:grid;grid-template-columns:1fr 70px 80px 70px 32px;gap:8px;align-items:center;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rs);padding:8px 12px;margin-bottom:6px;}
+.scenario-row input{background:var(--s1);border:1px solid var(--bd2);border-radius:4px;padding:5px 8px;font-size:12px;color:var(--hi);font-family:var(--f-body);outline:none;width:100%;}
+.scenario-row input:focus{border-color:var(--fire);}
+.scenario-rm{background:none;border:none;color:var(--lo);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;padding:0;transition:color .12s;}
+.scenario-rm:hover{color:var(--err);}
+
+/* ── Budget breakdown ── */
+.budget-table{width:100%;border-collapse:collapse;margin-bottom:14px;}
+.budget-table th{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--lo);padding:6px 12px;text-align:left;border-bottom:1px solid var(--bd2);}
+.budget-table td{padding:9px 12px;font-size:13px;color:var(--mid);border-bottom:1px solid var(--bd);}
+.budget-table td.hi{color:var(--hi);font-weight:500;}
+.budget-table td.mono{font-family:var(--f-mono);font-size:12px;color:var(--fire);}
+.budget-table tr:last-child td{border-bottom:none;font-weight:700;color:var(--hi);}
+.budget-cap-row{display:flex;align-items:center;gap:12px;background:var(--s2);border:1px solid var(--bd2);border-radius:var(--rs);padding:12px 16px;}
+.budget-cap-label{font-size:13px;font-weight:600;flex:1;}
+.budget-cap-input{width:90px;background:var(--s1);border:1px solid var(--bd2);border-radius:var(--rs);padding:7px 12px;font-size:13px;color:var(--hi);font-family:var(--f-mono);outline:none;text-align:right;}
+.budget-cap-input:focus{border-color:var(--fire);}
+
+/* ── Active page ── */
+.progress-track{height:4px;background:var(--s3);border-radius:2px;overflow:hidden;margin:12px 0;}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--fire),var(--warn));border-radius:2px;transition:width .5s ease;}
+.metric-band{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+.mb-item{background:var(--s2);border:1px solid var(--bd);border-radius:var(--rs);padding:8px 14px;}
+.mb-label{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--lo);}
+.mb-val{font-family:var(--f-mono);font-size:16px;font-weight:500;margin-top:2px;}
+.mb-val.ok{color:var(--ok);}
+.mb-val.warn{color:var(--warn);}
+.mb-val.err{color:var(--err);}
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;}
+.chart-wrap{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:16px;}
+.chart-title{font-size:12px;font-weight:600;color:var(--mid);margin-bottom:10px;}
+.chart-wrap canvas{max-height:150px;}
+@media(max-width:600px){.charts-row{grid-template-columns:1fr;}}
+
+/* ── Approval gate ── */
+.approval-gate{background:var(--s1);border:1px solid var(--warn-d);border-radius:var(--r);padding:18px 20px;margin-bottom:12px;border-left:3px solid var(--warn);}
+.diff-box{background:var(--bg);border:1px solid var(--bd);border-radius:var(--rs);padding:12px 14px;font-family:var(--f-mono);font-size:12px;line-height:1.7;margin:10px 0;}
+.diff-rm{color:var(--err);}
+.diff-add{color:var(--ok);}
+.evidence-bar{display:flex;align-items:center;gap:10px;margin:5px 0;}
+.ev-label{font-size:11px;color:var(--mid);width:100px;flex-shrink:0;}
+.ev-track{flex:1;height:6px;background:var(--s3);border-radius:3px;overflow:hidden;}
+.ev-fill{height:100%;border-radius:3px;background:var(--ok);}
+
+/* ── Trial expand ── */
+.trial-row{display:flex;align-items:center;gap:12px;padding:11px 14px;background:var(--s1);border:1px solid var(--bd);border-radius:var(--rs);margin-bottom:6px;cursor:pointer;transition:background .12s;}
+.trial-row:hover{background:var(--s2);}
+.tr-num{font-family:var(--f-mono);font-size:11px;color:var(--lo);width:32px;text-align:center;flex-shrink:0;}
+.tr-name{flex:1;font-size:13px;font-weight:600;}
+.tr-verdict.ok{color:var(--ok);}
+.tr-verdict.fire{color:var(--fire);}
+.tr-chevron{color:var(--lo);font-size:16px;transition:transform .2s;}
+.tr-chevron.open{transform:rotate(90deg);}
+.trial-detail{display:none;padding:14px;background:var(--s2);border:1px solid var(--bd);border-top:none;border-radius:0 0 var(--rs) var(--rs);margin-top:-6px;margin-bottom:6px;}
+.trial-detail.on{display:block;}
+.detail-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px;}
+.dg-key{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--lo);}
+.dg-val{font-size:14px;font-weight:600;font-family:var(--f-mono);}
+.dg-val.ok{color:var(--ok);}
+.dg-val.fire{color:var(--fire);}
+
+/* ── Benchmarks ── */
+.bench-row{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);margin-bottom:8px;overflow:hidden;cursor:pointer;transition:border-color .12s;}
+.bench-row:hover,.bench-row.open{border-color:var(--bd2);}
+.bench-head{display:flex;align-items:center;gap:12px;padding:14px 16px;}
+.bench-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.bench-info{flex:1;}
+.bench-name{font-size:14px;font-weight:700;}
+.bench-desc{font-size:12px;color:var(--mid);}
+.bench-bar-wrap{width:130px;flex-shrink:0;}
+.bench-bar-track{height:6px;background:var(--s3);border-radius:3px;overflow:hidden;margin-bottom:4px;}
+.bench-bar-fill{height:100%;border-radius:3px;}
+.bench-acc{font-size:11px;font-weight:700;text-align:right;}
+.bench-chevron{color:var(--lo);font-size:18px;transition:transform .2s;}
+.bench-row.open .bench-chevron{transform:rotate(90deg);}
+.bench-body{display:none;border-top:1px solid var(--bd);}
+.bench-row.open .bench-body{display:block;}
+.bench-fix-row{display:grid;grid-template-columns:1fr 110px 80px 100px;gap:8px;padding:9px 16px;border-bottom:1px solid var(--bd);font-size:12px;align-items:center;}
+.bench-fix-row:last-child{border-bottom:none;}
+.bench-fix-row.hdr{background:var(--s2);padding:5px 16px;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--lo);}
+.fix-name{font-family:var(--f-mono);font-size:11px;color:var(--hi);}
+.fix-out.ok{color:var(--ok);font-weight:700;}
+.fix-out.err{color:var(--err);font-weight:700;}
+.fix-out.warn{color:var(--warn);font-weight:700;}
+.fix-diag{color:var(--mid);font-size:11px;}
+
+/* ── Guardrails ── */
+.guard-row{display:flex;align-items:flex-start;gap:14px;padding:16px 0;border-bottom:1px solid var(--bd);}
+.guard-row:last-child{border-bottom:none;}
+.guard-info{flex:1;}
+.guard-name{font-size:13px;font-weight:600;}
+.guard-desc{font-size:12px;color:var(--mid);margin-top:2px;}
+.guard-locked{font-size:11px;color:var(--lo);background:var(--s3);padding:3px 8px;border-radius:4px;white-space:nowrap;}
+.toggle{position:relative;width:38px;height:22px;flex-shrink:0;cursor:pointer;}
+.toggle input{opacity:0;width:0;height:0;position:absolute;}
+.toggle-track{position:absolute;inset:0;border-radius:11px;background:var(--s3);transition:background .2s;}
+.toggle input:checked~.toggle-track{background:var(--fire);}
+.toggle-thumb{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .2s;}
+.toggle input:checked~.toggle-thumb{transform:translateX(16px);}
+.prop-table{width:100%;border-collapse:collapse;margin-top:8px;}
+.prop-table th{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--lo);padding:6px 10px;text-align:left;border-bottom:1px solid var(--bd2);}
+.prop-table td{padding:8px 10px;font-size:12px;color:var(--mid);border-bottom:1px solid var(--bd);}
+.prop-table td.hi{color:var(--hi);}
+.prop-table td.mono{font-family:var(--f-mono);font-size:12px;}
+.prop-table tr:last-child td{border-bottom:none;}
+
+/* ── Library ── */
+.lib-service{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);margin-bottom:8px;overflow:hidden;}
+.lib-svc-head{display:flex;align-items:center;gap:10px;padding:13px 14px;cursor:pointer;transition:background .12s;}
+.lib-svc-head:hover{background:var(--s2);}
+.lib-svc-body{display:none;padding:0 0 4px 28px;border-top:1px solid var(--bd);}
+.lib-svc-body.on{display:block;}
+.lib-col-head{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--rs);cursor:pointer;transition:background .12s;margin:4px 8px;}
+.lib-col-head:hover{background:var(--s2);}
+.lib-col-body{display:none;padding:2px 0 2px 24px;}
+.lib-col-body.on{display:block;}
+.lib-run-row{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:var(--rs);cursor:pointer;transition:background .12s;}
+.lib-run-row:hover{background:var(--s2);}
+
+/* ── YAML export/import ── */
+.yaml-box{background:var(--bg);border:1px solid var(--bd);border-radius:var(--rs);padding:12px 14px;font-family:var(--f-mono);font-size:11px;line-height:1.7;color:var(--ok);max-height:180px;overflow-y:auto;white-space:pre;}
+
+/* ── Info banner ── */
+.info-banner{
+  display:flex;align-items:flex-start;gap:10px;
+  background:var(--blue-d);border:1px solid rgba(91,155,213,.22);border-radius:var(--r);
+  padding:12px 14px;margin-bottom:18px;font-size:12px;color:var(--hi);line-height:1.6;
+}
+.info-banner-icon{font-size:15px;flex-shrink:0;margin-top:1px;}
+.info-banner-body{flex:1;}
+.info-banner-close{background:none;border:none;color:var(--lo);cursor:pointer;font-size:14px;flex-shrink:0;padding:0;line-height:1;transition:color .12s;}
+.info-banner-close:hover{color:var(--hi);}
+
+/* ── Hooks ── */
+.hook-row{display:grid;grid-template-columns:90px 1fr auto 28px;gap:8px;align-items:center;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rs);padding:8px 12px;margin-bottom:6px;}
+.hook-type{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:3px 8px;border-radius:4px;text-align:center;}
+.hook-type.before{background:var(--blue-d);color:var(--blue);}
+.hook-type.after{background:var(--ok-d);color:var(--ok);}
+.hook-type.abort{background:var(--err-d);color:var(--err);}
+.hook-row input{background:var(--s1);border:1px solid var(--bd2);border-radius:4px;padding:5px 8px;font-size:12px;font-family:var(--f-mono);color:var(--hi);outline:none;width:100%;}
+.hook-row input:focus{border-color:var(--fire);}
+.hook-rm{background:none;border:none;color:var(--lo);cursor:pointer;font-size:15px;padding:0;transition:color .12s;}
+.hook-rm:hover{color:var(--err);}
+
+/* ── Input data ── */
+.var-row{display:grid;grid-template-columns:120px 1fr 100px 28px;gap:8px;align-items:center;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rs);padding:7px 12px;margin-bottom:5px;}
+.var-row input,.var-row select{background:var(--s1);border:1px solid var(--bd2);border-radius:4px;padding:5px 8px;font-size:12px;font-family:var(--f-mono);color:var(--hi);outline:none;width:100%;}
+.var-row select{font-family:var(--f-body);}
+.var-rm{background:none;border:none;color:var(--lo);cursor:pointer;font-size:15px;padding:0;transition:color .12s;}
+.var-rm:hover{color:var(--err);}
+
+/* ── History ── */
+.hist-run-row{display:flex;align-items:center;gap:12px;padding:11px 14px;background:var(--s1);border:1px solid var(--bd);border-radius:var(--rs);margin-bottom:6px;cursor:pointer;transition:background .12s;}
+.hist-run-row:hover{background:var(--s2);}
+.hist-sparkline{width:80px;height:24px;flex-shrink:0;}
+
+/* ── Responsive ── */
+@media(max-width:900px){
+  .chat-pane,.resize-handle{display:none;}
+  .layout{display:block;}
+  .main{padding:20px 16px 80px;}
+}
+@media(max-width:700px){.rail{display:none;}.layout{margin-left:0;}}
+</style>
+
+<!-- ── RAIL ── -->
+<nav class="rail">
+  <div class="rail-brand">
+    <div class="brand-name">Crucible</div>
+    <div class="brand-tag">Autonomous Perf Engineer · v0.9</div>
+  </div>
+  <div class="nav">
+    <div class="nav-sec">Workspace</div>
+    <a class="nav-item on" onclick="go('overview')">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>
+      Overview
+    </a>
+    <a class="nav-item" onclick="go('library')">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 13V3a1 1 0 011-1h3v12H3a1 1 0 01-1-1zm4-11h3a1 1 0 011 1v10a1 1 0 01-1 1H6V2zm4 0h3a1 1 0 011 1v10a1 1 0 01-1 1h-3V2z"/></svg>
+      Library
+    </a>
+    <div class="nav-sec">Test Runs</div>
+    <a class="nav-item" onclick="go('new-test')">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M8 5v6M5 8h6"/></svg>
+      New Test Run
+    </a>
+    <a class="nav-item" onclick="go('preflight')">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5l-1 3H4l2.5 1.8L5.5 10 8 8.2l2.5 1.8-1-3.7L12 4.5H9z"/><path d="M8 12v2.5"/></svg>
+      Preflight
+    </a>
+    <a class="nav-item" onclick="go('active')">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8l2.5 2"/></svg>
+      Active
+      <span class="nav-badge pulse">1</span>
+    </a>
+    <a class="nav-item" onclick="go('results')">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12h2V6H2zm4 0h2V4H6zm4 0h2V8h-2z"/></svg>
+      Results
+    </a>
+    <a class="nav-item" onclick="go('benchmarks')">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 14l4-8 3 4 2-3 3 7"/></svg>
+      Benchmarks
+    </a>
+    <a class="nav-item" onclick="go('history')">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M8 4v4l3 2"/><path d="M3.5 3.5A6.5 6.5 0 0 0 2 8" stroke-dasharray="2 1.5"/></svg>
+      History &amp; Diff
+    </a>
+    <div class="nav-sec">Safety</div>
+    <a class="nav-item" onclick="go('guardrails')">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5L2 4v4c0 3 2.5 5.5 6 6.5 3.5-1 6-3.5 6-6.5V4L8 1.5z"/></svg>
+      Guardrails
+    </a>
+    <div class="nav-sec">System</div>
+    <a class="nav-item" onclick="go('settings')">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.22 3.22l1.41 1.41M11.37 11.37l1.41 1.41M3.22 12.78l1.41-1.41M11.37 4.63l1.41-1.41"/></svg>
+      Settings
+    </a>
+  </div>
+  <div class="rail-footer">
+    <div class="rail-env">
+      <div class="env-dot"></div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:10px;color:var(--lo);">Target</div>
+        <div style="font-size:12px;font-weight:600;font-family:var(--f-mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">PerfLab:8080</div>
+      </div>
+      <button id="themeToggle" onclick="toggleTheme()" title="Toggle light / dark" style="background:none;border:none;cursor:pointer;font-size:16px;padding:2px 4px;border-radius:6px;color:var(--mid);transition:color .12s,background .12s;flex-shrink:0;" onmouseover="this.style.background='var(--s3)'" onmouseout="this.style.background='none'">🌙</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ── LAYOUT (main + resize + chat) ── -->
+<div class="layout" id="layout">
+
+<!-- ── MAIN ── -->
+<main class="main" id="mainArea">
+
+<!-- ══ OVERVIEW ══ -->
+<section class="pg on" id="pg-overview">
+  <div class="ph">
+    <div class="ph-left">
+      <div class="ph-eyebrow">Dashboard</div>
+      <div class="ph-title">Overview</div>
+      <div class="ph-sub">PerfLab · Spring Boot · hikaricp — last run 2h ago</div>
+    </div>
+    <div class="ph-actions">
+      <button class="btn btn-ghost btn-sm" onclick="go('results')">View Results</button>
+      <button class="btn btn-primary btn-sm" onclick="go('new-test')">+ New Test Run</button>
+    </div>
+  </div>
+  <div class="grid4" style="margin-bottom:14px;">
+    <div class="kpi"><div class="kpi-label">Test Runs</div><div class="kpi-val">12</div><div class="kpi-meta">+2 this week</div></div>
+    <div class="kpi"><div class="kpi-label">Best p99</div><div class="kpi-val ok">58 ms</div><div class="kpi-meta">TR-003 pool=20</div></div>
+    <div class="kpi"><div class="kpi-label">Improvement</div><div class="kpi-val fire">95%</div><div class="kpi-meta">1206 → 58 ms</div></div>
+    <div class="kpi"><div class="kpi-label">AI Accuracy</div><div class="kpi-val">94.6%</div><div class="kpi-meta">35/37 fixtures</div></div>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <div class="card-h"><div><div class="card-title">Recent Test Runs</div></div><button class="btn btn-ghost btn-sm" onclick="go('results')">All →</button></div>
+      <div class="tbl-wrap"><table>
+        <tr><th>Run</th><th>Status</th><th>p99</th><th>Trials</th></tr>
+        <tr><td class="hi">TR-003</td><td><span class="pill ok">IMPROVED</span></td><td class="mono" data-thermal="58">58 ms</td><td>4</td></tr>
+        <tr><td class="hi">TR-002</td><td><span class="pill err">REVERTED</span></td><td class="mono" data-thermal="892">892 ms</td><td>3</td></tr>
+        <tr><td class="hi">TR-001</td><td><span class="pill idle">BASELINE</span></td><td class="mono" data-thermal="1206">1206 ms</td><td>1</td></tr>
+      </table></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><div><div class="card-title">Active Run</div><div class="card-sub">TR-004 in progress</div></div><span class="pill running">RUNNING</span></div>
+      <div style="font-size:13px;color:var(--mid);margin-bottom:8px;">steady_50u · Trial 3/5 · 14m elapsed</div>
+      <div class="progress-track"><div class="progress-fill" style="width:60%"></div></div>
+      <div class="metric-band" style="margin-top:10px;">
+        <div class="mb-item"><div class="mb-label">p99</div><div class="mb-val" data-thermal="312">312 ms</div></div>
+        <div class="mb-item"><div class="mb-label">RPS</div><div class="mb-val">48.2</div></div>
+        <div class="mb-item"><div class="mb-label">Errors</div><div class="mb-val ok">0.1%</div></div>
+      </div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="go('active')">Open Live View →</button>
+    </div>
+  </div>
+</section>
+
+<!-- ══ LIBRARY ══ -->
+<section class="pg" id="pg-library">
+  <div class="ph">
+    <div class="ph-left"><div class="ph-eyebrow">Collections</div><div class="ph-title">Library</div><div class="ph-sub">Services, collections, and all test runs</div></div>
+    <div class="ph-actions">
+      <button class="btn btn-ghost btn-sm" onclick="importYaml()">↑ Import YAML</button>
+      <button class="btn btn-primary btn-sm" onclick="go('new-test')">+ New Test Run</button>
+    </div>
+  </div>
+  <div id="libTree">
+    <div class="lib-service">
+      <div class="lib-svc-head" onclick="toggleLib(this)">
+        <span style="font-size:18px;width:28px;text-align:center;">🚀</span>
+        <div style="flex:1;"><div style="font-size:14px;font-weight:700;">PerfLab</div><div style="font-size:11px;color:var(--lo);">Spring Boot · hikaricp · 129.213.121.108:8080</div></div>
+        <span style="font-size:11px;color:var(--lo);margin-right:8px;">3 collections · 12 runs</span>
+        <span style="color:var(--lo);font-size:16px;transition:transform .2s;" class="lib-chev">›</span>
+      </div>
+      <div class="lib-svc-body on">
+        <div class="lib-col-head" onclick="toggleLibCol(this)">
+          <span style="color:var(--purple);">📁</span>
+          <span style="font-size:13px;font-weight:600;flex:1;">Connection Pool Investigation</span>
+          <span style="font-size:11px;color:var(--lo);">8 runs</span>
+          <span style="color:var(--lo);font-size:14px;transition:transform .2s;" class="lib-col-chev">›</span>
+        </div>
+        <div class="lib-col-body on" style="padding-left:28px;">
+          <div class="lib-run-row" onclick="go('results')"><span style="font-size:12px;">✅</span><span style="font-size:12px;flex:1;">TR-003 · pool=20 verification</span><span class="pill ok" style="font-size:10px;padding:2px 7px;">IMPROVED</span><span style="font-size:11px;color:var(--lo);margin-left:8px;">2h ago</span></div>
+          <div class="lib-run-row"><span style="font-size:12px;">↩️</span><span style="font-size:12px;flex:1;">TR-002 · pool=10 attempt</span><span class="pill err" style="font-size:10px;padding:2px 7px;">REVERTED</span><span style="font-size:11px;color:var(--lo);margin-left:8px;">1d ago</span></div>
+          <div class="lib-run-row"><span style="font-size:12px;">📊</span><span style="font-size:12px;flex:1;">TR-001 · baseline</span><span class="pill idle" style="font-size:10px;padding:2px 7px;">BASELINE</span><span style="font-size:11px;color:var(--lo);margin-left:8px;">2d ago</span></div>
+        </div>
+        <div class="lib-col-head" onclick="toggleLibCol(this)">
+          <span style="color:var(--purple);">📁</span>
+          <span style="font-size:13px;font-weight:600;flex:1;">Cache Endpoint Tests</span>
+          <span style="font-size:11px;color:var(--lo);">1 run</span>
+          <span style="color:var(--lo);font-size:14px;transition:transform .2s;" class="lib-col-chev">›</span>
+        </div>
+        <div class="lib-col-body" style="padding-left:28px;">
+          <div class="lib-run-row"><span style="font-size:12px;">🔄</span><span style="font-size:12px;flex:1;">TR-004 · /cache/get</span><span class="pill running" style="font-size:10px;padding:2px 7px;">RUNNING</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ NEW TEST RUN (5-step wizard) ══ -->
+<section class="pg" id="pg-new-test">
+  <div class="ph">
+    <div class="ph-left"><div class="ph-eyebrow">Setup</div><div class="ph-title">New Test Run</div><div class="ph-sub">5 steps · ~3 minutes · AI guides you through each one</div></div>
+    <div class="ph-actions">
+      <button class="btn btn-ghost btn-sm" onclick="importYaml()">↑ Import YAML</button>
+    </div>
+  </div>
+  <div class="info-banner" id="ib-new-test" style="display:none;">
+    <span class="info-banner-icon">👋</span>
+    <div class="info-banner-body"><strong>Starting a new test run?</strong> Tell me the service you want to test and what feels slow — I'll suggest the right scenario, SLA target, and automation mode. Semi-Automated requires a GitHub connection so Crucible can push config changes to your pre-prod branch.</div>
+    <button class="info-banner-close" onclick="dismissBanner('ib-new-test')">✕</button>
+  </div>
+  <div class="wizard-steps">
+    <div class="ws on" id="wt-0" onclick="wzGo(0)"><div class="ws-num">1</div> Target & Repo</div>
+    <div class="ws" id="wt-1" onclick="wzGo(1)"><div class="ws-num">2</div> Goal & SLA</div>
+    <div class="ws" id="wt-2" onclick="wzGo(2)"><div class="ws-num">3</div> Scenarios</div>
+    <div class="ws" id="wt-3" onclick="wzGo(3)"><div class="ws-num">4</div> Budget</div>
+    <div class="ws" id="wt-4" onclick="wzGo(4)"><div class="ws-num">5</div> Review</div>
+  </div>
+
+  <!-- Step 1: Target + GitHub -->
+  <div class="wz-pane on" id="wp-0">
+    <div class="card">
+      <div class="card-h"><div class="card-title">Service &amp; Collection</div></div>
+      <div class="form-grid2">
+        <div class="form-row"><label class="form-label">Service</label><select class="form-select"><option>PerfLab (existing)</option><option>+ Add new service…</option></select></div>
+        <div class="form-row"><label class="form-label">Collection (folder)</label><select class="form-select"><option>Connection Pool Investigation</option><option>Cache Endpoint Tests</option><option>+ Create new collection…</option></select></div>
+        <div class="form-row"><label class="form-label">Endpoint under test</label><input class="form-input" value="/transfer" placeholder="/api/endpoint"><div class="form-hint">The primary endpoint Crucible will load-test</div></div>
+        <div class="form-row"><label class="form-label">Environment</label><select class="form-select"><option>staging (pre-prod)</option><option>local-dev</option></select></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">
+        <div><div class="card-title">GitHub Repository Connection</div><div class="card-sub">Required for Semi-Automated and Fully Automated modes — Crucible checks out the target repo to apply config changes</div></div>
+        <span class="pill idle">Not connected</span>
+      </div>
+      <div class="form-grid2">
+        <div class="form-row">
+          <label class="form-label">Repository URL</label>
+          <input class="form-input" id="gh-repo" placeholder="https://github.com/org/perf-lab" value="https://github.com/rraghu214/perf-lab">
+          <div class="form-hint">The target repo — not this repo</div>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Base branch</label>
+          <input class="form-input" id="gh-base" value="main" placeholder="main">
+          <div class="form-hint">Crucible reads this once to create the sandbox branch</div>
+        </div>
+        <div class="form-row">
+          <label class="form-label">SSH deploy key path</label>
+          <input class="form-input" id="gh-key" placeholder="~/.ssh/perf-lab-deploy-key">
+          <div class="form-hint">Write-only key for perftest_sandbox only; path is safe to log</div>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Config file path <span style="color:var(--lo);font-weight:400;">(in repo)</span></label>
+          <input class="form-input" id="gh-cfg" value="src/main/resources/application.properties" placeholder="path/to/application.properties">
+          <div class="form-hint">Relative to repo root — this is the file Crucible edits</div>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Restart command</label>
+          <input class="form-input" id="gh-restart" value="./mvnw spring-boot:run -Dspring-boot.run.profiles=perf" placeholder="./mvnw spring-boot:run">
+          <div class="form-hint">Run on the target box after deploy; must block until ready</div>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Readiness probe URL</label>
+          <input class="form-input" id="gh-probe" value="http://localhost:8080/actuator/health" placeholder="http://localhost:8080/actuator/health">
+          <div class="form-hint">Crucible polls this after restart — 200 = ready</div>
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="testGithubConn()" style="margin-top:4px;">🔗 Test connection</button>
+      <div id="gh-conn-result" style="margin-top:8px;font-size:12px;color:var(--lo);display:none;"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><div><div class="card-title">Knowledge Docs <span style="font-size:11px;font-weight:400;color:var(--lo);">optional</span></div><div class="card-sub">Runbooks, architecture docs, incident reports — fed into the AI's Knowledge RAG</div></div></div>
+      <div class="doc-drop" id="docDrop" onclick="document.getElementById('docFile').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDocDrop(event)">
+        <div style="font-size:26px;margin-bottom:6px;">📄</div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:2px;">Drop files here or click to browse</div>
+        <div style="font-size:11px;color:var(--lo);">.pdf · .md · .txt · .docx</div>
+        <input type="file" id="docFile" multiple accept=".pdf,.md,.txt,.docx" style="display:none" onchange="handleDocInput(this)">
+      </div>
+      <div class="doc-chips" id="docChips"></div>
+    </div>
+    <div class="wz-nav"><div></div><button class="btn btn-primary" onclick="wzGo(1)">Next: Goal &amp; SLA →</button></div>
+  </div>
+
+  <!-- Step 2: Goal & SLA -->
+  <div class="wz-pane" id="wp-1">
+    <div class="card">
+      <div class="card-h"><div class="card-title">What do you want to improve?</div></div>
+      <div class="form-row">
+        <label class="form-label">Goal (plain English)</label>
+        <input class="form-input" id="goal-text" value="Reduce p99 latency of /transfer below 200 ms at 50 concurrent users">
+        <div class="form-hint">Crucible turns this into a measurable SLA — ask AI in the panel if unsure what to write</div>
+      </div>
+      <div class="form-grid2" style="margin-top:4px;">
+        <div class="form-row"><label class="form-label">SLA — p99 ceiling</label><input class="form-input" id="sla-p99" value="200" placeholder="ms"></div>
+        <div class="form-row"><label class="form-label">Error budget</label><input class="form-input" id="sla-err" value="1.0" placeholder="%"></div>
+        <div class="form-row"><label class="form-label">Percentile</label><select class="form-select"><option>p99</option><option>p95</option><option>p50</option></select></div>
+        <div class="form-row"><label class="form-label">Noise threshold</label><input class="form-input" value="5.0" placeholder="%"><div class="form-hint">Changes smaller than this are too small to act on</div></div>
+      </div>
+      <div style="background:var(--warn-d);border:1px solid rgba(232,166,48,.2);border-radius:var(--rs);padding:10px 14px;font-size:12px;color:var(--warn);margin-top:4px;">
+        🔒 SLA is locked once the run starts. The AI cannot move its own goalpost.
+      </div>
+    </div>
+    <div class="wz-nav">
+      <button class="btn btn-ghost" onclick="wzGo(0)">← Back</button>
+      <button class="btn btn-primary" onclick="wzGo(2)">Next: Scenarios →</button>
+    </div>
+  </div>
+
+  <!-- Step 3: Scenarios + Mode -->
+  <div class="wz-pane" id="wp-2">
+    <div class="card" style="margin-bottom:12px;">
+      <div class="card-h"><div class="card-title">Test mode</div></div>
+      <div class="mode-grid" id="modeGrid">
+        <div class="mode-card" onclick="selMode(this)">
+          <div class="mode-card-name">Advisory</div>
+          <div class="mode-card-desc">AI diagnoses and suggests. You apply every change manually.</div>
+        </div>
+        <div class="mode-card on" onclick="selMode(this)">
+          <div class="mode-rec">Recommended</div>
+          <div class="mode-card-name">Semi-Automated</div>
+          <div class="mode-card-desc">AI proposes each change. You approve before it applies. Requires GitHub connection.</div>
+        </div>
+        <div class="mode-card" onclick="selMode(this)">
+          <div class="mode-card-name">Fully Automated</div>
+          <div class="mode-card-desc">AI applies and verifies changes autonomously within guardrail bounds. Requires GitHub + pre-approved properties.</div>
+        </div>
+        <div class="mode-card ceiling-card" onclick="selMode(this,'ceiling')">
+          <div class="mode-rec" style="color:var(--warn);">Capacity</div>
+          <div class="mode-card-name">Ceiling Probe</div>
+          <div class="mode-card-desc">Find the load level where the SLA breaks. No config changes — characterises the service as-is.</div>
+        </div>
+      </div>
+      <div class="ceiling-cfg" id="ceilingCfg">
+        <div style="font-size:12px;font-weight:700;color:var(--warn);margin-bottom:10px;">⚠ Ceiling Probe — intentionally drives your service past its SLA</div>
+        <div class="form-grid2">
+          <div class="form-row"><label class="form-label">Start load (users)</label><input class="form-input" value="50"><div class="form-hint">Where your last passing run ended</div></div>
+          <div class="form-row"><label class="form-label">Step size (users)</label><input class="form-input" value="25"><div class="form-hint">Smaller = finer resolution, longer runtime</div></div>
+          <div class="form-row"><label class="form-label">Maximum users (hard cap)</label><input class="form-input" value="300"><div class="form-hint">Protects shared infra neighbours</div></div>
+          <div class="form-row"><label class="form-label">Hold per step</label><input class="form-input" value="180s"><div class="form-hint">Must exceed JIT warmup — 180s minimum</div></div>
+        </div>
+        <div style="font-size:11px;color:var(--mid);margin-top:8px;">Result is a pair: last level that met the SLA + first that didn't. Reported separately from experiment runs — §20.6.</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h">
+        <div><div class="card-title">Load scenarios</div><div class="card-sub">Each scenario = one trial. At least one required.</div></div>
+        <button class="btn btn-ghost btn-sm" onclick="addScenario()">+ Add Scenario</button>
+      </div>
+      <div class="scenario-hdr"><span>Name</span><span>Users</span><span>Duration</span><span>Ramp</span><span></span></div>
+      <div id="scenarioList">
+        <div class="scenario-row">
+          <div><input value="steady_50u"></div>
+          <div><input value="50" type="number" min="1"></div>
+          <div><input value="300s"></div>
+          <div><input value="30s"></div>
+          <button class="scenario-rm" onclick="rmScenario(this)">✕</button>
+        </div>
+        <div class="scenario-row">
+          <div><input value="burst_100u"></div>
+          <div><input value="100" type="number" min="1"></div>
+          <div><input value="180s"></div>
+          <div><input value="15s"></div>
+          <button class="scenario-rm" onclick="rmScenario(this)">✕</button>
+        </div>
+      </div>
+    </div>
+    <!-- Hooks -->
+    <div class="card" style="margin-bottom:12px;">
+      <div class="card-h">
+        <div><div class="card-title">Hooks</div><div class="card-sub">Shell commands that run around each trial — database reset, OAuth refresh, log capture</div></div>
+        <button class="btn btn-ghost btn-sm" onclick="addHook()">+ Add Hook</button>
+      </div>
+      <div style="font-size:11px;color:var(--lo);margin-bottom:8px;">A failing hook blocks the trial — a reset that silently did nothing makes every later measurement wrong.</div>
+      <div id="hookList">
+        <div class="hook-row">
+          <span class="hook-type before">before_each</span>
+          <input value="psql -c 'TRUNCATE transfers; INSERT INTO transfers SELECT * FROM transfers_seed'" placeholder="shell command">
+          <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--mid);white-space:nowrap;"><input type="checkbox" checked style="width:auto;"> fail-block</div>
+          <button class="hook-rm" onclick="this.closest('.hook-row').remove()">✕</button>
+        </div>
+        <div class="hook-row">
+          <span class="hook-type after">after_each</span>
+          <input value="./scripts/collect-logs.sh ${trial_id}" placeholder="shell command">
+          <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--mid);white-space:nowrap;"><input type="checkbox" style="width:auto;"> fail-block</div>
+          <button class="hook-rm" onclick="this.closest('.hook-row').remove()">✕</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Input Data -->
+    <div class="card">
+      <div class="card-h">
+        <div><div class="card-title">Input Data &amp; Request Templates</div><div class="card-sub">CSV data files fed to Locust; variable mappings for POST body templates</div></div>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('csvFile').click()">↑ Upload CSV</button>
+        <input type="file" id="csvFile" accept=".csv,.json" style="display:none" onchange="handleCsvInput(this)">
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--mid);margin-bottom:6px;">Uploaded data files</div>
+      <div id="dataFileList" style="margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:8px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rs);padding:7px 12px;margin-bottom:5px;">
+          <span style="font-size:13px;">📊</span>
+          <span style="font-size:12px;font-family:var(--f-mono);flex:1;">users.csv</span>
+          <span style="font-size:11px;color:var(--lo);">1,000 rows · 3 cols</span>
+          <button style="background:none;border:none;color:var(--lo);cursor:pointer;font-size:13px;" onclick="this.closest('div').remove()">✕</button>
+        </div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--mid);margin-bottom:6px;">Variable mappings <span style="font-size:11px;font-weight:400;color:var(--lo);">— bind template vars to CSV columns</span></div>
+      <div style="display:grid;grid-template-columns:120px 1fr 100px 28px;gap:6px;padding:4px 12px;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--lo);">
+        <span>Variable</span><span>CSV file</span><span>Column</span><span></span>
+      </div>
+      <div id="varList">
+        <div class="var-row">
+          <input value="${user_id}" placeholder="${var_name}">
+          <select><option>users.csv</option></select>
+          <input value="id" placeholder="col name or idx">
+          <button class="var-rm" onclick="this.closest('.var-row').remove()">✕</button>
+        </div>
+        <div class="var-row">
+          <input value="${amount}" placeholder="${var_name}">
+          <select><option>users.csv</option></select>
+          <input value="balance" placeholder="col name or idx">
+          <button class="var-rm" onclick="this.closest('.var-row').remove()">✕</button>
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="addVarRow()">+ Add mapping</button>
+      <div style="margin-top:12px;">
+        <div style="font-size:12px;font-weight:600;color:var(--mid);margin-bottom:6px;">POST body template <span style="font-size:11px;font-weight:400;color:var(--lo);">— for /transfer · leave blank for GET</span></div>
+        <textarea class="form-input" rows="4" style="font-family:var(--f-mono);font-size:12px;resize:vertical;">{"from_account":"${user_id}","amount":${amount},"to_account":"ACC_TARGET"}</textarea>
+      </div>
+    </div>
+
+    <div class="wz-nav">
+      <button class="btn btn-ghost" onclick="wzGo(1)">← Back</button>
+      <button class="btn btn-primary" onclick="wzGo(3)">Next: Budget →</button>
+    </div>
+  </div>
+
+  <!-- Step 4: Budget -->
+  <div class="wz-pane" id="wp-3">
+    <div class="card">
+      <div class="card-h"><div class="card-title">Cost &amp; time estimate</div><div class="card-sub">Based on 2 scenarios · Semi-Automated · max 8 trials</div></div>
+      <div class="tbl-wrap">
+        <table class="budget-table">
+          <tr><th>Phase</th><th>What happens</th><th>Wall clock</th><th>LLM calls</th><th>Est. cost</th></tr>
+          <tr><td class="hi">Preflight</td><td>Test deploy + revert; confirms pipeline works</td><td>~5 min</td><td>0</td><td class="mono">$0.00</td></tr>
+          <tr><td class="hi">Warmup (×2 scenarios)</td><td>120 s warmup discarded per scenario</td><td>~4 min</td><td>0</td><td class="mono">$0.00</td></tr>
+          <tr><td class="hi">Baseline measurement (×2)</td><td>300 s measured window; gauge sampling</td><td>~10 min</td><td>1</td><td class="mono">$0.002</td></tr>
+          <tr><td class="hi">Diagnosis (×1)</td><td>AI reads snapshot, proposes change</td><td>~1 min</td><td>1</td><td class="mono">$0.002</td></tr>
+          <tr><td class="hi">Deploy + verify (×trials)</td><td>Git push → deploy → readiness probe</td><td>~3 min ×4</td><td>0</td><td class="mono">$0.00</td></tr>
+          <tr><td class="hi">Re-measure (×trials)</td><td>300 s measured window after each change</td><td>~5 min ×4</td><td>4</td><td class="mono">$0.008</td></tr>
+          <tr><td class="hi">Watchdog checks</td><td>7 tripwires, arithmetic; fires model only on ambiguity</td><td>—</td><td>~2</td><td class="mono">$0.004</td></tr>
+          <tr style="background:var(--s2);"><td style="font-weight:700;color:var(--hi);">Total</td><td style="color:var(--mid);">Max 8 trials</td><td style="font-weight:700;color:var(--hi);">~3.5 h</td><td style="font-weight:700;color:var(--hi);">~8 calls</td><td style="font-family:var(--f-mono);color:var(--fire);font-weight:700;">~$0.016</td></tr>
+        </table>
+      </div>
+      <div style="font-size:12px;color:var(--mid);margin-bottom:14px;">
+        💡 Wall clock dominates — not model cost. Adding a third scenario adds ~40 min, not cents. Plan accordingly.
+      </div>
+      <div class="budget-cap-row">
+        <div>
+          <div class="budget-cap-label">Stop if model cost exceeds</div>
+          <div style="font-size:11px;color:var(--lo);">Campaign pauses and asks for confirmation before continuing</div>
+        </div>
+        <span style="font-size:13px;color:var(--mid);">$</span>
+        <input class="budget-cap-input" id="budgetCap" value="0.10" type="number" min="0.01" step="0.01">
+      </div>
+      <div class="budget-cap-row" style="margin-top:8px;">
+        <div>
+          <div class="budget-cap-label">Stop if wall clock exceeds</div>
+          <div style="font-size:11px;color:var(--lo);">Gracefully completes the in-flight trial then halts</div>
+        </div>
+        <input class="budget-cap-input" id="wallCapH" value="8" type="number" min="1" step="1" style="width:60px;">
+        <span style="font-size:13px;color:var(--mid);">h</span>
+      </div>
+    </div>
+    <div class="wz-nav">
+      <button class="btn btn-ghost" onclick="wzGo(2)">← Back</button>
+      <button class="btn btn-primary" onclick="wzGo(4)">Next: Review →</button>
+    </div>
+  </div>
+
+  <!-- Step 5: Review + YAML Export -->
+  <div class="wz-pane" id="wp-4">
+    <div class="card" style="margin-bottom:12px;">
+      <div class="card-h"><div class="card-title">Review &amp; launch</div></div>
+      <div class="grid2">
+        <div>
+          <div style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--lo);margin-bottom:8px;">Configuration</div>
+          <div style="display:flex;flex-direction:column;gap:7px;font-size:13px;">
+            <div style="display:flex;justify-content:space-between;"><span style="color:var(--mid);">Service</span><span style="font-weight:500;">PerfLab</span></div>
+            <div style="display:flex;justify-content:space-between;"><span style="color:var(--mid);">Endpoint</span><code style="font-family:var(--f-mono);font-size:12px;">/transfer</code></div>
+            <div style="display:flex;justify-content:space-between;"><span style="color:var(--mid);">SLA p99</span><span style="color:var(--ok);font-weight:600;">200 ms</span></div>
+            <div style="display:flex;justify-content:space-between;"><span style="color:var(--mid);">Mode</span><span>Semi-Automated</span></div>
+            <div style="display:flex;justify-content:space-between;"><span style="color:var(--mid);">Scenarios</span><span>2 (steady_50u, burst_100u)</span></div>
+            <div style="display:flex;justify-content:space-between;"><span style="color:var(--mid);">GitHub repo</span><code style="font-family:var(--f-mono);font-size:11px;">rraghu214/perf-lab</code></div>
+            <div style="display:flex;justify-content:space-between;"><span style="color:var(--mid);">Budget cap</span><span>$0.10 · 8h</span></div>
+            <div style="display:flex;justify-content:space-between;"><span style="color:var(--mid);">Knowledge docs</span><span id="rev-docs">0 uploaded</span></div>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--lo);margin-bottom:8px;">Preflight checklist</div>
+          <div style="display:flex;flex-direction:column;gap:6px;font-size:12px;">
+            <div style="display:flex;gap:8px;"><span style="color:var(--ok);">✓</span><span style="color:var(--mid);">Target reachable (200 OK)</span></div>
+            <div style="display:flex;gap:8px;"><span style="color:var(--ok);">✓</span><span style="color:var(--mid);">GitHub repo cloned</span></div>
+            <div style="display:flex;gap:8px;"><span style="color:var(--ok);">✓</span><span style="color:var(--mid);">perftest_sandbox branch ready</span></div>
+            <div style="display:flex;gap:8px;"><span style="color:var(--ok);">✓</span><span style="color:var(--mid);">Config file path exists in repo</span></div>
+            <div style="display:flex;gap:8px;"><span style="color:var(--warn);">⚠</span><span style="color:var(--mid);">Actuator /env: will verify at runtime</span></div>
+            <div style="display:flex;gap:8px;"><span style="color:var(--ok);">✓</span><span style="color:var(--mid);">glc_v5 gateway reachable</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h">
+        <div><div class="card-title">Export as YAML</div><div class="card-sub">Save this configuration to version-control alongside your service</div></div>
+        <button class="btn btn-ghost btn-sm" onclick="copyYaml()">Copy</button>
+      </div>
+      <div class="yaml-box" id="yamlBox">service: perf-lab
+profile: spring-boot-hikaricp
+endpoint: /transfer
+environment: staging
+sla:
+  p99_ceiling_ms: 200
+  error_budget_pct: 1.0
+  noise_threshold_pct: 5.0
+mode: semi_automated
+deploy:
+  repo: https://github.com/rraghu214/perf-lab
+  base_branch: main
+  branch: perftest_sandbox
+  config_file: src/main/resources/application.properties
+  restart_cmd: ./mvnw spring-boot:run -Dspring-boot.run.profiles=perf
+  readiness_probe: http://localhost:8080/actuator/health
+budget:
+  max_cost_usd: 0.10
+  max_wall_clock_h: 8
+scenarios:
+  - name: steady_50u
+    users: 50
+    duration: 300s
+    ramp: 30s
+  - name: burst_100u
+    users: 100
+    duration: 180s
+    ramp: 15s</div>
+    </div>
+    <div class="wz-nav">
+      <button class="btn btn-ghost" onclick="wzGo(3)">← Back</button>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+        <button class="btn btn-primary" onclick="launchRun()">🚀 Launch Test Run</button>
+        <div class="cli-twin">crucible run --profile profile.yaml</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ PREFLIGHT ══ -->
+<section class="pg" id="pg-preflight">
+  <div class="ph">
+    <div class="ph-left"><div class="ph-eyebrow">Pre-launch</div><div class="ph-title">Preflight</div><div class="ph-sub">Verify the target is ready before any measurement begins — no load, no changes</div></div>
+    <div class="ph-actions">
+      <button class="btn btn-ghost btn-sm" onclick="go('new-test')">← Back to setup</button>
+      <button class="btn btn-primary btn-sm" onclick="launchRun()">🚀 Launch</button>
+    </div>
+  </div>
+  <div class="grid2" style="margin-bottom:16px;">
+    <div class="card">
+      <div class="card-h"><div class="card-title">Readiness checks</div><div class="card-sub">7 checks — read-only, no changes to target</div></div>
+      <div class="tbl-wrap">
+        <table>
+          <tr><th>Check</th><th>Description</th><th>Status</th></tr>
+          <tr class="pf-row"><td class="hi">Target reachable</td><td style="font-size:11px;color:var(--mid);">GET /actuator/health → 200 OK</td><td><span class="pf-status" style="color:var(--lo);">—</span></td></tr>
+          <tr class="pf-row"><td class="hi">Protected paths</td><td style="font-size:11px;color:var(--mid);">SLA and load profile are Policy memory, unwritable</td><td><span class="pf-status" style="color:var(--lo);">—</span></td></tr>
+          <tr class="pf-row"><td class="hi">Metrics endpoint</td><td style="font-size:11px;color:var(--mid);">GET /actuator/prometheus or /actuator/metrics</td><td><span class="pf-status" style="color:var(--lo);">—</span></td></tr>
+          <tr class="pf-row"><td class="hi">Deploy pipeline</td><td style="font-size:11px;color:var(--mid);">perftest_sandbox branch · write access confirmed</td><td><span class="pf-status" style="color:var(--lo);">—</span></td></tr>
+          <tr class="pf-row"><td class="hi">Version endpoint</td><td style="font-size:11px;color:var(--mid);">Read-back property for deploy verification ladder</td><td><span class="pf-status" style="color:var(--lo);">—</span></td></tr>
+          <tr class="pf-row"><td class="hi">Environment kind</td><td style="font-size:11px;color:var(--mid);">Environment declared non-production</td><td><span class="pf-status" style="color:var(--lo);">—</span></td></tr>
+          <tr class="pf-row"><td class="hi">Manual overrides</td><td style="font-size:11px;color:var(--mid);">Any manual step will be flagged on the manifest</td><td><span class="pf-status" style="color:var(--lo);">—</span></td></tr>
+        </table>
+      </div>
+      <div id="pfSummary" style="display:none;margin-top:10px;font-size:12px;font-weight:600;padding:8px 10px;background:var(--ok-d);border-radius:var(--rs);"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+        <div style="display:flex;flex-direction:column;align-items:flex-start;gap:3px;">
+          <button class="btn btn-primary btn-sm" onclick="runPreflight(false)">▶ Run checks</button>
+          <div class="cli-twin">crucible preflight</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-start;gap:3px;">
+          <button class="btn btn-ghost btn-sm" onclick="runPreflight(true)" style="border-color:rgba(232,166,48,.4);color:var(--warn);">⚡ Apply probe (restarts target)</button>
+          <div class="cli-twin">crucible preflight --apply-probe</div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div class="card">
+        <div class="card-title" style="margin-bottom:8px;">What is an apply probe?</div>
+        <div style="font-size:12px;color:var(--mid);line-height:1.55;">
+          The apply probe performs a real end-to-end test: it pushes a trivial change to <code style="font-family:var(--f-mono);font-size:11px;">perftest_sandbox</code>, confirms the target restarts and passes its readiness probe, reads the property back, then reverts. It exercises deploy → verify → revert exactly as a campaign will.<br><br>
+          <strong style="color:var(--warn);">The target service will restart once.</strong> Run this before the first campaign on any new environment.
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:8px;">Manual overrides</div>
+        <div style="font-size:12px;color:var(--mid);margin-bottom:10px;">If deploy or restart is not automated, declare it here. The campaign will block with instructions when a manual step is reached and record it on the manifest.</div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;">
+            <input type="checkbox"> Deploy is manual (no push-to-deploy)
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;">
+            <input type="checkbox"> Restart is manual
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;">
+            <input type="checkbox"> Database reset is manual
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ ACTIVE ══ -->
+<section class="pg" id="pg-active">
+  <div class="ph">
+    <div class="ph-left"><div class="ph-eyebrow">Live</div><div class="ph-title">TR-004</div><div class="ph-sub">steady_50u · Trial 3/5 · 14m 32s elapsed · Semi-Automated</div></div>
+    <div class="ph-actions">
+      <span class="pill running">RUNNING</span>
+      <div style="display:flex;flex-direction:column;align-items:center;">
+        <button class="btn btn-ghost btn-sm">⏸ Pause</button>
+        <div class="cli-twin">crucible pause TR-004</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;">
+        <button class="btn btn-err btn-sm" onclick="confirmAbort()">■ Abort</button>
+        <div class="cli-twin">crucible abort TR-004</div>
+      </div>
+    </div>
+  </div>
+  <div class="progress-track"><div class="progress-fill" style="width:62%"></div></div>
+  <div class="metric-band">
+    <div class="mb-item"><div class="mb-label">p99</div><div class="mb-val" data-thermal="312">312 ms</div></div>
+    <div class="mb-item"><div class="mb-label">p50</div><div class="mb-val">88 ms</div></div>
+    <div class="mb-item"><div class="mb-label">RPS</div><div class="mb-val">48.2</div></div>
+    <div class="mb-item"><div class="mb-label">Errors</div><div class="mb-val ok">0.1%</div></div>
+    <div class="mb-item"><div class="mb-label">Pool Active</div><div class="mb-val err">2/2</div></div>
+    <div class="mb-item"><div class="mb-label">Pending</div><div class="mb-val err">43</div></div>
+  </div>
+  <div class="charts-row">
+    <div class="chart-wrap"><div class="chart-title">p99 Latency (ms)</div><canvas id="chartP99"></canvas></div>
+    <div class="chart-wrap"><div class="chart-title">Throughput (req/s)</div><canvas id="chartRps"></canvas></div>
+  </div>
+
+  <!-- PDMA Plan Graph -->
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-h">
+      <div><div class="card-title">Agent Task Flow</div><div class="card-sub">PDMA loop — Trial 3 · pool=20 hypothesis</div></div>
+      <span class="pill" style="font-size:10px;letter-spacing:.05em;">SEMI-AUTO</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;">
+      <div class="pgraph">
+        <div class="pgraph-node"><div class="pgraph-dot done"></div><div class="pgraph-label done">Baseline snapshot</div><div class="pgraph-role">Measure</div></div>
+        <div class="pgraph-node"><div class="pgraph-dot done"></div><div class="pgraph-label done">Recall past attempts</div><div class="pgraph-role">Plan</div></div>
+        <div class="pgraph-node"><div class="pgraph-dot done"></div><div class="pgraph-label done">Diagnose — pool saturation</div><div class="pgraph-role">Diagnose</div></div>
+        <div class="pgraph-node"><div class="pgraph-dot done"></div><div class="pgraph-label done">Guard check — within bounds</div><div class="pgraph-role">Guard</div></div>
+        <div class="pgraph-node"><div class="pgraph-dot waiting"></div><div class="pgraph-label waiting">⏸ Human approval</div><div class="pgraph-role">Approve</div></div>
+        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Apply config change</div><div class="pgraph-role">Act</div></div>
+      </div>
+      <div class="pgraph">
+        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Push to perftest_sandbox</div><div class="pgraph-role">Deploy</div></div>
+        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Read-back verify via /actuator/env</div><div class="pgraph-role">Verify</div></div>
+        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Re-measure under load</div><div class="pgraph-role">Measure</div></div>
+        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Score verdict (keep / revert)</div><div class="pgraph-role">Verdict</div></div>
+        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Commit manifest to Episode memory</div><div class="pgraph-role">Record</div></div>
+      </div>
+    </div>
+    <div style="margin-top:8px;display:flex;gap:14px;flex-wrap:wrap;">
+      <span style="font-size:11px;color:var(--lo);display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;background:var(--ok);border-radius:50%;display:inline-block;"></span>done</span>
+      <span style="font-size:11px;color:var(--lo);display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;background:var(--warn);border-radius:50%;display:inline-block;"></span>waiting for human</span>
+      <span style="font-size:11px;color:var(--lo);display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;background:var(--s3);border:2px solid var(--bd2);border-radius:50%;display:inline-block;"></span>pending</span>
+    </div>
+  </div>
+
+  <div class="approval-gate" id="approvalGate">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+      <span style="font-size:18px;">⚠️</span>
+      <span style="font-family:var(--f-head);font-size:14px;font-weight:700;color:var(--warn);">AI Proposes a Change — Your Approval Needed</span>
+    </div>
+    <p style="font-size:13px;color:var(--mid);margin-bottom:10px;"><strong style="color:var(--hi);">Diagnosis:</strong> Connection pool saturated. 43 threads waiting, max acquire 2406 ms. GC and CPU are healthy.</p>
+    <div class="diff-box"><div class="diff-rm">- spring.datasource.hikari.maximum-pool-size=2</div><div class="diff-add">+ spring.datasource.hikari.maximum-pool-size=20</div></div>
+    <div style="margin-bottom:10px;">
+      <div style="font-size:12px;font-weight:600;color:var(--mid);margin-bottom:6px;">Evidence</div>
+      <div class="evidence-bar"><div class="ev-label">Pool saturation</div><div class="ev-track"><div class="ev-fill" style="width:97%;background:var(--err)"></div></div><span style="font-size:11px;color:var(--err);">97%</span></div>
+      <div class="evidence-bar"><div class="ev-label">Acquire wait</div><div class="ev-track"><div class="ev-fill" style="width:92%;background:var(--err)"></div></div><span style="font-size:11px;color:var(--err);">2406 ms</span></div>
+      <div class="evidence-bar"><div class="ev-label">GC overhead</div><div class="ev-track"><div class="ev-fill" style="width:4%"></div></div><span style="font-size:11px;color:var(--ok);">4%</span></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;">
+      <div style="display:flex;flex-direction:column;align-items:flex-start;">
+        <button class="btn btn-ok" onclick="doApprove()">✓ Approve</button>
+        <div class="cli-twin">crucible approve TR-004</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-start;">
+        <button class="btn btn-err" onclick="doReject()">✕ Reject</button>
+        <div class="cli-twin">crucible reject TR-004</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="expandChat()">💬 Ask AI first</button>
+    </div>
+  </div>
+  <div id="diagResult" style="display:none;" class="card" style="border-color:rgba(59,171,140,.3);">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:22px;">✅</span>
+      <div><div style="font-family:var(--f-head);font-size:14px;font-weight:700;color:var(--ok);">Change applied — measuring now</div><div style="font-size:12px;color:var(--mid);">Deploy to perftest_sandbox · Commit 4f2a1c3 · Verified via /actuator/env</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ RESULTS ══ -->
+<section class="pg" id="pg-results">
+  <div class="ph">
+    <div class="ph-left"><div class="ph-eyebrow">Test Run</div><div class="ph-title">TR-003 · Connection Pool Fix</div><div class="ph-sub">PerfLab · /transfer · Semi-Automated · 22 Oct 2026</div></div>
+    <div class="ph-actions"><span class="pill ok">IMPROVED</span><button class="btn btn-ghost btn-sm">Export PDF</button><button class="btn btn-ghost btn-sm" onclick="showYamlExport()">Export YAML</button></div>
+  </div>
+  <div class="grid3" style="margin-bottom:14px;">
+    <div class="kpi"><div class="kpi-label">Baseline p99</div><div class="kpi-val" data-thermal="1206">1206 ms</div><div class="kpi-meta">pool=2</div></div>
+    <div class="kpi"><div class="kpi-label">Final p99</div><div class="kpi-val" data-thermal="58">58 ms</div><div class="kpi-meta">pool=20</div></div>
+    <div class="kpi"><div class="kpi-label">Improvement</div><div class="kpi-val fire">95.2%</div><div class="kpi-meta">SLA: &lt;200 ms ✓</div></div>
+  </div>
+  <div class="card">
+    <div class="card-h"><div class="card-title">Trials</div></div>
+    <div class="trial-row" onclick="toggleTrial('t1')"><div class="tr-num">T1</div><div class="tr-name">Baseline — pool=2</div><div style="flex:1;"></div><span class="tr-verdict fire">BASELINE</span><div style="font-family:var(--f-mono);font-size:13px;margin-left:10px;">1206 ms</div><div class="tr-chevron" id="tc-t1">›</div></div>
+    <div class="trial-detail" id="td-t1"><div class="detail-grid"><div><div class="dg-key">p99</div><div class="dg-val fire">1206 ms</div></div><div><div class="dg-key">p50</div><div class="dg-val">420 ms</div></div><div><div class="dg-key">RPS</div><div class="dg-val">32.1</div></div><div><div class="dg-key">Pool active</div><div class="dg-val fire">2/2</div></div><div><div class="dg-key">Pending</div><div class="dg-val fire">43</div></div><div><div class="dg-key">Duration</div><div class="dg-val">300s</div></div></div><div style="font-size:12px;color:var(--mid);">Pool saturation: 43 waiters, 2406 ms max acquire. GC overhead 4%. CPU 28%.</div></div>
+    <div class="trial-row" onclick="toggleTrial('t2')"><div class="tr-num">T2</div><div class="tr-name">pool=20 applied</div><div style="flex:1;"></div><span class="tr-verdict ok">KEPT</span><div style="font-family:var(--f-mono);font-size:13px;color:var(--ok);margin-left:10px;">58 ms</div><div class="tr-chevron" id="tc-t2">›</div></div>
+    <div class="trial-detail" id="td-t2"><div class="detail-grid"><div><div class="dg-key">p99</div><div class="dg-val ok">58 ms</div></div><div><div class="dg-key">p50</div><div class="dg-val">21 ms</div></div><div><div class="dg-key">RPS</div><div class="dg-val">49.8</div></div><div><div class="dg-key">Pool active</div><div class="dg-val ok">4/20</div></div><div><div class="dg-key">Pending</div><div class="dg-val ok">0</div></div><div><div class="dg-key">Duration</div><div class="dg-val">300s</div></div></div><div style="font-size:12px;color:var(--mid);">SLA met. Pool contention resolved. Headroom confirmed to 200 users.</div></div>
+  </div>
+</section>
+
+<!-- ══ BENCHMARKS ══ -->
+<section class="pg" id="pg-benchmarks">
+  <div class="ph">
+    <div class="ph-left"><div class="ph-eyebrow">AI Evaluation</div><div class="ph-title">Benchmarks</div><div class="ph-sub">37 fixtures · Gemini 1.5 Pro · glc_v5</div></div>
+    <div class="ph-actions"><button class="btn btn-ghost btn-sm" onclick="go('new-test')">Capture Fixture</button><button class="btn btn-primary btn-sm">▶ Re-run</button></div>
+  </div>
+  <div class="info-banner" id="ib-benchmarks">
+    <span class="info-banner-icon">🧪</span>
+    <div class="info-banner-body"><strong>Replay eval separates diagnosis quality from luck.</strong> Each fixture is a recorded metric snapshot — the AI diagnoses it without running a live experiment. A result landing in the "LUCKY" quadrant (wrong diagnosis, fix worked anyway) scores differently from a genuinely correct one. Click any row to expand fixture-level detail. Use "Capture Fixture" to add new snapshots from a running campaign.</div>
+    <button class="info-banner-close" onclick="dismissBanner('ib-benchmarks')">✕</button>
+  </div>
+  <div class="grid4" style="margin-bottom:16px;">
+    <div class="kpi"><div class="kpi-label">Overall</div><div class="kpi-val ok">94.6%</div><div class="kpi-meta">35/37</div></div>
+    <div class="kpi"><div class="kpi-label">Fixtures</div><div class="kpi-val">37</div><div class="kpi-meta">22 captured</div></div>
+    <div class="kpi"><div class="kpi-label">Avg latency</div><div class="kpi-val">1.8s</div><div class="kpi-meta">per diagnosis</div></div>
+    <div class="kpi"><div class="kpi-label">Model</div><div class="kpi-val" style="font-size:14px;">Gemini 1.5</div><div class="kpi-meta">pinned per campaign</div></div>
+  </div>
+  <div class="bench-row" onclick="toggleBench(this)">
+    <div class="bench-head"><div class="bench-icon" style="background:var(--err-d);">🏊</div><div class="bench-info"><div class="bench-name">Connection Pool Saturation</div><div class="bench-desc">HikariCP exhaustion · acquire wait · pending threads</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:100%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--ok);">100% · 8/8</div></div><span class="bench-chevron">›</span></div>
+    <div class="bench-body">
+      <div class="bench-fix-row hdr"><span>Fixture</span><span>Provider/Model</span><span>Outcome</span><span>Diagnosis</span></div>
+      <div class="bench-fix-row"><span class="fix-name">pool_2_transfer_p99_1206</span><span style="color:var(--blue);">Gemini 1.5 Pro</span><span class="fix-out ok">CORRECT</span><span class="fix-diag">pool_saturation → pool_size</span></div>
+      <div class="bench-fix-row"><span class="fix-name">pool_2_burst_100u</span><span style="color:var(--blue);">Gemini 1.5 Pro</span><span class="fix-out ok">CORRECT</span><span class="fix-diag">pool_saturation → pool_size</span></div>
+      <div class="bench-fix-row"><span class="fix-name">pool_5_borderline</span><span style="color:var(--blue);">Gemini 1.5 Pro</span><span class="fix-out ok">CORRECT</span><span class="fix-diag">pool_saturation → pool_size</span></div>
+      <div class="bench-fix-row"><span class="fix-name">pool_10_healthy</span><span style="color:var(--blue);">Gemini 1.5 Pro</span><span class="fix-out ok">CORRECT</span><span class="fix-diag">no_bottleneck</span></div>
+    </div>
+  </div>
+  <div class="bench-row" onclick="toggleBench(this)">
+    <div class="bench-head"><div class="bench-icon" style="background:var(--warn-d);">⚙️</div><div class="bench-info"><div class="bench-name">GC Pressure</div><div class="bench-desc">JVM GC overhead · STW pauses · heap exhaustion</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:85%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--ok);">85% · 6/7</div></div><span class="bench-chevron">›</span></div>
+    <div class="bench-body">
+      <div class="bench-fix-row hdr"><span>Fixture</span><span>Provider/Model</span><span>Outcome</span><span>Diagnosis</span></div>
+      <div class="bench-fix-row"><span class="fix-name">gc_overhead_30pct</span><span style="color:var(--blue);">Gemini 1.5 Pro</span><span class="fix-out ok">CORRECT</span><span class="fix-diag">gc_pressure → heap_size</span></div>
+      <div class="bench-fix-row"><span class="fix-name">gc_g1_region_overflow</span><span style="color:var(--blue);">Gemini 1.5 Pro</span><span class="fix-out err">WRONG</span><span class="fix-diag">Expected gc_pressure, got pool_saturation</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ GUARDRAILS ══ -->
+<section class="pg" id="pg-guardrails">
+  <div class="ph">
+    <div class="ph-left"><div class="ph-eyebrow">Safety</div><div class="ph-title">Guardrails</div><div class="ph-sub">What the AI can and cannot do — enforced at the platform level, not just convention</div></div>
+  </div>
+  <div class="info-banner" id="ib-guardrails">
+    <span class="info-banner-icon">🛡️</span>
+    <div class="info-banner-body"><strong>"Always enforced" rules cannot be turned off</strong> — each one exists because removing it caused a specific failure during the feasibility spike. The configurable rules below are safe to adjust per service. The Allowed Properties table is the most important: the AI can only propose what is listed there, with values inside the stated bounds.</div>
+    <button class="info-banner-close" onclick="dismissBanner('ib-guardrails')">✕</button>
+  </div>
+  <!-- Live refused-attempts counter -->
+  <div class="grid4" style="margin-bottom:16px;">
+    <div class="kpi" style="border-color:rgba(224,82,82,.25);">
+      <div class="kpi-label">Proposals refused</div>
+      <div class="kpi-val err" id="guardRefusedCount">3</div>
+      <div class="kpi-meta">this campaign · TR-004</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Last refusal</div>
+      <div class="kpi-val" style="font-size:13px;" id="guardLastRefusal">TR-004</div>
+      <div class="kpi-meta" id="guardLastReason">pool-size out of bounds (max=50, proposed=200)</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Proposals approved</div>
+      <div class="kpi-val ok">1</div>
+      <div class="kpi-meta">pool=20 · kept</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Guard latency</div>
+      <div class="kpi-val">0 ms</div>
+      <div class="kpi-meta">synchronous, no model call</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-h"><div class="card-title">Core protections</div><div class="card-sub">These cannot be disabled — they exist because disabling them reintroduces a specific past failure</div></div>
+    <div class="guard-row">
+      <div class="guard-info"><div class="guard-name">SLA is read-only</div><div class="guard-desc">The AI cannot raise its own goalposts. The p99 ceiling and error budget you set are locked for the lifetime of the run. Enforced as Policy memory and a protected file path — weakening either independently defeats both.</div></div>
+      <span class="guard-locked">Always enforced</span>
+    </div>
+    <div class="guard-row">
+      <div class="guard-info"><div class="guard-name">Load profile is read-only</div><div class="guard-desc">Fewer users is not a fix. Reducing load to hit the SLA destroys comparability across runs.</div></div>
+      <span class="guard-locked">Always enforced</span>
+    </div>
+    <div class="guard-row">
+      <div class="guard-info"><div class="guard-name">Writes only to perftest_sandbox</div><div class="guard-desc">Crucible never writes to main, master, develop, trunk, release/*, hotfix/* or the base branch. Checked when the profile loads, not just at push time.</div></div>
+      <span class="guard-locked">Always enforced</span>
+    </div>
+    <div class="guard-row">
+      <div class="guard-info"><div class="guard-name">No cross-provider failover</div><div class="guard-desc">Model is pinned per campaign. A campaign whose experiments were diagnosed by different models is not internally comparable. CRUCIBLE_GATEWAY_FALLBACK_PROVIDERS stays empty.</div></div>
+      <span class="guard-locked">Always enforced</span>
+    </div>
+    <div class="guard-row">
+      <div class="guard-info"><div class="guard-name">No force-push</div><div class="guard-desc">Reverting means deploying an earlier commit, never rewriting history. Force-push would destroy the experiment history that every manifest depends on.</div></div>
+      <span class="guard-locked">Always enforced</span>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-h"><div class="card-title">Configurable rules</div></div>
+    <div class="guard-row">
+      <div class="guard-info"><div class="guard-name">Require human approval before every change</div><div class="guard-desc">Semi-automated mode. Turn off only in Fully Automated mode with pre-approved properties.</div></div>
+      <label class="toggle"><input type="checkbox" checked><span class="toggle-track"></span><span class="toggle-thumb"></span></label>
+    </div>
+    <div class="guard-row">
+      <div class="guard-info"><div class="guard-name">Auto-revert on SLA miss</div><div class="guard-desc">If a change fails to improve p99 or worsens error rate, Crucible redeploys the last good commit automatically.</div></div>
+      <label class="toggle"><input type="checkbox" checked><span class="toggle-track"></span><span class="toggle-thumb"></span></label>
+    </div>
+    <div class="guard-row">
+      <div class="guard-info"><div class="guard-name">Abort if host CPU steal exceeds threshold</div><div class="guard-desc">A noisy neighbour on shared VCPUs means measurements are about someone else's workload. Default 5%; Oracle free tier uses 10%.</div></div>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        <input class="form-input" value="10" type="number" min="1" max="50" style="width:60px;padding:5px 8px;">
+        <span style="font-size:13px;color:var(--mid);">%</span>
+      </div>
+    </div>
+    <div class="guard-row">
+      <div class="guard-info"><div class="guard-name">Max changes per run</div><div class="guard-desc">Campaign stops after this many trials, even if the SLA is not yet met.</div></div>
+      <input class="form-input" value="8" type="number" min="1" max="20" style="width:70px;padding:5px 8px;flex-shrink:0;">
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-h"><div class="card-title">Allowed properties &amp; bounds</div><div class="card-sub">The AI can only propose changes to properties listed here, within these bounds. A property not on this list cannot be touched, regardless of the AI's confidence.</div></div>
+    <div class="tbl-wrap">
+      <table class="prop-table">
+        <tr><th>Property</th><th>Current</th><th>Min</th><th>Max</th><th>Unit</th><th>Cause family</th></tr>
+        <tr><td class="hi mono">spring.datasource.hikari.maximum-pool-size</td><td class="mono">2</td><td class="mono">1</td><td class="mono">50</td><td>count</td><td>pool_saturation</td></tr>
+        <tr><td class="hi mono">spring.datasource.hikari.connection-timeout</td><td class="mono">30000</td><td class="mono">1000</td><td class="mono">60000</td><td>ms</td><td>pool_saturation</td></tr>
+        <tr><td class="hi mono">server.tomcat.threads.max</td><td class="mono">200</td><td class="mono">50</td><td class="mono">800</td><td>count</td><td>thread_exhaustion</td></tr>
+        <tr><td class="hi mono">-Xmx (JVM heap)</td><td class="mono">512m</td><td class="mono">256m</td><td class="mono">4096m</td><td>MB</td><td>gc_pressure</td></tr>
+        <tr><td class="hi mono">spring.datasource.hikari.idle-timeout</td><td class="mono">600000</td><td class="mono">10000</td><td class="mono">1800000</td><td>ms</td><td>pool_saturation</td></tr>
+      </table>
+    </div>
+    <button class="btn btn-ghost btn-sm" style="margin-top:10px;">+ Add allowed property</button>
+  </div>
+</section>
+
+<!-- ══ HISTORY & DIFF ══ -->
+<section class="pg" id="pg-history">
+  <div class="ph">
+    <div class="ph-left"><div class="ph-eyebrow">Trend</div><div class="ph-title">History &amp; Diff</div><div class="ph-sub">All test runs · compare any two · promoted playbooks</div></div>
+    <div class="ph-actions">
+      <button class="btn btn-ghost btn-sm" id="diffBtn" disabled onclick="showDiff()">Compare selected (2)</button>
+      <button class="btn btn-ghost btn-sm">Export CSV</button>
+    </div>
+  </div>
+  <div class="info-banner" id="ib-history">
+    <span class="info-banner-icon">📈</span>
+    <div class="info-banner-body"><strong>Select two runs to compare them side-by-side.</strong> Crucible flags when runs used different environments or models — those comparisons are marked unreliable. Playbooks are fix patterns that worked and were promoted from a single service to global — use them to seed the AI's diagnosis on similar services.</div>
+    <button class="info-banner-close" onclick="dismissBanner('ib-history')">✕</button>
+  </div>
+  <!-- History tabs -->
+  <div style="display:flex;gap:2px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--r);padding:3px;margin-bottom:18px;width:fit-content;">
+    <button id="htab-runs" onclick="switchHistTab('runs')" style="padding:6px 16px;border-radius:7px;border:none;font-size:12px;font-weight:600;cursor:pointer;transition:all .12s;background:var(--s1);color:var(--hi);box-shadow:0 1px 3px rgba(0,0,0,.1);">Experiment Runs</button>
+    <button id="htab-ceiling" onclick="switchHistTab('ceiling')" style="padding:6px 16px;border-radius:7px;border:none;font-size:12px;font-weight:600;cursor:pointer;transition:all .12s;background:transparent;color:var(--mid);">Ceiling Probes</button>
+    <button id="htab-playbooks" onclick="switchHistTab('playbooks')" style="padding:6px 16px;border-radius:7px;border:none;font-size:12px;font-weight:600;cursor:pointer;transition:all .12s;background:transparent;color:var(--mid);">Playbooks</button>
+  </div>
+
+  <!-- Tab: Experiment Runs -->
+  <div id="hpanel-runs">
+  <div class="grid4" style="margin-bottom:14px;">
+    <div class="kpi"><div class="kpi-label">Total runs</div><div class="kpi-val">12</div></div>
+    <div class="kpi"><div class="kpi-label">Improved</div><div class="kpi-val ok">7</div><div class="kpi-meta">58%</div></div>
+    <div class="kpi"><div class="kpi-label">Best gain</div><div class="kpi-val fire">95.2%</div><div class="kpi-meta">TR-003</div></div>
+    <div class="kpi"><div class="kpi-label">Playbooks</div><div class="kpi-val">3</div><div class="kpi-meta">2 global</div></div>
+  </div>
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-h"><div class="card-title">All Test Runs</div><div class="card-sub">Click rows to select for comparison (max 2)</div></div>
+    <div class="tbl-wrap"><table>
+      <tr><th></th><th>Run</th><th>Date</th><th>Service</th><th>Endpoint</th><th>Mode</th><th>Status</th><th>Baseline p99</th><th>Final p99</th><th>Δ</th></tr>
+      <tr onclick="toggleHistSel(this)" style="cursor:pointer;">
+        <td><input type="checkbox" onclick="event.stopPropagation();toggleHistSel(this.closest('tr'))"></td>
+        <td class="hi">TR-003</td><td>22 Oct</td><td>PerfLab</td><td class="mono">/transfer</td><td>Semi-Auto</td>
+        <td><span class="pill ok">IMPROVED</span></td><td class="mono" data-thermal="1206">1206 ms</td><td class="mono" data-thermal="58">58 ms</td><td class="mono" style="color:var(--ok);">-95%</td>
+      </tr>
+      <tr onclick="toggleHistSel(this)" style="cursor:pointer;">
+        <td><input type="checkbox" onclick="event.stopPropagation();toggleHistSel(this.closest('tr'))"></td>
+        <td class="hi">TR-002</td><td>21 Oct</td><td>PerfLab</td><td class="mono">/transfer</td><td>Semi-Auto</td>
+        <td><span class="pill err">REVERTED</span></td><td class="mono" data-thermal="1206">1206 ms</td><td class="mono" data-thermal="892">892 ms</td><td class="mono" style="color:var(--err);">-26%</td>
+      </tr>
+      <tr onclick="toggleHistSel(this)" style="cursor:pointer;">
+        <td><input type="checkbox" onclick="event.stopPropagation();toggleHistSel(this.closest('tr'))"></td>
+        <td class="hi">TR-001</td><td>20 Oct</td><td>PerfLab</td><td class="mono">/transfer</td><td>Advisory</td>
+        <td><span class="pill idle">BASELINE</span></td><td class="mono" data-thermal="1206">1206 ms</td><td class="mono">—</td><td>—</td>
+      </tr>
+    </table></div>
+  </div>
+  <div id="diffView" style="display:none;" class="card">
+    <div class="card-h"><div class="card-title">Diff: TR-002 vs TR-003</div><div class="card-sub">Same service, same environment, same model — comparison is valid</div></div>
+    <div class="grid3">
+      <div class="kpi"><div class="kpi-label">p99 (TR-002)</div><div class="kpi-val" style="color:var(--err);">892 ms</div><div class="kpi-meta">pool=10 reverted</div></div>
+      <div class="kpi"><div class="kpi-label">p99 (TR-003)</div><div class="kpi-val ok">58 ms</div><div class="kpi-meta">pool=20 kept</div></div>
+      <div class="kpi"><div class="kpi-label">Difference</div><div class="kpi-val fire">−93.5%</div><div class="kpi-meta">pool size was the lever</div></div>
+    </div>
+    <div style="font-size:12px;color:var(--mid);margin-top:10px;padding:10px 12px;background:var(--s2);border-radius:var(--rs);">
+      TR-002 tried pool=10 — p99 improved from 1206 ms to 892 ms but missed the 200 ms SLA, so it was auto-reverted. TR-003 tried pool=20 — p99 dropped to 58 ms, SLA met, change kept. The difference confirms pool size is the binding lever, not anything else.
+    </div>
+  </div>
+  </div><!-- end hpanel-runs -->
+
+  <!-- Tab: Ceiling Probes -->
+  <div id="hpanel-ceiling" style="display:none;">
+    <div style="font-size:12px;color:var(--mid);margin-bottom:14px;">Ceiling probe results are kept separate from experiment runs — nothing was changed, so they cannot be compared as verdicts (§20.6).</div>
+    <div class="grid2" style="margin-bottom:14px;">
+      <div class="card">
+        <div class="card-h"><div class="card-title">CP-001 · PerfLab /transfer</div><div class="card-sub">13 Sep 2026 · step=25 users</div></div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div style="background:var(--ok-d);border:1px solid rgba(59,171,140,.25);border-radius:var(--rs);padding:12px 14px;">
+            <div style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ok);margin-bottom:3px;">Last passing level</div>
+            <div style="font-family:var(--f-head);font-size:22px;font-weight:700;color:var(--ok);">200 users</div>
+            <div style="font-size:12px;color:var(--mid);margin-top:1px;">p99: 183 ms · Errors: 0.2% · SLA ✓</div>
+          </div>
+          <div style="background:var(--err-d);border:1px solid rgba(224,82,82,.25);border-radius:var(--rs);padding:12px 14px;">
+            <div style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--err);margin-bottom:3px;">First failing level</div>
+            <div style="font-family:var(--f-head);font-size:22px;font-weight:700;color:var(--err);">225 users</div>
+            <div style="font-size:12px;color:var(--mid);margin-top:1px;">p99: 418 ms · Errors: 3.1% · SLA ✗</div>
+          </div>
+          <div style="font-size:11px;color:var(--mid);">True ceiling: 200–225 users. Reduce step to 10 for ±5-user resolution.</div>
+        </div>
+      </div>
+      <div class="card" style="display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;border-style:dashed;min-height:180px;">
+        <div style="font-size:28px;">⚡</div>
+        <div style="font-size:13px;font-weight:600;color:var(--mid);">Run a new ceiling probe</div>
+        <div style="font-size:11px;color:var(--lo);text-align:center;max-width:200px;">Select "Ceiling Probe" mode in New Test Run</div>
+        <button class="btn btn-ghost btn-sm" onclick="go('new-test')">+ New Test Run</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: Playbooks -->
+  <div id="hpanel-playbooks" style="display:none;">
+  <div class="card">
+    <div class="card-h"><div class="card-title">Playbooks</div><div class="card-sub">Fix patterns that worked — promoted from service-scoped to global</div></div>
+    <div class="tbl-wrap"><table>
+      <tr><th>Name</th><th>Cause family</th><th>Fix</th><th>Scope</th><th>Confirmed on</th></tr>
+      <tr>
+        <td class="hi">HikariCP pool exhaustion → size increase</td>
+        <td>pool_saturation</td>
+        <td class="mono">maximum-pool-size × 10</td>
+        <td><span style="background:var(--ok-d);color:var(--ok);padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;">GLOBAL</span></td>
+        <td>3 services</td>
+      </tr>
+      <tr>
+        <td class="hi">Missing index on high-cardinality FK</td>
+        <td>slow_query</td>
+        <td class="mono">CREATE INDEX CONCURRENTLY</td>
+        <td><span style="background:var(--blue-d);color:var(--blue);padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;">SERVICE</span></td>
+        <td>PerfLab only</td>
+      </tr>
+    </table></div>
+  </div>
+  </div>
+</section>
+
+<!-- ══ SETTINGS ══ -->
+<section class="pg" id="pg-settings">
+  <div class="ph">
+    <div class="ph-left"><div class="ph-eyebrow">Configuration</div><div class="ph-title">Settings</div></div>
+  </div>
+  <div class="card">
+    <div class="card-h"><div class="card-title">AI Model</div></div>
+    <div class="guard-row"><div class="guard-info"><div class="guard-name">Gateway</div><div class="guard-desc">glc_v5 at 127.0.0.1:8111 — do not restart from this UI</div></div><span class="pill ok">Connected</span></div>
+    <div class="guard-row"><div class="guard-info"><div class="guard-name">Model (pinned per campaign)</div><div class="guard-desc">Cross-provider failover is disabled. Budget-driven downgrade records the model change on every manifest.</div></div><code style="font-family:var(--f-mono);font-size:12px;color:var(--fire);background:var(--fire-d);padding:4px 8px;border-radius:4px;">gemini-1.5-pro</code></div>
+    <div class="guard-row"><div class="guard-info"><div class="guard-name">Embedder (Knowledge RAG)</div><div class="guard-desc">gemini-embedding-001 at outputDimensionality=768. Changing this requires re-indexing all stored vectors.</div></div><code style="font-family:var(--f-mono);font-size:12px;color:var(--blue);background:var(--blue-d);padding:4px 8px;border-radius:4px;">gemini-embedding-001</code></div>
+  </div>
+  <div class="card">
+    <div class="card-h"><div class="card-title">Target repository</div></div>
+    <div class="guard-row"><div class="guard-info"><div class="guard-name">Repo</div><div class="guard-desc">https://github.com/rraghu214/perf-lab</div></div><span class="pill ok">Reachable</span></div>
+    <div class="guard-row"><div class="guard-info"><div class="guard-name">Sandbox branch</div><div class="guard-desc">The only branch Crucible ever writes to.</div></div><code style="font-family:var(--f-mono);font-size:12px;color:var(--blue);background:var(--blue-d);padding:4px 8px;border-radius:4px;">perftest_sandbox</code></div>
+  </div>
+</section>
+
+</main>
+
+<!-- ── RESIZE HANDLE ── -->
+<div class="resize-handle" id="resizeHandle"></div>
+
+<!-- ── CHAT PANE ── -->
+<aside class="chat-pane" id="chatPane">
+  <!-- Collapsed tab -->
+  <div class="chat-collapsed-tab">
+    <div class="chat-collapsed-icon" onclick="expandChat()" title="Open AI chat">🔥</div>
+    <div class="chat-collapsed-badge" id="collapsedBadge">1</div>
+  </div>
+  <!-- Expanded body -->
+  <div class="chat-pane-body" id="chatPaneBody">
+    <div class="chat-pane-header">
+      <div class="chat-avatar" style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--fire),var(--warn));display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">🔥</div>
+      <div style="flex:1;min-width:0;">
+        <div class="chat-pane-title">Crucible AI</div>
+        <div class="chat-ai-status">● diagnosing TR-004</div>
+      </div>
+      <button class="chat-collapse-btn" onclick="collapseChat()" title="Collapse panel">‹</button>
+    </div>
+    <div class="chat-context-bar" id="chatContextBar">
+      📍 Active: TR-004 · Trial 3 · Approval pending
+    </div>
+    <div class="chat-messages" id="chatMessages">
+      <div class="chat-msg ai">
+        <div class="msg-av">🔥</div>
+        <div class="msg-bubble-ai">Hi! I've been watching TR-004. The connection pool is saturated — 43 threads waiting, max acquire 2.4 s. I'd like to raise <code style="font-family:var(--f-mono);font-size:11px;">maximum-pool-size</code> from 2 → 20.<br><br>Shall I show you the exact diff and evidence?</div>
+      </div>
+    </div>
+    <div class="chat-quick" id="chatQuick">
+      <span class="quick-chip ok" onclick="chatApprove()">✓ Approve the change</span>
+      <span class="quick-chip" onclick="chatReject()">✕ Reject</span>
+      <span class="quick-chip" onclick="chatAsk('Why pool=20 and not pool=10?')">Why 20?</span>
+      <span class="quick-chip" onclick="chatAsk('Show me the full evidence')">Show evidence</span>
+    </div>
+    <div class="chat-input-row">
+      <input class="chat-input" id="chatInput" placeholder="Ask about this run…" onkeydown="if(event.key==='Enter')sendChat()">
+      <button class="chat-send" onclick="sendChat()">↑</button>
+    </div>
+  </div>
+</aside>
+
+</div><!-- /layout -->
+
+<script>
+/* ── Page nav ─────────────────────────────────────────────────────────── */
+const PAGES={'overview':'pg-overview','library':'pg-library','new-test':'pg-new-test','preflight':'pg-preflight','active':'pg-active','results':'pg-results','benchmarks':'pg-benchmarks','guardrails':'pg-guardrails','history':'pg-history','settings':'pg-settings'};
+const CHAT_CONTEXT={
+  'overview':'📍 Overview — ask about any run',
+  'new-test':'📍 Setup wizard — I can help fill in fields',
+  'preflight':'📍 Preflight — verifying target readiness',
+  'active':'📍 Active: TR-004 · Approval pending',
+  'results':'📍 Results: TR-003 — ask about findings',
+  'benchmarks':'📍 Benchmarks — ask about accuracy',
+  'guardrails':'📍 Guardrails — ask about any rule',
+  'library':'📍 Library — ask about a collection',
+  'settings':'📍 Settings'
+};
+const ONBOARD_MSGS={
+  'new-test':'👋 Starting a new test run? I can help! Tell me the service you want to test and what feels slow — I\'ll suggest the right scenario, SLA, and mode.',
+  'guardrails':'The guardrails page shows what the AI can and can\'t change. The green "Always enforced" ones can\'t be turned off — they exist because disabling them caused a real failure in our feasibility spike.',
+  'benchmarks':'The Benchmark page shows how accurately I diagnose problems on pre-recorded fixtures. Click any problem type to see individual fixture results — green = I got it right, red = I was wrong.',
+};
+let currentPage='overview';
+const onboardShown={};
+
+function go(p){
+  // Drive visibility with style.display — classList toggling is unreliable inside the artifact sandbox
+  Object.values(PAGES).forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.style.display='none';
+  });
+  const pg=document.getElementById(PAGES[p]);
+  if(pg) pg.style.display='block';
+
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('on'));
+  document.querySelectorAll('.nav-item').forEach(el=>{
+    const oc=el.getAttribute('onclick')||'';
+    if(oc.includes("'"+p+"'")) el.classList.add('on');
+  });
+
+  if(p==='active') setTimeout(initActiveCharts,80);
+  window.scrollTo(0,0);
+  currentPage=p;
+  const ctx=document.getElementById('chatContextBar');
+  if(ctx) ctx.textContent=CHAT_CONTEXT[p]||'📍 Crucible AI';
+  // Info banners replace chat tips — show once per page on first visit
+  const bannerMap={'new-test':'ib-new-test','guardrails':'ib-guardrails','benchmarks':'ib-benchmarks','history':'ib-history','ceiling':'ib-ceiling'};
+  if(bannerMap[p]&&!onboardShown[p]){
+    onboardShown[p]=true;
+    const b=document.getElementById(bannerMap[p]);
+    if(b) b.style.display='flex';
+  }
+}
+
+// Init: hide everything, then show overview
+Object.values(PAGES).forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
+go('overview');
+
+/* ── Wizard ──────────────────────────────────────────────────────────── */
+const WZ_MSGS=[
+  'Starting a new run! First, tell me about the target service and connect the GitHub repo. I need repo access for Semi-Automated and Fully Automated modes — for Advisory mode it\'s optional.',
+  'What\'s your goal? Be specific — e.g. "reduce /transfer p99 below 200ms at 50 users". I\'ll extract the SLA numbers for you. <span class="suggest-fill-btn" onclick="suggestSLA()">✨ Let AI suggest SLA</span>',
+  'How many users do you expect in production? That shapes the scenario. I recommend starting with your normal load, then one burst scenario at 2×. <span class="suggest-fill-btn" onclick="suggestScenarios()">✨ Suggest scenarios</span>',
+  'The wall clock budget matters more than cost. Most runs take 2–4 hours. Set a cap so the campaign stops gracefully if it runs long.',
+  'Everything looks good! Preflight will run first — a test deploy + revert — before any real measurement starts. Want me to explain what happens step by step?',
+];
+// Init wizard pane visibility on first call
+let wzInited=false;
+function wzGo(n){
+  const panes=document.querySelectorAll('.wz-pane');
+  if(!wzInited){wzInited=true;panes.forEach(p=>p.style.display='none');}
+  panes.forEach((p,i)=>{p.style.display=i===n?'block':'none';});
+  document.querySelectorAll('.ws').forEach((s,i)=>{
+    s.classList.remove('on','done');
+    if(i===n) s.classList.add('on');
+    else if(i<n) s.classList.add('done');
+  });
+  // Only fire AI tip for wizard steps when chat is open, and only once per step
+  const chatCollapsed=document.getElementById('chatPane').classList.contains('collapsed');
+  if(!chatCollapsed&&WZ_MSGS[n]){
+    setTimeout(()=>addChatMsg('ai',WZ_MSGS[n]),300);
+  }
+}
+
+/* ── Mode selector ───────────────────────────────────────────────────── */
+function selMode(el,type){
+  document.querySelectorAll('.mode-card').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on');
+  const cfg=document.getElementById('ceilingCfg');
+  if(cfg) cfg.classList.toggle('show', type==='ceiling');
+}
+
+/* ── Scenarios ───────────────────────────────────────────────────────── */
+let scenCount=2;
+function addScenario(){
+  scenCount++;
+  const row=document.createElement('div');
+  row.className='scenario-row';
+  row.innerHTML=`<div><input value="scenario_${scenCount}"></div><div><input value="50" type="number" min="1"></div><div><input value="300s"></div><div><input value="30s"></div><button class="scenario-rm" onclick="rmScenario(this)">✕</button>`;
+  document.getElementById('scenarioList').appendChild(row);
+}
+function rmScenario(btn){if(document.querySelectorAll('.scenario-row').length>1)btn.closest('.scenario-row').remove();}
+
+/* ── AI suggest helpers ──────────────────────────────────────────────── */
+function suggestSLA(){addChatMsg('user','Suggest an SLA for me');setTimeout(()=>addChatMsg('ai','Based on "reduce /transfer p99 below 200ms at 50 users" I\'ve set: p99 ceiling = 200 ms, error budget = 1.0%, noise threshold = 5%. Does that match what you expect in production?'),700);}
+function suggestScenarios(){addChatMsg('user','Suggest scenarios');setTimeout(()=>addChatMsg('ai','I\'d recommend two: (1) steady_50u — 50 users, 300s, 30s ramp — your normal load; (2) burst_100u — 100 users, 180s, 15s ramp — a 2× spike. That covers normal operation and a peak without running too long.'),700);}
+
+/* ── Docs ────────────────────────────────────────────────────────────── */
+const docFiles=[];
+function addDoc(name){docFiles.push(name);const c=document.getElementById('docChips');const chip=document.createElement('div');chip.className='doc-chip';chip.innerHTML=`📄 ${name} <span class="doc-chip-rm" onclick="this.closest('.doc-chip').remove()">✕</span>`;c.appendChild(chip);const rd=document.getElementById('rev-docs');if(rd)rd.textContent=docFiles.length+' uploaded';}
+function handleDocDrop(e){e.preventDefault();document.getElementById('docDrop').classList.remove('drag');Array.from(e.dataTransfer.files).forEach(f=>addDoc(f.name));}
+function handleDocInput(inp){Array.from(inp.files).forEach(f=>addDoc(f.name));}
+
+/* ── GitHub test ─────────────────────────────────────────────────────── */
+function testGithubConn(){const r=document.getElementById('gh-conn-result');r.style.display='block';r.textContent='Testing…';r.style.color='var(--mid)';setTimeout(()=>{r.textContent='✓ Connected · perf-lab · perftest_sandbox branch exists · config file found';r.style.color='var(--ok)';},1200);}
+
+/* ── YAML ────────────────────────────────────────────────────────────── */
+function copyYaml(){const box=document.getElementById('yamlBox');if(navigator.clipboard){navigator.clipboard.writeText(box.textContent).then(()=>{addChatMsg('ai','YAML copied to clipboard!')}).catch(()=>{});}else{const sel=window.getSelection();const range=document.createRange();range.selectNodeContents(box);sel.removeAllRanges();sel.addRange(range);}}
+function importYaml(){addChatMsg('ai','To import a YAML, paste it below and I\'ll pre-fill the wizard fields for you.');}
+function showYamlExport(){alert('YAML exported — see the Export YAML button on the Review step in New Test Run.');}
+
+/* ── Library ─────────────────────────────────────────────────────────── */
+function toggleLib(head){const body=head.nextElementSibling;const chev=head.querySelector('.lib-chev');const on=body.classList.toggle('on');if(chev)chev.style.transform=on?'rotate(90deg)':'';}
+function toggleLibCol(head){const body=head.nextElementSibling;const chev=head.querySelector('.lib-col-chev');const on=body.classList.toggle('on');if(chev)chev.style.transform=on?'rotate(90deg)':'';}
+
+/* ── Trial expand ────────────────────────────────────────────────────── */
+function toggleTrial(id){const d=document.getElementById('td-'+id);const c=document.getElementById('tc-'+id);const on=d.classList.toggle('on');if(c)c.classList.toggle('open',on);}
+
+/* ── Benchmark expand ────────────────────────────────────────────────── */
+function toggleBench(row){row.classList.toggle('open');}
+
+/* ── Active charts ───────────────────────────────────────────────────── */
+let chartsInit=false;
+function initActiveCharts(){
+  if(chartsInit)return;chartsInit=true;
+  const labels=[...Array(20)].map((_,i)=>`${i*30}s`);
+  const base={responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#555',font:{size:10},maxTicksLimit:6}},y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#555',font:{size:10}}}}};
+  try{
+    new Chart(document.getElementById('chartP99'),{type:'line',data:{labels,datasets:[{data:[320,340,360,380,400,420,380,360,340,320,310,308,312,315,309,308,310,312,311,312],borderColor:'#e8a630',backgroundColor:'rgba(232,166,48,.07)',borderWidth:1.5,pointRadius:0,tension:.35,fill:true}]},options:{...base,scales:{...base.scales,y:{...base.scales.y,min:200,max:500}}}});
+    new Chart(document.getElementById('chartRps'),{type:'line',data:{labels,datasets:[{data:[44,45,46,47,47,46,47,48,48,49,48,48,48,48,49,49,48,48,48,48],borderColor:'#3bab8c',backgroundColor:'rgba(59,171,140,.07)',borderWidth:1.5,pointRadius:0,tension:.35,fill:true}]},options:base});
+  }catch(e){}
+}
+
+/* ── Approval ────────────────────────────────────────────────────────── */
+function doApprove(){document.getElementById('approvalGate').style.display='none';document.getElementById('diagResult').style.display='flex';addChatMsg('ai','Change approved ✓ — deploying pool=20 to perftest_sandbox now. I\'ll start the re-measurement window once /actuator/env confirms the property is live.');}
+function doReject(){document.getElementById('approvalGate').style.display='none';addChatMsg('ai','Rejected. I\'ll keep the baseline and look for other hypotheses. Want me to probe for slow queries or GC pressure next?');}
+function confirmAbort(){if(confirm('Abort TR-004? The in-progress trial will be discarded and the last good commit will be redeployed.'))addChatMsg('ai','Abort initiated — redeploying last good commit and stopping the load generator.');}
+
+/* ── Launch ──────────────────────────────────────────────────────────── */
+function launchRun(){go('active');setTimeout(()=>addChatMsg('ai','TR-004 launched! Running preflight first — test deploy, check readiness probe, then revert. I\'ll tell you when the first real measurement begins.'),400);}
+
+/* ── Info banners ────────────────────────────────────────────────────── */
+function dismissBanner(id){
+  const b=document.getElementById(id);
+  if(b) b.style.display='none';
+}
+
+/* ── Hooks ───────────────────────────────────────────────────────────── */
+function addHook(){
+  const list=document.getElementById('hookList');
+  if(!list) return;
+  const row=document.createElement('div');
+  row.className='hook-row';
+  row.innerHTML=`
+    <select class="form-input" style="font-size:11px;padding:4px 6px;">
+      <option>before_each</option><option>after_each</option><option>on_abort</option>
+    </select>
+    <input class="form-input" placeholder="shell command or script path" style="font-size:12px;">
+    <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--mid);white-space:nowrap;">
+      <input type="checkbox" checked> fail-block
+    </label>
+    <button onclick="this.closest('.hook-row').remove()" style="background:none;border:none;color:var(--lo);cursor:pointer;font-size:14px;line-height:1;">✕</button>
+  `;
+  list.appendChild(row);
+}
+
+/* ── Input data / variable mappings ──────────────────────────────────── */
+function handleCsvInput(input){
+  if(!input.files||!input.files.length) return;
+  const list=document.getElementById('dataFileList');
+  if(!list) return;
+  Array.from(input.files).forEach(f=>{
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rs);margin-bottom:4px;font-size:12px;';
+    row.innerHTML=`<span style="font-size:14px;">📄</span><span class="hi" style="flex:1;">${f.name}</span><span style="color:var(--lo);">${(f.size/1024).toFixed(1)} KB</span><button onclick="this.parentNode.remove()" style="background:none;border:none;color:var(--lo);cursor:pointer;font-size:13px;padding:0;">✕</button>`;
+    list.appendChild(row);
+  });
+  input.value='';
+}
+function addVarRow(){
+  const list=document.getElementById('varList');
+  if(!list) return;
+  const row=document.createElement('div');
+  row.className='var-row';
+  row.innerHTML=`<input class="form-input" placeholder="\${var_name}" style="font-size:12px;"><select class="form-input" style="font-size:12px;"><option>— select CSV —</option></select><input class="form-input" placeholder="column" style="font-size:12px;"><button onclick="this.closest('.var-row').remove()" style="background:none;border:none;color:var(--lo);cursor:pointer;font-size:14px;">✕</button>`;
+  list.appendChild(row);
+}
+
+/* ── Theme toggle ────────────────────────────────────────────────────── */
+function toggleTheme(){
+  const root=document.documentElement;
+  const cur=root.getAttribute('data-theme');
+  const next=cur==='light'?'dark':'light';
+  root.setAttribute('data-theme',next);
+  const btn=document.getElementById('themeToggle');
+  if(btn) btn.textContent=next==='light'?'☀':'🌙';
+  try{localStorage.setItem('crucible-theme',next);}catch(e){}
+}
+document.addEventListener('DOMContentLoaded',function(){
+  try{
+    const t=localStorage.getItem('crucible-theme');
+    if(t){
+      document.documentElement.setAttribute('data-theme',t);
+      const btn=document.getElementById('themeToggle');
+      if(btn) btn.textContent=t==='light'?'☀':'🌙';
+    }
+  }catch(e){}
+  applyThermal();
+});
+
+/* ── History tabs ────────────────────────────────────────────────────── */
+function switchHistTab(tab){
+  ['runs','ceiling','playbooks'].forEach(t=>{
+    const panel=document.getElementById('hpanel-'+t);
+    const btn=document.getElementById('htab-'+t);
+    if(panel) panel.style.display=t===tab?'block':'none';
+    if(btn){
+      btn.style.background=t===tab?'var(--s1)':'transparent';
+      btn.style.color=t===tab?'var(--hi)':'var(--mid)';
+      btn.style.boxShadow=t===tab?'0 1px 3px rgba(0,0,0,.1)':'none';
+    }
+  });
+}
+
+/* ── History diff ────────────────────────────────────────────────────── */
+let histSel=[];
+function toggleHistSel(row){
+  const cb=row.querySelector('input[type=checkbox]');
+  const idx=histSel.indexOf(row);
+  if(idx>=0){histSel.splice(idx,1);cb.checked=false;row.style.background='';}
+  else if(histSel.length<2){histSel.push(row);cb.checked=true;row.style.background='var(--s2)';}
+  const btn=document.getElementById('diffBtn');
+  if(btn){btn.disabled=histSel.length!==2;btn.textContent=histSel.length===2?'Compare selected (2)':'Compare selected ('+histSel.length+')';}
+}
+function showDiff(){
+  const d=document.getElementById('diffView');
+  if(d) d.style.display=d.style.display==='none'?'block':'none';
+}
+
+/* ── Ceiling probe ────────────────────────────────────────────────────── */
+function launchCeiling(){
+  if(!confirm('This will intentionally drive your service past its SLA to find its ceiling. Confirm you are targeting a pre-prod environment.')) return;
+  alert('Ceiling probe queued. Track progress on the Active Run page.');
+  go('active');
+}
+
+/* ── Thermal latency encoding ─────────────────────────────────────────── */
+// Returns an inline style string (color only) for a p99 ms value relative to SLA
+function thermal(ms, sla){
+  sla = sla || 200;
+  if(ms > sla)              return 'color:var(--err)';
+  if(ms > sla * 0.8)        return 'color:var(--fire)';
+  if(ms > sla * 0.5)        return 'color:var(--warn)';
+  return 'color:var(--ok)';
+}
+// Apply thermal colors to all elements with data-thermal="<ms>" at DOM ready
+function applyThermal(){
+  document.querySelectorAll('[data-thermal]').forEach(el=>{
+    const ms=parseInt(el.dataset.thermal,10);
+    const sla=parseInt(el.dataset.sla||'200',10);
+    el.setAttribute('style',(el.getAttribute('style')||'')+';'+thermal(ms,sla));
+  });
+}
+
+/* ── Preflight ────────────────────────────────────────────────────────── */
+const PF_CHECKS=[
+  {id:'pf1', label:'Target reachable',  cmd:'crucible preflight --check target',      desc:'GET /actuator/health → 200 OK'},
+  {id:'pf2', label:'Protected paths',   cmd:'crucible preflight --check guard',       desc:'SLA and load profile are Policy memory, unwritable'},
+  {id:'pf3', label:'Metrics endpoint',  cmd:'crucible preflight --check metrics',     desc:'GET /actuator/prometheus or /actuator/metrics'},
+  {id:'pf4', label:'Deploy pipeline',   cmd:'crucible preflight --check deploy',      desc:'perftest_sandbox branch · write access confirmed'},
+  {id:'pf5', label:'Version endpoint',  cmd:'crucible preflight --check version',     desc:'Read-back property for deploy verification ladder'},
+  {id:'pf6', label:'Environment kind',  cmd:'crucible preflight --check env',         desc:'Environment declared non-production'},
+  {id:'pf7', label:'Manual overrides',  cmd:'crucible preflight --check overrides',   desc:'Any manual step will be flagged on the manifest'},
+];
+let pfRunning=false;
+function runPreflight(applyProbe){
+  if(pfRunning) return;
+  if(applyProbe&&!confirm('Apply-probe will perform a real deploy and revert — the target service will restart once. Confirm you are on pre-prod.')) return;
+  pfRunning=true;
+  const rows=document.querySelectorAll('.pf-row');
+  rows.forEach(r=>{
+    r.querySelector('.pf-status').textContent='…';
+    r.querySelector('.pf-status').style.color='var(--mid)';
+  });
+  rows.forEach((r,i)=>{
+    setTimeout(()=>{
+      const st=r.querySelector('.pf-status');
+      st.textContent='✓ Pass';
+      st.style.color='var(--ok)';
+      if(i===rows.length-1){
+        pfRunning=false;
+        const summary=document.getElementById('pfSummary');
+        if(summary){
+          summary.style.display='block';
+          summary.textContent=applyProbe
+            ? '✓ All 7 checks passed · Apply probe complete — target restarted and reverted successfully. Ready to launch.'
+            : '✓ All 7 checks passed. Run preflight --apply-probe for a full end-to-end deploy + revert test.';
+          summary.style.color='var(--ok)';
+        }
+      }
+    }, 600*(i+1));
+  });
+}
+
+/* ── Chat pane ───────────────────────────────────────────────────────── */
+function collapseChat(){document.getElementById('chatPane').classList.add('collapsed');}
+function expandChat(){document.getElementById('chatPane').classList.remove('collapsed');document.getElementById('collapsedBadge').style.display='none';setTimeout(()=>document.getElementById('chatInput').focus(),200);}
+function addChatMsg(from,html){
+  const msgs=document.getElementById('chatMessages');
+  const div=document.createElement('div');
+  div.className='chat-msg '+from;
+  div.innerHTML=from==='ai'
+    ?`<div class="msg-av">🔥</div><div class="msg-bubble-ai">${html}</div>`
+    :`<div class="msg-bubble-user">${html}</div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop=msgs.scrollHeight;
+  if(from==='ai'&&document.getElementById('chatPane').classList.contains('collapsed')){
+    const b=document.getElementById('collapsedBadge');
+    b.style.display='flex';
+  }
+}
+function showTyping(){
+  const msgs=document.getElementById('chatMessages');
+  const d=document.createElement('div');d.className='chat-msg ai';d.id='typing-ind';
+  d.innerHTML='<div class="msg-av">🔥</div><div class="msg-bubble-ai"><div class="typing-dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div></div>';
+  msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;return d;
+}
+function sendChat(){
+  const inp=document.getElementById('chatInput');
+  const text=inp.value.trim();if(!text)return;
+  addChatMsg('user',text);inp.value='';
+  document.getElementById('chatQuick').style.display='none';
+  const t=showTyping();
+  const lc=text.toLowerCase();
+  let reply='Based on what I can see right now, the connection pool is the bottleneck. Happy to dig into any specific signal.';
+  if(lc.includes('why 20')||lc.includes('not 10')||lc.includes('why pool=20')) reply='Pool utilisation at 50 users peaks at ~22 active connections based on the wait distribution. 10 would help but still queue at burst. 20 gives safe headroom to ~200 users without further changes — and the min/max bounds in Guardrails allow up to 50, so this is well within policy.';
+  else if(lc.includes('evidence')||lc.includes('proof')) reply='<strong>Pool</strong>: 43 threads waiting, 2/2 active (100% saturated), max acquire wait 2406 ms.<br><strong>GC</strong>: 4% overhead — healthy.<br><strong>CPU</strong>: 28% at peak load — healthy.<br><strong>Network</strong>: box-to-box RTT 0.3 ms.<br>Only the pool is saturated.';
+  else if(lc.includes('scenario')||lc.includes('users')) reply='I\'d start with a steady-state scenario at your normal load (50 users, 300s), then add a 2× burst (100 users, 180s). That covers normal operation and a traffic spike without running for hours.';
+  else if(lc.includes('sla')||lc.includes('goal')) reply='Your current goal translates to: p99 ceiling 200 ms, error budget 1.0%, noise threshold 5%. Does that match what you\'d accept in production?';
+  setTimeout(()=>{t.remove();addChatMsg('ai',reply);},900+Math.random()*400);
+}
+function chatAsk(q){addChatMsg('user',q);const t=showTyping();const replies={'Why pool=20 and not pool=10?':'Pool utilisation at 50 users peaks at ~22 active connections. 10 would still queue at burst. 20 gives headroom to ~200 users and stays within the allowed bound of 50.','Show me the full evidence':'<strong>Pool saturation</strong>: 43 waiters, 2406 ms max acquire.<br><strong>GC</strong>: 4% — healthy.<br><strong>CPU</strong>: 28% — healthy.<br><strong>Network RTT</strong>: 0.3 ms.<br>The pool is the only thing saturated.'};setTimeout(()=>{t.remove();addChatMsg('ai',replies[q]||'Great question — let me look into that for this run.');document.getElementById('chatQuick').style.display='none';},900);}
+function chatApprove(){addChatMsg('user','Approve the change');const t=showTyping();setTimeout(()=>{t.remove();doApprove();},700);}
+function chatReject(){addChatMsg('user','Reject');const t=showTyping();setTimeout(()=>{t.remove();doReject();},700);}
+
+/* ── Resize handle ───────────────────────────────────────────────────── */
+(function(){
+  const handle=document.getElementById('resizeHandle');
+  const pane=document.getElementById('chatPane');
+  let dragging=false,startX=0,startW=0;
+  handle.addEventListener('mousedown',e=>{
+    dragging=true;startX=e.clientX;startW=pane.offsetWidth;
+    handle.classList.add('dragging');e.preventDefault();
+  });
+  document.addEventListener('mousemove',e=>{
+    if(!dragging)return;
+    const dx=startX-e.clientX;
+    const nw=Math.max(40,Math.min(520,startW+dx));
+    pane.style.width=nw+'px';
+    pane.style.transition='none';
+    if(nw<=60) pane.classList.add('collapsed');
+    else pane.classList.remove('collapsed');
+  });
+  document.addEventListener('mouseup',()=>{dragging=false;handle.classList.remove('dragging');pane.style.transition='';});
+  // Touch support
+  handle.addEventListener('touchstart',e=>{const t=e.touches[0];dragging=true;startX=t.clientX;startW=pane.offsetWidth;},{ passive:true});
+  document.addEventListener('touchmove',e=>{if(!dragging)return;const t=e.touches[0];const dx=startX-t.clientX;const nw=Math.max(40,Math.min(520,startW+dx));pane.style.width=nw+'px';if(nw<=60)pane.classList.add('collapsed');else pane.classList.remove('collapsed');},{passive:true});
+  document.addEventListener('touchend',()=>{dragging=false;});
+})();
+</script>

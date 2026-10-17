@@ -1607,6 +1607,18 @@ async def perf_client():
     return _CLIENT.read_text(encoding="utf-8")
 
 
+_DASHBOARD = Path(__file__).parent / "client" / "crucible-ui.html"
+
+
+@router.get("/dashboard", response_class=HTMLResponse)
+@router.get("/dashboard/", response_class=HTMLResponse)
+async def dashboard():
+    """The Crucible SPA — design-quality campaign UI served as one static file."""
+    if not _DASHBOARD.exists():
+        raise HTTPException(500, "dashboard client missing")
+    return _DASHBOARD.read_text(encoding="utf-8")
+
+
 __all__ = [
     "GROUPS",
     "SCREENS",
