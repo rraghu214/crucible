@@ -119,7 +119,11 @@ def cmd_init(state_dir: str | None = None, sla_path: str = "config/slo.yaml") ->
 # ---------------------------------------------------------------------------
 
 
-def cmd_plan(profile_name: str = "spring-boot", sla_path: str = "config/slo.yaml") -> int:
+def cmd_plan(
+    profile_name: str = "spring-boot",
+    sla_path: str = "config/slo.yaml",
+    workspace: str | None = None,
+) -> int:
     """Show what a campaign would do. Reads config; changes nothing.
 
     The output is deliberately exhaustive about *authority*: which properties may
@@ -191,6 +195,19 @@ def cmd_plan(profile_name: str = "spring-boot", sla_path: str = "config/slo.yaml
     print(f"  manual      : {restart.manual}")
     print(f"  command     : {' '.join(restart.command) if restart.command else '(none)'}")
     print(f"  health url  : {restart.health_url or '(unset)'}")
+
+    print(_rule("workspace"))
+    if workspace is None:
+        print("  (not supplied — pass --workspace <path> to verify config_file exists)")
+    else:
+        config_path = Path(workspace) / profile.config_file
+        if config_path.exists():
+            print(f"  workspace   : {workspace}")
+            print(f"  config_file : {profile.config_file}  ✓ found")
+        else:
+            print(f"  workspace   : {workspace}")
+            print(f"  config_file : {profile.config_file}  MISSING — run will fail on first apply")
+
     return OK
 
 

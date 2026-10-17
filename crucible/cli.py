@@ -40,7 +40,8 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--state-dir", default=None)
     init.add_argument("--sla", default="config/slo.yaml")
 
-    with_common(sub.add_parser("plan", help="show what a campaign would do; changes nothing"))
+    plan = with_common(sub.add_parser("plan", help="show what a campaign would do; changes nothing"))
+    plan.add_argument("--workspace", default=None, help="path to the target repo checkout; if given, verifies config_file exists")
 
     preflight = with_common(
         sub.add_parser("preflight", help="exercise the target once, end to end")
@@ -324,7 +325,7 @@ def main() -> int:
     if args.command == "init":
         return commands.cmd_init(state_dir=args.state_dir, sla_path=args.sla)
     if args.command == "plan":
-        return commands.cmd_plan(profile_name=args.profile, sla_path=args.sla)
+        return commands.cmd_plan(profile_name=args.profile, sla_path=args.sla, workspace=args.workspace)
     if args.command == "preflight":
         return commands.cmd_preflight(
             profile_name=args.profile,
