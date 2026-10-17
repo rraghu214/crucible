@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -962,6 +963,9 @@ def build_campaign(
     from .campaign import Campaign
     from .diagnosis import Diagnoser
     from .runner import Scenario
+
+    if not run_id:
+        run_id = time.strftime("run-%Y%m%d-%H%M%S", time.gmtime())
 
     profile = TargetProfile.named(profile_name)
     sla = Sla.load(sla_path)
