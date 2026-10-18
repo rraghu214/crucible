@@ -1415,30 +1415,18 @@ scenarios:
   <!-- Tab: Experiment Runs -->
   <div id="hpanel-runs">
   <div class="grid4" style="margin-bottom:14px;">
-    <div class="kpi"><div class="kpi-label">Total runs</div><div class="kpi-val">12</div></div>
-    <div class="kpi"><div class="kpi-label">Improved</div><div class="kpi-val ok">7</div><div class="kpi-meta">58%</div></div>
-    <div class="kpi"><div class="kpi-label">Best gain</div><div class="kpi-val fire">95.2%</div><div class="kpi-meta">TR-003</div></div>
+    <div class="kpi"><div class="kpi-label">Total runs</div><div class="kpi-val" id="hist-kpi-total">—</div></div>
+    <div class="kpi"><div class="kpi-label">Improved</div><div class="kpi-val ok" id="hist-kpi-improved">—</div><div class="kpi-meta" id="hist-kpi-improved-pct"></div></div>
+    <div class="kpi"><div class="kpi-label">Best gain</div><div class="kpi-val fire" id="hist-kpi-best-gain">—</div><div class="kpi-meta" id="hist-kpi-best-run"></div></div>
     <div class="kpi"><div class="kpi-label">Playbooks</div><div class="kpi-val">3</div><div class="kpi-meta">2 global</div></div>
   </div>
   <div class="card" style="margin-bottom:12px;">
     <div class="card-h"><div class="card-title">All Test Runs</div><div class="card-sub">Click rows to select for comparison (max 2)</div></div>
     <div class="tbl-wrap"><table>
-      <tr><th></th><th>Run</th><th>Date</th><th>Service</th><th>Endpoint</th><th>Mode</th><th>Status</th><th>Baseline p99</th><th>Final p99</th><th>Δ</th></tr>
-      <tr onclick="toggleHistSel(this)" style="cursor:pointer;">
-        <td><input type="checkbox" onclick="event.stopPropagation();toggleHistSel(this.closest('tr'))"></td>
-        <td class="hi">TR-003</td><td>22 Oct</td><td>PerfLab</td><td class="mono">/transfer</td><td>Semi-Auto</td>
-        <td><span class="pill ok">IMPROVED</span></td><td class="mono" data-thermal="1206">1206 ms</td><td class="mono" data-thermal="58">58 ms</td><td class="mono" style="color:var(--ok);">-95%</td>
-      </tr>
-      <tr onclick="toggleHistSel(this)" style="cursor:pointer;">
-        <td><input type="checkbox" onclick="event.stopPropagation();toggleHistSel(this.closest('tr'))"></td>
-        <td class="hi">TR-002</td><td>21 Oct</td><td>PerfLab</td><td class="mono">/transfer</td><td>Semi-Auto</td>
-        <td><span class="pill err">REVERTED</span></td><td class="mono" data-thermal="1206">1206 ms</td><td class="mono" data-thermal="892">892 ms</td><td class="mono" style="color:var(--err);">-26%</td>
-      </tr>
-      <tr onclick="toggleHistSel(this)" style="cursor:pointer;">
-        <td><input type="checkbox" onclick="event.stopPropagation();toggleHistSel(this.closest('tr'))"></td>
-        <td class="hi">TR-001</td><td>20 Oct</td><td>PerfLab</td><td class="mono">/transfer</td><td>Advisory</td>
-        <td><span class="pill idle">BASELINE</span></td><td class="mono" data-thermal="1206">1206 ms</td><td class="mono">—</td><td>—</td>
-      </tr>
+      <tr><th></th><th>Run</th><th>Date</th><th>Service</th><th>Endpoint</th><th>Status</th><th>Baseline p99</th><th>Final p99</th><th>Δ</th></tr>
+      <tbody id="hist-tbody">
+      <tr><td colspan="9" style="text-align:center;color:var(--lo);padding:18px;">Loading…</td></tr>
+      </tbody>
     </table></div>
   </div>
   <div id="diffView" style="display:none;" class="card">
@@ -1610,6 +1598,7 @@ function go(p){
   });
 
   if(p==='active') setTimeout(initActiveCharts,80);
+  if(p==='history') loadHistory();
   window.scrollTo(0,0);
   currentPage=p;
   const ctx=document.getElementById('chatContextBar');
@@ -1820,6 +1809,68 @@ function switchHistTab(tab){
       btn.style.boxShadow=t===tab?'0 1px 3px rgba(0,0,0,.1)':'none';
     }
   });
+}
+
+/* ── History: live data from /v1/perf/screens/17 ─────────────────────── */
+const OUTCOME_PILL={
+  'CHANGE_KEPT':   ['ok',  'IMPROVED'],
+  'NO_CHANGE_KEPT':['idle','NO CHANGE'],
+  'NOTHING_TO_FIX':['idle','BASELINE MET'],
+  'REVERTED':      ['err', 'REVERTED'],
+};
+let _histLoaded=false;
+async function loadHistory(){
+  // Only re-fetch if the page hasn't loaded yet, or force a refresh.
+  const tbody=document.getElementById('hist-tbody');
+  if(!tbody) return;
+  try{
+    const res=await fetch('/v1/perf/screens/17');
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data=await res.json();
+    const dm=(data.surface||{}).dataModel||{};
+    const rows=(dm.v_9||[]).slice().reverse(); // newest first
+    if(!rows.length){tbody.innerHTML='<tr><td colspan="9" style="text-align:center;color:var(--lo);padding:18px;">No campaigns on record yet.</td></tr>';return;}
+    // KPI
+    const improved=rows.filter(r=>r.outcome==='CHANGE_KEPT');
+    const pct=rows.length?Math.round(improved.length/rows.length*100):0;
+    const bestRow=improved.reduce((best,r)=>{
+      const v=parseFloat(r['p99 after']);
+      return(!best||v<parseFloat(best['p99 after']||'9999'))?r:best;
+    },null);
+    const el=id=>document.getElementById(id);
+    if(el('hist-kpi-total')) el('hist-kpi-total').textContent=rows.length;
+    if(el('hist-kpi-improved')){el('hist-kpi-improved').textContent=improved.length;el('hist-kpi-improved-pct').textContent=pct+'%';}
+    if(bestRow&&el('hist-kpi-best-gain')){
+      const p99=parseFloat(bestRow['p99 after']);
+      el('hist-kpi-best-gain').textContent=p99+' ms';
+      el('hist-kpi-best-run').textContent=bestRow.run;
+    }
+    // Table
+    const sparkline=(dm.v_6||[]).slice().reverse();
+    tbody.innerHTML=rows.map((r,i)=>{
+      const[cls,label]=OUTCOME_PILL[r.outcome]||['idle',r.outcome||'—'];
+      const p99After=r['p99 after']&&r['p99 after']!=='--'?r['p99 after']+' ms':'—';
+      const baseP99=sparkline[i]?sparkline[i]+' ms':'—';
+      const _d=new Date((r.date||'').replace(' UTC','Z').replace(' ','T'));
+      const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const dateShort=isNaN(_d.getTime())?r.date:`${_d.getUTCDate()} ${MONTHS[_d.getUTCMonth()]} ${String(_d.getUTCHours()).padStart(2,'0')}:${String(_d.getUTCMinutes()).padStart(2,'0')}`;
+      const env=(r.environment||'').replace('oracle-ashburn-','').replace('boxa','Box A');
+      return `<tr onclick="toggleHistSel(this)" style="cursor:pointer;">
+        <td><input type="checkbox" onclick="event.stopPropagation();toggleHistSel(this.closest('tr'))"></td>
+        <td class="hi" style="font-family:var(--f-mono);font-size:12px;">${r.run}</td>
+        <td>${dateShort}</td>
+        <td>PerfLab</td>
+        <td class="mono">/api/db</td>
+        <td><span class="pill ${cls}">${label}</span></td>
+        <td class="mono">${baseP99}</td>
+        <td class="mono">${p99After}</td>
+        <td>—</td>
+      </tr>`;
+    }).join('');
+    _histLoaded=true;
+  }catch(e){
+    if(tbody) tbody.innerHTML='<tr><td colspan="9" style="text-align:center;color:var(--lo);padding:18px;">Could not load history: '+e.message+'</td></tr>';
+  }
 }
 
 /* ── History diff ────────────────────────────────────────────────────── */
