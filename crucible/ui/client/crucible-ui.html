@@ -1086,10 +1086,50 @@ scenarios:
 
 <!-- ══ ACTIVE ══ -->
 <section class="pg" id="pg-active">
+
+  <!-- LIVE CAMPAIGN OVERLAY — hidden until a real campaign is detected -->
+  <div id="active-live-overlay" style="display:none;margin-bottom:16px;">
+    <div class="card" style="border:1px solid var(--ok);background:var(--ok-d);">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <span class="pill running" style="animation:pulse 1.5s infinite;">● LIVE</span>
+        <span id="live-run-id" style="font-family:var(--f-mono);font-size:13px;font-weight:700;color:var(--hi);"></span>
+        <span id="live-status-text" style="font-size:12px;color:var(--mid);"></span>
+        <span id="live-elapsed" style="font-size:12px;color:var(--lo);margin-left:auto;"></span>
+        <button class="btn btn-ghost btn-sm" onclick="confirmPause()">⏸ Pause</button>
+        <button class="btn btn-err btn-sm" onclick="confirmAbort()">■ Abort</button>
+      </div>
+    </div>
+    <!-- Real approval gate — shown when server reports needs_approval -->
+    <div id="active-real-gate" style="display:none;" class="approval-gate">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <span style="font-size:18px;">⚠️</span>
+        <span style="font-family:var(--f-head);font-size:14px;font-weight:700;color:var(--warn);">AI Proposes a Change — Your Approval Needed</span>
+      </div>
+      <div id="live-approval-body"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;margin-top:10px;">
+        <div style="display:flex;flex-direction:column;align-items:flex-start;">
+          <button class="btn btn-ok" onclick="doApprove()">✓ Approve</button>
+          <div class="cli-twin" id="live-approve-cli">crucible approve …</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-start;">
+          <button class="btn btn-err" onclick="doReject()">✕ Reject</button>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="expandChat()">💬 Ask AI first</button>
+      </div>
+    </div>
+    <!-- Manual step banner -->
+    <div id="active-manual-banner" style="display:none;margin-top:8px;padding:10px 14px;border-radius:var(--rs);background:var(--warn-d);color:var(--warn);font-size:12px;font-weight:600;border:1px solid var(--warn);"></div>
+    <!-- Job log -->
+    <div id="active-log-card" class="card" style="display:none;margin-top:8px;">
+      <div class="card-h"><div class="card-title" id="active-log-title">Campaign log</div><button class="btn btn-ghost btn-sm" onclick="pollActiveCampaign()">↺</button></div>
+      <pre id="active-log-pre" style="font-family:var(--f-mono);font-size:10px;line-height:1.4;overflow-x:auto;white-space:pre-wrap;max-height:200px;overflow-y:auto;background:var(--s2);padding:10px;border-radius:var(--rs);color:var(--mid);margin-top:6px;"></pre>
+    </div>
+  </div>
+  <!-- Demo header (always shown; live overlay prepends above) -->
   <div class="ph">
-    <div class="ph-left"><div class="ph-eyebrow">Live</div><div class="ph-title">TR-004</div><div class="ph-sub">steady_50u · Trial 3/5 · 14m 32s elapsed · Semi-Automated</div></div>
+    <div class="ph-left"><div class="ph-eyebrow">Live</div><div class="ph-title" id="active-demo-title">TR-004</div><div class="ph-sub">steady_50u · Trial 3/5 · 14m 32s elapsed · Semi-Automated</div></div>
     <div class="ph-actions">
-      <span class="pill running">RUNNING</span>
+      <span class="pill running" id="active-demo-pill">RUNNING</span>
       <div style="display:flex;flex-direction:column;align-items:center;">
         <button class="btn btn-ghost btn-sm" onclick="confirmPause()">⏸ Pause</button>
         <div class="cli-twin">crucible pause TR-004</div>
@@ -1179,21 +1219,48 @@ scenarios:
 
 <!-- ══ RESULTS ══ -->
 <section class="pg" id="pg-results">
-  <div class="ph">
-    <div class="ph-left"><div class="ph-eyebrow">Test Run</div><div class="ph-title">TR-003 · Connection Pool Fix</div><div class="ph-sub">PerfLab · /transfer · Semi-Automated · 22 Oct 2026</div></div>
-    <div class="ph-actions"><span class="pill ok">IMPROVED</span><button class="btn btn-ghost btn-sm">Export PDF</button><button class="btn btn-ghost btn-sm" onclick="showYamlExport()">Export YAML</button></div>
+  <!-- Live results header — replaced by real data when available -->
+  <div class="ph" id="results-ph">
+    <div class="ph-left"><div class="ph-eyebrow">Test Run</div><div class="ph-title" id="results-title">TR-003 · Connection Pool Fix</div><div class="ph-sub" id="results-sub">PerfLab · /transfer · Semi-Automated · 22 Oct 2026</div></div>
+    <div class="ph-actions">
+      <span class="pill ok" id="results-outcome-pill">IMPROVED</span>
+      <button class="btn btn-ghost btn-sm" onclick="loadResults('latest')">↺ Latest run</button>
+      <button class="btn btn-ghost btn-sm" id="results-run-picker-btn" style="display:none;" onclick="toggleRunPicker()">▼ Pick run</button>
+    </div>
   </div>
-  <div class="grid3" style="margin-bottom:14px;">
-    <div class="kpi"><div class="kpi-label">Baseline p99</div><div class="kpi-val" data-thermal="1206">1206 ms</div><div class="kpi-meta">pool=2</div></div>
-    <div class="kpi"><div class="kpi-label">Final p99</div><div class="kpi-val" data-thermal="58">58 ms</div><div class="kpi-meta">pool=20</div></div>
-    <div class="kpi"><div class="kpi-label">Improvement</div><div class="kpi-val fire">95.2%</div><div class="kpi-meta">SLA: &lt;200 ms ✓</div></div>
+  <div id="results-run-picker" style="display:none;" class="card" style="margin-bottom:8px;">
+    <div class="card-h"><div class="card-title">Select run</div></div>
+    <div id="results-run-list"></div>
   </div>
-  <div class="card">
+  <!-- KPI strip -->
+  <div class="grid3" style="margin-bottom:14px;" id="results-kpi-strip">
+    <div class="kpi"><div class="kpi-label">Baseline p99</div><div class="kpi-val" id="res-p99-before" data-thermal="1206">1206 ms</div><div class="kpi-meta" id="res-p99-before-note">pool=2</div></div>
+    <div class="kpi"><div class="kpi-label">Final p99</div><div class="kpi-val" id="res-p99-after" data-thermal="58">58 ms</div><div class="kpi-meta" id="res-p99-after-note">pool=20</div></div>
+    <div class="kpi"><div class="kpi-label">Improvement</div><div class="kpi-val fire" id="res-improvement">95.2%</div><div class="kpi-meta" id="res-sla-note">SLA: &lt;200 ms ✓</div></div>
+  </div>
+  <!-- Before / After chart (real data) -->
+  <div class="card" style="margin-bottom:14px;" id="results-chart-card">
+    <div class="card-h"><div class="card-title">Before → After</div></div>
+    <div style="max-width:480px;margin:0 auto;padding:8px 0;">
+      <canvas id="chartBeforeAfter" height="160"></canvas>
+    </div>
+  </div>
+  <!-- Experiments table (live or demo) -->
+  <div class="card" id="results-exp-card">
     <div class="card-h"><div class="card-title">Trials</div></div>
-    <div class="trial-row" onclick="toggleTrial('t1')"><div class="tr-num">T1</div><div class="tr-name">Baseline — pool=2</div><div style="flex:1;"></div><span class="tr-verdict fire">BASELINE</span><div style="font-family:var(--f-mono);font-size:13px;margin-left:10px;">1206 ms</div><div class="tr-chevron" id="tc-t1">›</div></div>
-    <div class="trial-detail" id="td-t1"><div class="detail-grid"><div><div class="dg-key">p99</div><div class="dg-val fire">1206 ms</div></div><div><div class="dg-key">p50</div><div class="dg-val">420 ms</div></div><div><div class="dg-key">RPS</div><div class="dg-val">32.1</div></div><div><div class="dg-key">Pool active</div><div class="dg-val fire">2/2</div></div><div><div class="dg-key">Pending</div><div class="dg-val fire">43</div></div><div><div class="dg-key">Duration</div><div class="dg-val">300s</div></div></div><div style="font-size:12px;color:var(--mid);">Pool saturation: 43 waiters, 2406 ms max acquire. GC overhead 4%. CPU 28%.</div></div>
-    <div class="trial-row" onclick="toggleTrial('t2')"><div class="tr-num">T2</div><div class="tr-name">pool=20 applied</div><div style="flex:1;"></div><span class="tr-verdict ok">KEPT</span><div style="font-family:var(--f-mono);font-size:13px;color:var(--ok);margin-left:10px;">58 ms</div><div class="tr-chevron" id="tc-t2">›</div></div>
-    <div class="trial-detail" id="td-t2"><div class="detail-grid"><div><div class="dg-key">p99</div><div class="dg-val ok">58 ms</div></div><div><div class="dg-key">p50</div><div class="dg-val">21 ms</div></div><div><div class="dg-key">RPS</div><div class="dg-val">49.8</div></div><div><div class="dg-key">Pool active</div><div class="dg-val ok">4/20</div></div><div><div class="dg-key">Pending</div><div class="dg-val ok">0</div></div><div><div class="dg-key">Duration</div><div class="dg-val">300s</div></div></div><div style="font-size:12px;color:var(--mid);">SLA met. Pool contention resolved. Headroom confirmed to 200 users.</div></div>
+    <div id="results-trials-live" style="display:none;"></div>
+    <div id="results-trials-demo">
+      <div class="trial-row" onclick="toggleTrial('t1')"><div class="tr-num">T1</div><div class="tr-name">Baseline — pool=2</div><div style="flex:1;"></div><span class="tr-verdict fire">BASELINE</span><div style="font-family:var(--f-mono);font-size:13px;margin-left:10px;">1206 ms</div><div class="tr-chevron" id="tc-t1">›</div></div>
+      <div class="trial-detail" id="td-t1"><div class="detail-grid"><div><div class="dg-key">p99</div><div class="dg-val fire">1206 ms</div></div><div><div class="dg-key">p50</div><div class="dg-val">420 ms</div></div><div><div class="dg-key">RPS</div><div class="dg-val">32.1</div></div><div><div class="dg-key">Pool active</div><div class="dg-val fire">2/2</div></div><div><div class="dg-key">Pending</div><div class="dg-val fire">43</div></div><div><div class="dg-key">Duration</div><div class="dg-val">300s</div></div></div><div style="font-size:12px;color:var(--mid);">Pool saturation: 43 waiters, 2406 ms max acquire. GC overhead 4%. CPU 28%.</div></div>
+      <div class="trial-row" onclick="toggleTrial('t2')"><div class="tr-num">T2</div><div class="tr-name">pool=20 applied</div><div style="flex:1;"></div><span class="tr-verdict ok">KEPT</span><div style="font-family:var(--f-mono);font-size:13px;color:var(--ok);margin-left:10px;">58 ms</div><div class="tr-chevron" id="tc-t2">›</div></div>
+      <div class="trial-detail" id="td-t2"><div class="detail-grid"><div><div class="dg-key">p99</div><div class="dg-val ok">58 ms</div></div><div><div class="dg-key">p50</div><div class="dg-val">21 ms</div></div><div><div class="dg-key">RPS</div><div class="dg-val">49.8</div></div><div><div class="dg-key">Pool active</div><div class="dg-val ok">4/20</div></div><div><div class="dg-key">Pending</div><div class="dg-val ok">0</div></div><div><div class="dg-key">Duration</div><div class="dg-val">300s</div></div></div><div style="font-size:12px;color:var(--mid);">SLA met. Pool contention resolved. Headroom confirmed to 200 users.</div></div>
+    </div>
+  </div>
+  <!-- Headline + limits (live) -->
+  <div class="card" id="results-headline-card" style="display:none;">
+    <div class="card-h"><div class="card-title">Findings</div></div>
+    <div id="results-headline-text" style="font-size:13px;color:var(--mid);margin-bottom:8px;"></div>
+    <div id="results-limits-text" style="font-size:12px;color:var(--lo);white-space:pre-line;"></div>
   </div>
 </section>
 
@@ -1660,7 +1727,8 @@ function go(p){
     if(oc.includes("'"+p+"'")) el.classList.add('on');
   });
 
-  if(p==='active') setTimeout(initActiveCharts,80);
+  if(p==='active'){ setTimeout(initActiveCharts,80); startActivePoll(); } else { stopActivePoll(); }
+  if(p==='results') loadResults('latest');
   if(p==='history') loadHistory();
   if(p==='jobs') loadJobs();
   window.scrollTo(0,0);
@@ -2349,6 +2417,261 @@ function updateJobsBadge(jobs){
 }
 // Poll running jobs every 10s to refresh badge
 setInterval(updateJobsBadge,10000);
+
+/* ── Active tab live polling ─────────────────────────────────────────── */
+let _activePollTimer=null;
+
+function startActivePoll(){
+  if(_activePollTimer) return;
+  pollActiveCampaign();
+  _activePollTimer=setInterval(pollActiveCampaign,5000);
+}
+function stopActivePoll(){
+  if(_activePollTimer){clearInterval(_activePollTimer);_activePollTimer=null;}
+}
+
+async function pollActiveCampaign(){
+  let data;
+  try{
+    const r=await fetch('/v1/perf/campaign/active',{headers:getAuthHeaders()});
+    if(!r.ok) return;
+    data=await r.json();
+  }catch(e){return;}
+  renderLiveActive(data);
+}
+
+async function renderLiveActive(data){
+  const overlay=document.getElementById('active-live-overlay');
+  const demoTitle=document.getElementById('active-demo-title');
+
+  if(!data.active){
+    // No real campaign — show demo view, hide live overlay
+    if(overlay) overlay.style.display='none';
+    if(demoTitle) demoTitle.style.display='';
+    return;
+  }
+
+  // Real campaign running — show live overlay, hide demo title
+  if(overlay) overlay.style.display='';
+  if(demoTitle) demoTitle.style.display='none';
+
+  // Update run id state so approve/abort use the real id
+  _activeRunId=data.run_id||_activeRunId;
+
+  // Header fields
+  const elRunId=document.getElementById('live-run-id');
+  const elStatus=document.getElementById('live-status-text');
+  const elElapsed=document.getElementById('live-elapsed');
+  if(elRunId) elRunId.textContent=data.run_id||'';
+  if(elStatus) elStatus.textContent=data.status||'';
+  if(elElapsed && data.elapsed_s!=null){
+    const m=Math.floor(data.elapsed_s/60), s=Math.floor(data.elapsed_s%60);
+    elElapsed.textContent=m+'m '+String(s).padStart(2,'0')+'s elapsed';
+  }
+
+  // Approval gate
+  const gate=document.getElementById('active-real-gate');
+  const body=document.getElementById('live-approval-body');
+  const approvals=data.approvals||[];
+  if(approvals.length>0 && gate && body){
+    gate.style.display='';
+    const ap=approvals[0];
+    const rows=Object.entries(ap.params||{}).map(([k,v])=>
+      `<div style="display:flex;gap:10px;font-size:12px;margin:3px 0;">
+         <span style="color:var(--lo);min-width:120px;">${k}</span>
+         <span style="color:var(--mid);">→</span>
+         <span style="font-weight:600;color:var(--fg);">${v}</span>
+       </div>`).join('');
+    body.innerHTML=`
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">
+        Exp ${ap.experiment||''} · ${ap.cause_family||''} · confidence ${ap.confidence||''}
+      </div>
+      <div style="font-size:12px;color:var(--mid);margin-bottom:8px;">${ap.summary||''}</div>
+      ${rows}
+      <div style="font-size:11px;color:var(--lo);margin-top:6px;">Evidence: ${(ap.evidence_cited||[]).join(', ')||'—'}</div>`;
+  } else if(gate){
+    gate.style.display='none';
+    if(body) body.innerHTML='';
+  }
+
+  // Job log
+  const logCard=document.getElementById('active-log-card');
+  const logPre=document.getElementById('active-log-pre');
+  const logTitle=document.getElementById('active-log-title');
+  if(data.job && logCard && logPre){
+    logCard.style.display='';
+    if(logTitle) logTitle.textContent='Job '+data.job.id;
+    try{
+      const lr=await fetch('/v1/perf/jobs/'+data.job.id+'/output?tail=80');
+      if(lr.ok){const ld=await lr.json();logPre.textContent=(ld.lines||[]).join('\n');logPre.scrollTop=logPre.scrollHeight;}
+    }catch(e){}
+  }
+
+  // Manual steps banner
+  const steps=data.manual_steps||[];
+  const banner=document.getElementById('active-manual-banner');
+  if(banner){
+    if(steps.length>0){
+      banner.textContent='Manual step required: '+steps[0];
+      banner.style.display='';
+    } else {
+      banner.style.display='none';
+    }
+  }
+}
+
+/* ── Results tab ─────────────────────────────────────────────────────── */
+let _resultsChart=null;
+
+async function loadResults(runId){
+  runId=runId||'latest';
+  let report;
+  try{
+    const r=await fetch('/v1/perf/runs/'+runId+'/report');
+    if(!r.ok){
+      // Fall back gracefully — keep the demo data visible
+      return;
+    }
+    report=await r.json();
+  }catch(e){return;}
+
+  // Header
+  const title=document.getElementById('results-title');
+  const sub=document.getElementById('results-sub');
+  const pill=document.getElementById('results-outcome-pill');
+  if(title) title.textContent=(report.run_id||runId)+' · '+(report.headline||'');
+  if(sub){
+    const m=report.measurement||{};
+    const note=[];
+    if(m.p99_ms&&m.p99_ms.before) note.push('before '+Math.round(m.p99_ms.before)+' ms');
+    if(m.p99_ms&&m.p99_ms.after) note.push('after '+Math.round(m.p99_ms.after)+' ms');
+    sub.textContent=note.join(' → ');
+  }
+  if(pill){
+    const out=(report.outcome||'').toUpperCase();
+    pill.textContent=out||'—';
+    pill.className='pill '+(out==='IMPROVED'?'ok':out==='REVERTED'?'err':'idle');
+  }
+
+  // KPI strip
+  const m=report.measurement||{};
+  const elBefore=document.getElementById('res-p99-before');
+  const elAfter=document.getElementById('res-p99-after');
+  const elImp=document.getElementById('res-improvement');
+  const elSla=document.getElementById('res-sla-note');
+  if(elBefore && m.p99_ms) elBefore.textContent=m.p99_ms.before!=null?Math.round(m.p99_ms.before)+' ms':'—';
+  if(elAfter && m.p99_ms) elAfter.textContent=m.p99_ms.after!=null?Math.round(m.p99_ms.after)+' ms':'—';
+  if(elImp && m.p99_ms && m.p99_ms.before && m.p99_ms.after){
+    const pct=((m.p99_ms.before-m.p99_ms.after)/m.p99_ms.before*100).toFixed(1);
+    elImp.textContent=pct+'%';
+  }
+  if(elSla) elSla.textContent=report.limits_of_this_result||'';
+
+  // Before / after chart
+  _renderBeforeAfterChart(m);
+
+  // Experiments table
+  const exps=report.experiments||[];
+  const liveTrials=document.getElementById('results-trials-live');
+  const demoTrials=document.getElementById('results-trials-demo');
+  if(exps.length>0 && liveTrials){
+    demoTrials && (demoTrials.style.display='none');
+    liveTrials.style.display='';
+    liveTrials.innerHTML=exps.map((ex,i)=>{
+      const verdict=(ex.verdict||'').toUpperCase();
+      const vc=verdict==='KEPT'?'ok':verdict==='REVERTED'?'err':verdict==='BASELINE'?'fire':'idle';
+      const p99=ex.p99_ms!=null?Math.round(ex.p99_ms)+' ms':'—';
+      return `<div class="trial-row" onclick="toggleTrial('lr${i}')">
+        <div class="tr-num">T${i+1}</div>
+        <div class="tr-name">${ex.label||ex.experiment_id||'Exp '+(i+1)}</div>
+        <div style="flex:1;"></div>
+        <span class="tr-verdict ${vc}">${verdict}</span>
+        <div style="font-family:var(--f-mono);font-size:13px;margin-left:10px;">${p99}</div>
+        <div class="tr-chevron" id="tc-lr${i}">›</div>
+      </div>
+      <div class="trial-detail" id="td-lr${i}" style="display:none;">
+        <div class="detail-grid">
+          <div><div class="dg-key">p99</div><div class="dg-val">${p99}</div></div>
+          ${ex.p50_ms!=null?`<div><div class="dg-key">p50</div><div class="dg-val">${Math.round(ex.p50_ms)} ms</div></div>`:''}
+          ${ex.rps!=null?`<div><div class="dg-key">RPS</div><div class="dg-val">${ex.rps.toFixed(1)}</div></div>`:''}
+          ${ex.error_rate_pct!=null?`<div><div class="dg-key">Errors</div><div class="dg-val">${ex.error_rate_pct.toFixed(2)}%</div></div>`:''}
+        </div>
+        ${ex.diagnosis||''}
+      </div>`;
+    }).join('');
+  }
+
+  // Headline + limits card
+  const hlCard=document.getElementById('results-headline-card');
+  const hlText=document.getElementById('results-headline-text');
+  const limText=document.getElementById('results-limits-text');
+  if(report.headline && hlCard){
+    hlCard.style.display='';
+    if(hlText) hlText.textContent=report.headline;
+    if(limText) limText.textContent=report.limits_of_this_result||'';
+  }
+
+  // Load run list for picker
+  _loadRunPicker();
+}
+
+function _renderBeforeAfterChart(m){
+  const canvas=document.getElementById('chartBeforeAfter');
+  if(!canvas) return;
+  const metrics=['p99_ms','p50_ms','p95_ms'];
+  const labels=metrics.filter(k=>m[k]&&(m[k].before||m[k].after)).map(k=>k.replace('_ms',' (ms)'));
+  const before=metrics.filter(k=>m[k]&&(m[k].before||m[k].after)).map(k=>m[k].before||0);
+  const after=metrics.filter(k=>m[k]&&(m[k].before||m[k].after)).map(k=>m[k].after||0);
+  if(labels.length===0) return;
+  const isDark=document.documentElement.getAttribute('data-theme')==='dark'
+    ||(!document.documentElement.getAttribute('data-theme')&&window.matchMedia('(prefers-color-scheme:dark)').matches);
+  const gridColor=isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.07)';
+  const tickColor=isDark?'#666':'#888';
+  if(_resultsChart){_resultsChart.destroy();_resultsChart=null;}
+  _resultsChart=new Chart(canvas,{
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        {label:'Before',data:before,backgroundColor:'rgba(239,68,68,0.7)',borderRadius:4},
+        {label:'After', data:after, backgroundColor:'rgba(34,197,94,0.7)',borderRadius:4}
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:true,
+      plugins:{legend:{position:'top',labels:{color:tickColor,font:{size:11}}}},
+      scales:{
+        x:{grid:{color:gridColor},ticks:{color:tickColor,font:{size:11}}},
+        y:{grid:{color:gridColor},ticks:{color:tickColor,font:{size:11}},beginAtZero:true}
+      }
+    }
+  });
+}
+
+async function _loadRunPicker(){
+  let runs=[];
+  try{
+    const r=await fetch('/v1/perf/runs');
+    if(r.ok){const d=await r.json();runs=d.runs||[];}
+  }catch(e){}
+  const btn=document.getElementById('results-run-picker-btn');
+  if(btn && runs.length>1) btn.style.display='';
+  const list=document.getElementById('results-run-list');
+  if(!list) return;
+  list.innerHTML=runs.map(r=>{
+    const p99=r.p99_before!=null?Math.round(r.p99_before)+' → '+(r.p99_after!=null?Math.round(r.p99_after)+' ms':'?'):'';
+    return `<div class="trial-row" onclick="loadResults('${r.run_id}');toggleRunPicker();" style="cursor:pointer;">
+      <div style="flex:1;font-size:13px;">${r.run_id}</div>
+      <span style="font-size:11px;color:var(--lo);">${r.started_at||''}</span>
+      <span style="font-size:11px;color:var(--mid);margin-left:8px;">${p99}</span>
+    </div>`;
+  }).join('');
+}
+
+function toggleRunPicker(){
+  const d=document.getElementById('results-run-picker');
+  if(d) d.style.display=d.style.display==='none'?'':'none';
+}
 
 /* ── Resize handle ───────────────────────────────────────────────────── */
 (function(){

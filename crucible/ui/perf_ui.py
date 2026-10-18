@@ -1882,6 +1882,83 @@ async def perf_job_output(job_id: str, request: Request):
     return read_output(j)
 
 
+@router.get("/v1/perf/campaign/active")
+async def perf_active_campaign(request: Request):
+    """Return live campaign summary with pending approval details — polled by the UI every few seconds."""
+    from ..perf.approval import pending_approvals, pending_manual_steps
+    from ..perf.campaign import abort_requested
+
+    ctx = _context(request)
+    active = _active_runs(ctx)
+    if not active:
+        # surface the latest job that is still RUNNING so the UI can track it
+        running_jobs = [j for j in list_jobs(ctx.state, limit=20) if j.status == "RUNNING"]
+        return {"active": False, "running_job": _job_dict(running_jobs[0]) if running_jobs else None}
+
+    run = active[0]
+    run_id = str(run.get("run_id", ""))
+    elapsed = time.time() - float(run.get("since_epoch_s") or time.time())
+    approvals = pending_approvals(ctx.state, run_id)
+    manual = pending_manual_steps(ctx.state, run_id)
+    aborting = abort_requested(ctx.state, run_id)
+    status = "aborting" if aborting else ("needs_approval" if approvals else ("manual_step" if manual else "running"))
+
+    # find the running job for log tailing
+    running_jobs = [j for j in list_jobs(ctx.state, limit=20) if j.status == "RUNNING"]
+    job = next((j for j in running_jobs if run_id in j.label), running_jobs[0] if running_jobs else None)
+
+    return {
+        "active": True,
+        "run_id": run_id,
+        "elapsed_s": round(elapsed),
+        "branch": run.get("branch"),
+        "status": status,
+        "approvals": approvals,
+        "manual_steps": manual,
+        "job": _job_dict(job) if job else None,
+    }
+
+
+@router.get("/v1/perf/runs")
+async def perf_list_runs(request: Request):
+    """List completed campaign runs, newest first."""
+    from ..perf.report import final_measurement, summarise_outcome
+
+    ctx = _context(request)
+    campaigns, _ = _campaigns(ctx)
+    rows = []
+    for c in reversed(campaigns):
+        m = final_measurement(c)
+        p99 = m.get("p99_ms") or {}
+        rows.append({
+            "run_id": c.get("run_id"),
+            "started_at": c.get("started_at_epoch_s"),
+            "outcome": summarise_outcome(c),
+            "p99_before": p99.get("before"),
+            "p99_after": p99.get("after"),
+        })
+    return {"runs": rows}
+
+
+@router.get("/v1/perf/runs/{run_id}/report")
+async def perf_run_report(run_id: str, request: Request):
+    """Return a full campaign report as JSON."""
+    from ..perf.commands import _harness_sha
+    from ..perf.report import build_report
+
+    ctx = _context(request)
+    campaigns, _ = _campaigns(ctx)
+    # allow 'latest' as a shorthand
+    if run_id == "latest":
+        campaign = campaigns[-1] if campaigns else None
+    else:
+        campaign = next((c for c in campaigns if c.get("run_id") == run_id), None)
+    if campaign is None:
+        raise HTTPException(404, f"no campaign {run_id!r}")
+    report = build_report(campaign, harness_sha=_harness_sha())
+    return report.as_dict()
+
+
 @router.get("/v1/perf/campaign/{run_id}/state")
 async def perf_campaign_state(run_id: str, request: Request):
     """Return the current state of a campaign: active, pending approvals, lock."""
