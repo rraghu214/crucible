@@ -106,9 +106,9 @@ curl -s http://127.0.0.1:8113/v1/perf/runs/latest/report \
 # Windows laptop — keep this terminal open throughout
 ssh -i "C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-1\ssh-key-2026-09-12.key" `
     -L 9113:127.0.0.1:8113 `
-    -L 8089:127.0.0.1:8089 `
     ubuntu@150.136.143.227
-# 9113 = SPA demo UI  |  8089 = Locust web UI (open during active campaign)
+# 9113 = SPA demo UI
+# Note: Crucible runs Locust with --headless; no Locust web UI on port 8089.
 ```
 
 Open **http://localhost:9113/dashboard**, then:
@@ -408,19 +408,22 @@ in CI works identically."
 
 ---
 
-## Step 10 — Locust web UI: live load view (1 min) [LIVE during campaign]
-
-> Only available while a real campaign is running. Skip if demo mode.
-
-Open **http://localhost:8089** (tunnel from §0.8).
+## Step 10 — Load generator: headless Locust (1 min) [EXPLAIN]
 
 **Say:**
-"Locust's own web UI — RPS, failure rate, p99 distribution, worker count —
-live during the load generation window. This is the client-side view. Crucible
-reads metrics from Actuator and Datadog on the server side. Client and server
-measure different things: Locust sees what left the load generator, Actuator
-sees what the JVM processed. Both are useful for diagnosis; the verdict uses
-server-side metrics, not Locust's numbers."
+"Crucible drives Locust headless — no browser UI, no web port open. The load
+generator is a subprocess: Crucible spawns it with `--headless`, waits for the
+measurement window, then reads the CSV it writes on exit.
+
+This is intentional. A web UI means Locust holds an extra thread and HTTP
+server, which contends with the load generator on a single OCPU. Crucible
+owns the measurement; Locust is just a subprocess that sends requests and
+writes numbers to disk.
+
+The metrics you care about come from the server side — Actuator's
+`hikaricp.connections.pending`, `http.server.requests` p99 — not from Locust's
+client-side latency. Client and server measure different things: Locust sees
+what left the load generator, Actuator sees what the JVM processed."
 
 ---
 
@@ -646,7 +649,7 @@ Nothing is claimed that wasn't measured."
 | Active tab — live campaign | **LIVE** | Polls `GET /v1/perf/campaign/active` every 5 s; real run-id, status, elapsed, approval gate, job log |
 | Active tab — no campaign | **DEMO** | TR-004 pre-loaded; approval animates locally |
 | Results tab | **LIVE** | Fetches `GET /v1/perf/runs/latest/report`; Chart.js Before/After chart + real experiment table |
-| Locust web UI (8089) | **LIVE** | During active campaign only; SSH tunnel `-L 8089:127.0.0.1:8089` |
+| Locust | **N/A** | Crucible runs Locust `--headless`; no web UI, no port 8089 |
 | Datadog dashboard | **LIVE** | app.datadoghq.com — real metrics from Box A during/after run |
 | Chat with Live AI OFF | **SCRIPTED** | Keyword-matched, instant, no network |
 | Active demo charts | **SCRIPTED** | Pre-loaded TR-004 p99/RPS data |
@@ -669,6 +672,5 @@ Nothing is claimed that wasn't measured."
 | Active tab not showing live overlay | Check `curl 127.0.0.1:8113/v1/perf/campaign/active` on Box B — campaign state file may not be created yet |
 | Results tab showing TR-003 demo data | No completed run yet — check `curl .../v1/perf/runs`; run a campaign first |
 | Results chart absent | Chart.js CDN blocked — reload; KPI strip still shows numbers |
-| Locust UI (8089) not loading | Locust not running or tunnel not open; skip this step |
 | RAG doc not indexed (empty memory.faiss) | Run `§0.5` curl command on Box B before continuing |
 | Gemini embedding fails (GLC v5 Render) | Check that `GEMINI_API_KEY` is set in Render env vars; embedder falls back gracefully |
