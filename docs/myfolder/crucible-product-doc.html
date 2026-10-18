@@ -1,0 +1,639 @@
+<!doctype html>
+<title>Crucible — Autonomous Performance Engineer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#faf9f7; --s1:#ffffff; --s2:#f3f1ed; --s3:#e8e4de;
+  --bd:rgba(0,0,0,0.08); --bd2:rgba(0,0,0,0.15);
+  --hi:#1a1714; --mid:#6b5d4f; --lo:#a89880;
+  --fire:#c94d1a; --fire-d:rgba(201,77,26,0.09);
+  --ok:#1a7a5c; --ok-d:rgba(26,122,92,0.09);
+  --blue:#1a5fa8; --blue-d:rgba(26,95,168,0.09);
+  --warn:#a06010; --warn-d:rgba(160,96,16,0.09);
+  --f-head:'Playfair Display',Georgia,serif;
+  --f-body:'Inter',ui-sans-serif,sans-serif;
+  --f-mono:'JetBrains Mono',ui-monospace,monospace;
+  --r:10px; --gutter:max(20px,env(safe-area-inset-left,0px));
+  color-scheme:light;
+}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e0d0b;--s1:#161410;--s2:#1e1c18;--s3:#272420;
+  --bd:rgba(255,255,255,0.07);--bd2:rgba(255,255,255,0.14);
+  --hi:#f0ebe3;--mid:#9e8e7a;--lo:#5a4e40;
+  --fire:#e06030;--fire-d:rgba(224,96,48,0.12);
+  --ok:#2aaa78;--ok-d:rgba(42,170,120,0.11);
+  --blue:#4a8fd4;--blue-d:rgba(74,143,212,0.11);
+  --warn:#d08020;--warn-d:rgba(208,128,32,0.11);
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{--bg:#0e0d0b;--s1:#161410;--s2:#1e1c18;--s3:#272420;--bd:rgba(255,255,255,0.07);--bd2:rgba(255,255,255,0.14);--hi:#f0ebe3;--mid:#9e8e7a;--lo:#5a4e40;--fire:#e06030;--fire-d:rgba(224,96,48,0.12);--ok:#2aaa78;--ok-d:rgba(42,170,120,0.11);--blue:#4a8fd4;--blue-d:rgba(74,143,212,0.11);--warn:#d08020;--warn-d:rgba(208,128,32,0.11);color-scheme:dark;}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{background:var(--bg);color:var(--hi);font-family:var(--f-body);font-size:15px;line-height:1.7;padding-left:var(--gutter);padding-right:max(20px,env(safe-area-inset-right,0px));padding-block:env(safe-area-inset-top,0px) env(safe-area-inset-bottom,0px);}
+a{color:var(--blue);text-decoration:none;}a:hover{text-decoration:underline;}
+img{max-width:100%;}
+
+/* ── Layout ── */
+.wrap{max-width:860px;margin:0 auto;padding:48px 0 80px;}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+@media(max-width:600px){.two-col{grid-template-columns:1fr;}}
+.three-col{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+@media(max-width:640px){.three-col{grid-template-columns:1fr;}}
+
+/* ── Hero ── */
+.hero{padding:56px 0 48px;border-bottom:1px solid var(--bd);margin-bottom:48px;}
+.hero-eyebrow{font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--fire);margin-bottom:14px;}
+.hero-title{font-family:var(--f-head);font-size:clamp(32px,6vw,52px);line-height:1.08;font-weight:800;letter-spacing:-.02em;margin-bottom:20px;}
+.hero-title em{font-style:italic;color:var(--fire);}
+.hero-sub{font-size:17px;color:var(--mid);max-width:600px;line-height:1.65;}
+.hero-badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:24px;}
+.badge{font-size:11px;font-weight:600;letter-spacing:.06em;padding:4px 10px;border-radius:20px;border:1px solid var(--bd2);}
+.badge-fire{background:var(--fire-d);color:var(--fire);border-color:rgba(201,77,26,.2);}
+.badge-ok{background:var(--ok-d);color:var(--ok);border-color:rgba(26,122,92,.2);}
+.badge-blue{background:var(--blue-d);color:var(--blue);border-color:rgba(26,95,168,.2);}
+
+/* ── Sections ── */
+.section{margin-bottom:56px;}
+.section-label{font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--fire);margin-bottom:10px;}
+.section-title{font-family:var(--f-head);font-size:clamp(22px,4vw,30px);font-weight:700;letter-spacing:-.02em;margin-bottom:18px;text-wrap:balance;}
+.section-body{color:var(--mid);font-size:15px;}
+
+/* ── Cards ── */
+.card{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:22px 24px;min-width:0;}
+.card-title{font-weight:600;font-size:14px;margin-bottom:6px;}
+.card-body{font-size:13px;color:var(--mid);line-height:1.6;}
+.card-tag{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;}
+
+/* ── NFR table ── */
+.nfr-table{width:100%;border-collapse:collapse;font-size:13px;min-width:0;}
+.nfr-table th{text-align:left;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--lo);padding:8px 12px;border-bottom:1px solid var(--bd);}
+.nfr-table td{padding:10px 12px;border-bottom:1px solid var(--bd);vertical-align:top;}
+.nfr-table tr:last-child td{border-bottom:none;}
+.nfr-table td:first-child{font-weight:600;white-space:nowrap;color:var(--hi);}
+.tbl-wrap{overflow-x:auto;}
+
+/* ── Code / mono ── */
+code{font-family:var(--f-mono);font-size:12px;background:var(--s2);padding:1px 5px;border-radius:4px;color:var(--fire);}
+.code-block{background:var(--s2);border:1px solid var(--bd);border-radius:var(--r);padding:16px 18px;font-family:var(--f-mono);font-size:12px;overflow-x:auto;line-height:1.7;white-space:pre;}
+
+/* ── Arch diagram ── */
+.arch{background:var(--s2);border:1px solid var(--bd);border-radius:var(--r);padding:28px;margin:20px 0;}
+.arch-row{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+.arch-row:last-child{margin-bottom:0;}
+.arch-box{background:var(--s1);border:1px solid var(--bd2);border-radius:8px;padding:10px 16px;font-size:13px;font-weight:500;white-space:nowrap;}
+.arch-box.fire{border-color:rgba(201,77,26,.35);background:var(--fire-d);color:var(--fire);font-weight:600;}
+.arch-box.ok{border-color:rgba(26,122,92,.35);background:var(--ok-d);color:var(--ok);font-weight:600;}
+.arch-box.blue{border-color:rgba(26,95,168,.35);background:var(--blue-d);color:var(--blue);font-weight:600;}
+.arch-arrow{color:var(--lo);font-size:18px;flex-shrink:0;}
+.arch-note{font-size:11px;color:var(--lo);margin-top:4px;}
+
+/* ── Memory taxonomy ── */
+.mem-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;}
+.mem-card{background:var(--s1);border:1px solid var(--bd);border-radius:8px;padding:14px 16px;}
+.mem-kind{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px;}
+.mem-desc{font-size:12px;color:var(--mid);line-height:1.55;}
+.mem-who{font-size:10px;margin-top:6px;font-weight:600;}
+
+/* ── Demo steps ── */
+.steps{counter-reset:step;}
+.step{display:flex;gap:16px;margin-bottom:24px;counter-increment:step;}
+.step-num{width:28px;height:28px;min-width:28px;border-radius:50%;background:var(--fire-d);border:1px solid rgba(201,77,26,.3);color:var(--fire);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:2px;}
+.step-body{flex:1;min-width:0;}
+.step-title{font-weight:600;font-size:14px;margin-bottom:4px;}
+.step-desc{font-size:13px;color:var(--mid);line-height:1.6;}
+.step-cli{font-family:var(--f-mono);font-size:11px;background:var(--s2);padding:6px 10px;border-radius:6px;border:1px solid var(--bd);margin-top:8px;display:inline-block;}
+.step-tag{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:4px;margin-left:8px;}
+.tag-live{background:var(--ok-d);color:var(--ok);}
+.tag-demo{background:var(--warn-d);color:var(--warn);}
+.tag-explain{background:var(--blue-d);color:var(--blue);}
+
+/* ── Concept pill ── */
+.concept{font-size:11px;font-weight:600;background:var(--blue-d);color:var(--blue);padding:2px 8px;border-radius:4px;margin:2px;display:inline-block;}
+
+/* ── ToC ── */
+.toc{background:var(--s2);border:1px solid var(--bd);border-radius:var(--r);padding:20px 24px;margin-bottom:40px;}
+.toc-title{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--lo);margin-bottom:12px;}
+.toc ol{padding-left:18px;display:grid;grid-template-columns:1fr 1fr;gap:2px 24px;}
+@media(max-width:500px){.toc ol{grid-template-columns:1fr;}}
+.toc li{font-size:13px;padding:2px 0;}
+.toc a{color:var(--mid);}
+
+/* ── Quote ── */
+blockquote{border-left:3px solid var(--fire);padding:12px 16px;background:var(--fire-d);border-radius:0 8px 8px 0;margin:16px 0;font-size:14px;color:var(--hi);font-style:italic;}
+
+/* ── Principle list ── */
+.principles{list-style:none;padding:0;}
+.principles li{padding:12px 0;border-bottom:1px solid var(--bd);display:flex;gap:14px;font-size:14px;}
+.principles li:last-child{border-bottom:none;}
+.prin-num{font-family:var(--f-head);font-size:22px;font-weight:700;color:var(--fire);width:28px;flex-shrink:0;line-height:1.2;}
+.prin-body strong{display:block;font-size:14px;margin-bottom:2px;}
+.prin-body span{color:var(--mid);font-size:13px;}
+</style>
+
+<div class="wrap">
+
+  <!-- ── Hero ── -->
+  <div class="hero">
+    <div class="hero-eyebrow">Capstone Project · EAG V3</div>
+    <h1 class="hero-title">Crucible:<br><em>Autonomous Performance Engineer</em></h1>
+    <p class="hero-sub">An AI agent that runs its own load experiments, diagnoses bottlenecks from telemetry, proposes bounded configuration changes under human approval, and proves every claim with a fresh measurement — not an assertion.</p>
+    <div class="hero-badges">
+      <span class="badge badge-fire">Spring Boot · FastAPI</span>
+      <span class="badge badge-ok">Actuator · Prometheus · Datadog</span>
+      <span class="badge badge-blue">Locust · k6</span>
+      <span class="badge badge-fire">Gemini via GLC v5</span>
+      <span class="badge badge-ok">Oracle Cloud · Hetzner</span>
+    </div>
+  </div>
+
+  <!-- ── ToC ── -->
+  <div class="toc">
+    <div class="toc-title">Contents</div>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#architecture">Architecture</a></li>
+      <li><a href="#principles">Five Principles</a></li>
+      <li><a href="#capabilities">Key Capabilities</a></li>
+      <li><a href="#nfr">Non-Functional Requirements</a></li>
+      <li><a href="#memory">Memory Taxonomy</a></li>
+      <li><a href="#eval">Benchmarks &amp; Evaluation</a></li>
+      <li><a href="#concepts">Design Concepts</a></li>
+      <li><a href="#demo">Demo Flow</a></li>
+    </ol>
+  </div>
+
+  <!-- ── Problem ── -->
+  <div class="section" id="problem">
+    <div class="section-label">01 · The Problem</div>
+    <h2 class="section-title">Performance engineering is slow, expensive, and manual</h2>
+    <p class="section-body" style="margin-bottom:16px;">
+      When a service misses its SLA, an engineer must instrument it, run a load test, read metrics across tools with different units and update cadences, form a hypothesis, apply a change, re-test, and decide whether the improvement is real or noise. This loop takes hours even for an expert. It requires knowledge of at least three specialisms (load testing, observability, runtime internals) that are rarely combined in one person.
+    </p>
+    <p class="section-body" style="margin-bottom:20px;">
+      Commercial tools address slices of this. <strong>Akamas</strong> automates tuning but is optimisation-focused, not diagnosis-focused. <strong>Tricentis NeoLoad</strong> adds analysis to load testing but doesn't decide what to try next. <em>Nothing closes the full loop.</em>
+    </p>
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title" style="color:var(--fire);">Without Crucible</div>
+        <div class="card-body">
+          Manual load test → export CSV → open Grafana in another tab → form a guess → apply a change → wait for a restart → run another load test → compare numbers on paper. 2–4 hours. Requires 3 tool contexts held simultaneously.
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="color:var(--ok);">With Crucible</div>
+        <div class="card-body">
+          Point Crucible at a service. It instruments, loads, diagnoses, proposes a change with a full evidence dossier, waits for approval, applies, re-tests, and delivers a verdict. Engineer reviews at approval gates only — the loop is hours, not days.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Architecture ── -->
+  <div class="section" id="architecture">
+    <div class="section-label">02 · Architecture</div>
+    <h2 class="section-title">Three-box deployment, clean separation of concerns</h2>
+    <div class="arch">
+      <div class="arch-row">
+        <div class="arch-box ok">Box A · Oracle Cloud<br><small style="font-weight:400;font-size:11px;">PerfLab (Spring Boot 3.3, Postgres, Redis, Prometheus, Jaeger)</small></div>
+        <div class="arch-arrow">←</div>
+        <div class="arch-box">HTTP + Actuator / Prometheus scrape</div>
+      </div>
+      <div class="arch-row">
+        <div class="arch-box fire">Box B · Oracle Cloud<br><small style="font-weight:400;font-size:11px;">Crucible agent + Locust load generator</small></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box">git push → perftest_sandbox → post-receive hook builds &amp; restarts Box A</div>
+      </div>
+      <div class="arch-row">
+        <div class="arch-box blue">GLC v5 · Render<br><small style="font-weight:400;font-size:11px;">LLM gateway · Gemini free-tier keys in rotation</small></div>
+        <div class="arch-arrow">←</div>
+        <div class="arch-box">REST (diagnosis calls only) · pinned per campaign · no cross-provider failover</div>
+      </div>
+      <div class="arch-note" style="margin-top:12px;">Box A: target under test. Box B: load generator + agent. GLC v5 on Render: hosted gateway (cold-start charged to wall clock, never to a measured window).</div>
+    </div>
+    <div class="two-col" style="margin-top:16px;">
+      <div class="card">
+        <div class="card-tag" style="color:var(--ok);">Metrics</div>
+        <div class="card-title">Adapter breadth</div>
+        <div class="card-body">Actuator (one instance, pinned), Prometheus/PromQL (service-wide histograms), Datadog (via <code>micrometer-registry-datadog</code>). Unit conversion + gauge peak sampling in the collector — the model never sees a raw Micrometer tuple.</div>
+      </div>
+      <div class="card">
+        <div class="card-tag" style="color:var(--fire);">Deploy</div>
+        <div class="card-title">Sandbox-only writes</div>
+        <div class="card-body">Crucible commits one file, pushes to <code>perftest_sandbox</code> only. Force-push refused always. Base branch (<code>main</code>) is read once, to create the sandbox on first use, and never written. Protected branch patterns refused at profile load time.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Principles ── -->
+  <div class="section" id="principles">
+    <div class="section-label">03 · Design Principles</div>
+    <h2 class="section-title">Five rules that cannot be traded away</h2>
+    <ul class="principles">
+      <li>
+        <span class="prin-num">1</span>
+        <div class="prin-body"><strong>Nothing is claimed that was not measured.</strong><span>Verified and unverified experiments look different in the report. A prediction is a tracked signal, never a decision input.</span></div>
+      </li>
+      <li>
+        <span class="prin-num">2</span>
+        <div class="prin-body"><strong>The agent knows what it cannot see.</strong><span>Missing evidence is declared (<code>available_evidence</code> on every snapshot). "I looked and found nothing" is different from "I never looked."</span></div>
+      </li>
+      <li>
+        <span class="prin-num">3</span>
+        <div class="prin-body"><strong>The agent never grades itself.</strong><span>It cannot edit the SLA, the load profile, or the tests. Enforced twice — as a protected path in the guard and as a Policy memory kind with no write permission for the agent.</span></div>
+      </li>
+      <li>
+        <span class="prin-num">4</span>
+        <div class="prin-body"><strong>A human holds every irreversible action.</strong><span>Deploy, apply, and keep are gated on explicit operator approval. Approval parameters are bound — the exact diff approved is the exact diff deployed.</span></div>
+      </li>
+      <li>
+        <span class="prin-num">5</span>
+        <div class="prin-body"><strong>Understanding is scored separately from outcome.</strong><span>The LUCKY quadrant — wrong diagnosis, fix worked anyway — is invisible to outcome-only scoring. An agent right by accident fails the next similar fixture.</span></div>
+      </li>
+    </ul>
+  </div>
+
+  <!-- ── Capabilities ── -->
+  <div class="section" id="capabilities">
+    <div class="section-label">04 · Key Capabilities</div>
+    <h2 class="section-title">What Crucible actually does</h2>
+    <div class="three-col">
+      <div class="card">
+        <div class="card-tag" style="color:var(--fire);">Collect</div>
+        <div class="card-title">Telemetry + unit conversion</div>
+        <div class="card-body">Actuator, PromQL, Datadog. Micrometer timers converted from seconds to ms before the model sees them. Gauge peak sampled mid-run, never zero-padded. Unknown metrics declared, not dropped.</div>
+      </div>
+      <div class="card">
+        <div class="card-tag" style="color:var(--fire);">Diagnose</div>
+        <div class="card-title">Evidence-based hypothesis</div>
+        <div class="card-body">HikariCP saturation, GC pressure, thread exhaustion, slow queries, application code delays. Journal RAG filters disproven hypotheses. Cause family vocabulary per runtime profile.</div>
+      </div>
+      <div class="card">
+        <div class="card-tag" style="color:var(--ok);">Propose</div>
+        <div class="card-title">Bounded config change</div>
+        <div class="card-body">Property, new value, and allowed range from <code>profile.yaml</code>. A novel cause is permitted and recorded as novel — declared on the manifest, never silently normalised to a known family.</div>
+      </div>
+      <div class="card">
+        <div class="card-tag" style="color:var(--ok);">Verify</div>
+        <div class="card-title">Measured verdict, not predicted</div>
+        <div class="card-body">Applies the change, waits for the target to confirm the property is live (read-back from <code>/actuator/env</code>), runs a fresh measurement window. Verdict from observed p99, not from the model's estimate.</div>
+      </div>
+      <div class="card">
+        <div class="card-tag" style="color:var(--blue);">Guard</div>
+        <div class="card-title">Allowlist command runner</div>
+        <div class="card-body">Model-composed shell is refused. Approved parameters bound to a parked object — widening is impossible. Protected paths cover SLA, load profile, tests, packaging. Every refusal in Audit memory.</div>
+      </div>
+      <div class="card">
+        <div class="card-tag" style="color:var(--blue);">Score</div>
+        <div class="card-title">Off-loop, model-free scorer</div>
+        <div class="card-body">Reads manifests from disk. Six dimensions: outcome, diagnosis quality, integrity, comparability, efficiency, calibration. Rescoring without re-running. LUCKY quadrant surfaced separately.</div>
+      </div>
+    </div>
+
+    <div style="margin-top:24px;" class="card">
+      <div class="card-title">Three automation modes</div>
+      <div class="card-body" style="margin-bottom:14px;">The mode controls how many human gates exist in the loop. The underlying code path is identical in all three — only the gate configuration differs.</div>
+      <div class="tbl-wrap"><table class="nfr-table">
+        <tr><th>Mode</th><th>Gate at proposal</th><th>Gate at apply</th><th>Who decides</th></tr>
+        <tr><td>Advisory</td><td>Full stop — human reviews diagnosis + proposal</td><td>Human executes</td><td>Human leads, agent advises</td></tr>
+        <tr><td>Semi-Automated</td><td>Approve / reject the diff</td><td>Automated after approval</td><td>Human approves, agent executes</td></tr>
+        <tr><td>Fully Automated</td><td>None — bounded by policy</td><td>Automated</td><td>Agent decides within guardrail bounds</td></tr>
+      </table></div>
+      <div style="margin-top:12px;font-size:13px;color:var(--mid);">
+        Fully Automated mode is inspired by the idea of an AI scientist that can propose experiments, run them unattended, and iterate on evidence — as Andrej Karpathy has described for LLM-driven research pipelines. Crucible applies this to performance engineering: bounded by the property list in <code>profile.yaml</code>, every "experiment" is a real measurement, and every result is a manifest on disk, not a claim in memory.
+      </div>
+    </div>
+  </div>
+
+  <!-- ── NFR ── -->
+  <div class="section" id="nfr">
+    <div class="section-label">05 · Non-Functional Requirements</div>
+    <h2 class="section-title">What the system must never compromise</h2>
+    <div class="tbl-wrap">
+    <table class="nfr-table">
+      <tr><th>Category</th><th>Requirement</th><th>How enforced</th></tr>
+      <tr>
+        <td>Measurement integrity</td>
+        <td>No measurement begins until the target proves the change is live</td>
+        <td>Property read-back from <code>/actuator/env</code>; deploy timeout surfaces gap between "pushed" and "running"</td>
+      </tr>
+      <tr>
+        <td>Measurement integrity</td>
+        <td>Gauges are sampled during load, not after</td>
+        <td>Background sampler in collector; unsampled gauge is <code>null</code>, never <code>0</code></td>
+      </tr>
+      <tr>
+        <td>Measurement integrity</td>
+        <td>Unit conversion before the model sees any value</td>
+        <td>Collector converts Micrometer seconds → ms; every field name includes its unit</td>
+      </tr>
+      <tr>
+        <td>Safety</td>
+        <td>The agent cannot widen its own authority</td>
+        <td>SLA + load profile in Policy memory (operator-only write); protected path guard runs independently</td>
+      </tr>
+      <tr>
+        <td>Safety</td>
+        <td>No model output becomes a shell argument</td>
+        <td>Allowlist command runner; refspec (remote + branch) is configuration, never model output</td>
+      </tr>
+      <tr>
+        <td>Safety</td>
+        <td>Production targets refused</td>
+        <td>Environment <code>kind</code> field; campaign refuses to start against <code>production</code></td>
+      </tr>
+      <tr>
+        <td>Comparability</td>
+        <td>Results across different models are flagged unreliable</td>
+        <td>Every experiment records which model actually served it; report flags multi-model campaigns</td>
+      </tr>
+      <tr>
+        <td>Comparability</td>
+        <td>Environment differences are flagged before comparison</td>
+        <td>Campaign manifest records environment; diff command refuses cross-environment comparison</td>
+      </tr>
+      <tr>
+        <td>Reproducibility</td>
+        <td>Every snapshot carries <code>collector_version</code></td>
+        <td>Eval runner refuses snapshots from a mismatched collector version; names which need recapture</td>
+      </tr>
+      <tr>
+        <td>Credential safety</td>
+        <td>No secret appears in a model prompt or journal entry</td>
+        <td>Allowlist redaction on all <code>/actuator/env</code> output before snapshot is written</td>
+      </tr>
+      <tr>
+        <td>Cost discipline</td>
+        <td>Watchdog uses arithmetic, not model calls</td>
+        <td>Seven tripwires checked every 5 min with no LLM; model fires only on ambiguous trip (≈2× per long scenario)</td>
+      </tr>
+    </table>
+    </div>
+  </div>
+
+  <!-- ── Memory ── -->
+  <div class="section" id="memory">
+    <div class="section-label">06 · Memory Taxonomy</div>
+    <h2 class="section-title">Seven kinds of memory, each with a different lifetime and write authority</h2>
+    <p class="section-body" style="margin-bottom:20px;">The choice of memory kind is a security decision as much as an engineering one. Policy memory gives the SLA its teeth — an agent that can overwrite its own objective is not safe to run autonomously.</p>
+    <div class="mem-grid">
+      <div class="mem-card">
+        <div class="mem-kind" style="color:var(--mid);">Working</div>
+        <div class="mem-desc">Current hypothesis and in-flight snapshot. Dies with the run.</div>
+        <div class="mem-who" style="color:var(--lo);">Writer: runtime</div>
+      </div>
+      <div class="mem-card">
+        <div class="mem-kind" style="color:var(--blue);">Episode</div>
+        <div class="mem-desc">Experiment manifests and the full campaign journal. Append-only, survives crashes.</div>
+        <div class="mem-who" style="color:var(--lo);">Writer: runtime</div>
+      </div>
+      <div class="mem-card">
+        <div class="mem-kind" style="color:var(--ok);">Fact</div>
+        <div class="mem-desc">"Gateway quota is 120 rps", "this app resets by truncate+reseed". Agent writes on confirmation.</div>
+        <div class="mem-who" style="color:var(--lo);">Writer: agent (confirmed)</div>
+      </div>
+      <div class="mem-card">
+        <div class="mem-kind" style="color:var(--warn);">Playbook</div>
+        <div class="mem-desc">Cause signatures that worked. Service-scoped until a human promotes to global. Seeded into diagnosis context.</div>
+        <div class="mem-who" style="color:var(--lo);">Writer: agent, promoted by operator</div>
+      </div>
+      <div class="mem-card" style="border-color:rgba(201,77,26,.3);background:var(--fire-d);">
+        <div class="mem-kind" style="color:var(--fire);">Policy ⚠</div>
+        <div class="mem-desc">Allowed properties, protected paths, budget ceiling, <strong>the SLA</strong>. Agent has no write permission — ever.</div>
+        <div class="mem-who" style="color:var(--fire);">Writer: operator only</div>
+      </div>
+      <div class="mem-card">
+        <div class="mem-kind" style="color:var(--mid);">Audit</div>
+        <div class="mem-desc">Guard refusals, approvals, applies, reverts. Append-only, tamper-evident. Every human gate is recorded here.</div>
+        <div class="mem-who" style="color:var(--lo);">Writer: append-only (system)</div>
+      </div>
+      <div class="mem-card">
+        <div class="mem-kind" style="color:var(--blue);">Document chunk</div>
+        <div class="mem-desc">Architecture notes, runbooks, incident history. Embedded via Gemini embedding-001 at 768d, pinned per campaign.</div>
+        <div class="mem-who" style="color:var(--lo);">Writer: indexer</div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px;">
+      <div class="card-title">Two RAGs, different purposes</div>
+      <div class="card-body">
+        <strong>Journal RAG</strong> — past manifests, queried at diagnosis so the agent doesn't re-propose a disproven hypothesis. Structured field filter first (fast, free), vectors only for narrative matching — dense retrieval is weak on exact identifiers like <code>hikaricp.connections.pending</code>.<br><br>
+        <strong>Knowledge RAG</strong> — runbooks, architecture, incident notes. Prevents the agent blaming the application for an API-gateway throttle. Upload any document (architecture spec, post-mortem) and it becomes part of the diagnosis context.
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Eval ── -->
+  <div class="section" id="eval">
+    <div class="section-label">07 · Benchmarks &amp; Evaluation</div>
+    <h2 class="section-title">A benchmark is five things, none optional</h2>
+    <blockquote>Task + harness + policy + scorer + manifest. A result produced without all five tells you nothing about the agent — it tells you about the gap you left open.</blockquote>
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Replay vs Live split</div>
+        <div class="card-body">
+          <strong>Replay</strong>: diagnosis, refusal, confidence — ~2 s, $0.002. Run hundreds of times against captured fixtures.<br><br>
+          <strong>Live</strong>: apply + restart + re-measure + verdict — ~15 min. Reserved for the full loop.<br><br>
+          Fixtures captured once, properly: 120 s warmup discarded, 300 s measured. Every snapshot carries <code>collector_version</code> — a changed collector invalidates old fixtures, exactly as a changed embedder invalidates old vectors.
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Six scoring dimensions</div>
+        <div class="card-body">
+          <strong>Outcome</strong> — did p99 improve?<br>
+          <strong>Diagnosis quality</strong> — was the cause correctly identified?<br>
+          <strong>Integrity</strong> — were the measurement conditions sound?<br>
+          <strong>Comparability</strong> — same model, same environment?<br>
+          <strong>Efficiency</strong> — how many experiments to reach a verdict?<br>
+          <strong>Calibration</strong> — how close was the prediction to the measurement?<br><br>
+          Scorer calls no model. Reads manifests only. Rescore without re-running.
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px;">
+      <div class="card-title">34 draft test assertions across 8 groups · <code>docs/CRUCIBLE_TEST_ASSERTIONS.md</code></div>
+      <div class="card-body">
+        Measurement integrity · Collector correctness · Guard and safety · Approval binding · Deploy and verification · Diagnosis quality · Scorer · Watchdog.<br><br>
+        Every assertion is reviewed by the operator before it is committed — Claude Code drafts the reasoning, the operator decides whether it matches the actual failure mode it is testing for.
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Concepts ── -->
+  <div class="section" id="concepts">
+    <div class="section-label">08 · Under the Hood — Design Concepts</div>
+    <h2 class="section-title">The ideas that make this work</h2>
+    <div class="tbl-wrap">
+    <table class="nfr-table">
+      <tr><th>Crucible feature</th><th>Underlying idea</th></tr>
+      <tr>
+        <td>Campaign loop structure</td>
+        <td>Perception → Memory → Decision → Action. Collector is Perception; Journal RAG is Memory; Diagnosis is Decision; Applicator + Deploy is Action. Outcome earns the next piece of the graph — baseline must pass before experiments begin, diagnosis must pass before proposals are generated.</td>
+      </tr>
+      <tr>
+        <td>Collector cascade</td>
+        <td>Cheap first, escalate on failure. Try Actuator (no infra cost), fall back to PromQL (requires Prometheus), then Datadog. The same cost-discipline principle that governs model tier selection.</td>
+      </tr>
+      <tr>
+        <td>Journal RAG</td>
+        <td>Dense vector retrieval is weak on exact tokens. Journals are full of identifiers like <code>hikaricp.connections.pending</code> — filter on structured fields first, use vectors only for narrative. Embedder is pinned per campaign; corpus embedded under one model is incompatible with another, exactly as a changed collector invalidates snapshots.</td>
+      </tr>
+      <tr>
+        <td>HITL approval gate</td>
+        <td>A waiting node in the campaign graph. The proposal parks with its exact parameters. Approval resumes the node with those same parameters — widening is structurally impossible, not a policy hope.</td>
+      </tr>
+      <tr>
+        <td>Guard enforced twice</td>
+        <td>A single enforcement point can be bypassed if configuration moves. Two independent mechanisms — protected path in the file guard and Policy memory kind — must both be weakened independently for a violation to succeed. Defence in depth, not defence by hope.</td>
+      </tr>
+      <tr>
+        <td>SKILL.md grants no authority</td>
+        <td>Skills change how the model approaches work. They are rendered into the prompt and nowhere else — never into <code>allowed_side_effects</code>. A SKILL.md that says "you may raise pool size to 1000" has no effect; only the bounds in <code>profile.yaml</code> matter.</td>
+      </tr>
+      <tr>
+        <td>Scorer off-loop, no model</td>
+        <td>An LLM judge costs ~7× the work it grades. More importantly, an agent that grades itself has every incentive to be generous. The scorer reads manifests from disk — deterministic, cheap, and structurally unable to be influenced by the agent it is scoring.</td>
+      </tr>
+      <tr>
+        <td>Credential redaction allowlist</td>
+        <td>A blocklist that doesn't know a key name lets it through. An allowlist that doesn't know a key name blocks it. For secrets, the safe default is to redact the unknown, not pass it.</td>
+      </tr>
+      <tr>
+        <td>Watchdog arithmetic, not LLM</td>
+        <td>288 checks × $0.002 = $0.58 for a 24-hour scenario — more than the whole campaign budget. Arithmetic answers questions arithmetic can answer; a model call fires only when a tripwire trips ambiguously (≈2 times in a 24-hour run).</td>
+      </tr>
+    </table>
+    </div>
+  </div>
+
+  <!-- ── Demo Flow ── -->
+  <div class="section" id="demo">
+    <div class="section-label">09 · Demo Flow</div>
+    <h2 class="section-title">End-to-end walkthrough script</h2>
+
+    <div class="steps">
+
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Problem statement + architecture overview <span class="step-tag tag-explain">explain</span></div>
+          <div class="step-desc">Show the three-box diagram. Box A (Spring Boot on Oracle Cloud) is the target under test. Box B (Crucible + Locust) is the agent. GLC v5 on Render is the LLM gateway. Crucible uses Actuator, Prometheus, and Datadog for telemetry — three different adapter implementations, same interface.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Upload architecture doc → Knowledge RAG <span class="step-tag tag-live">live</span></div>
+          <div class="step-desc">Upload the architecture PDF. The system chunks it semantically (topic-boundary detection, not fixed-size splits) and embeds with Gemini embedding-001 at 768 dimensions into a FAISS index. This becomes the diagnosis context — the agent reads relevant sections when forming a hypothesis rather than having all docs in context at all times.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Onboarding chat — curated questions <span class="step-tag tag-live">live</span></div>
+          <div class="step-desc">Ask: "What SLA should I set for /api/db at 50 users?" — agent responds from the uploaded doc context. Ask: "What cause families does this runtime declare?" — agent reads from <code>config/profiles/spring-boot.yaml</code>. Show that the knowledge doc changes the answers.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <div class="step-title">Upload users.csv + POST body template <span class="step-tag tag-explain">explain</span></div>
+          <div class="step-desc">Show users.csv (not chunked/RAG — raw file). Show the Locust POST body template and how CSV columns map to variables. This drives realistic user behaviour instead of uniform synthetic load.</div>
+          <div class="step-cli">crucible run --scenario steady_50u --sla config/slo.yaml</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <div class="step-title">Guardrails + YAML inspection <span class="step-tag tag-live">live</span></div>
+          <div class="step-desc">Open Guardrails screen. Show the property list from <code>profile.yaml</code>: which properties the agent may change, and within what bounds. Show that the SLA is read-only (Policy memory). Show the sandbox branch rule. Explain: SKILL.md shapes how the agent reasons; <code>profile.yaml</code> is what grants actual authority — they are deliberately separate files.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">6</div>
+        <div class="step-body">
+          <div class="step-title">New Test Run + budget by mode <span class="step-tag tag-demo">demo script</span></div>
+          <div class="step-desc">Walk through the wizard. Switch between Advisory / Semi-Automated / Fully Automated modes and show how the budget estimate changes (more experiments = longer wall clock, not more money — foreground time, background cost). Toggle "add 2 more experiments" and show the time impact. Set a cap.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">7</div>
+        <div class="step-body">
+          <div class="step-title">Preflight <span class="step-tag tag-explain">explain</span></div>
+          <div class="step-desc">Explain that preflight exercises the full loop once before committing to a campaign: connects to the target, runs a tiny baseline, deploys a no-op change, confirms the target reports the new commit, reverts, confirms the revert is live. Every step that can fail in a real campaign is exercised here with minimal cost. These same verification steps run before every experiment.</div>
+          <div class="step-cli">crucible preflight --apply-probe</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">8</div>
+        <div class="step-body">
+          <div class="step-title">Active campaign — real-time logs + PDMA loop <span class="step-tag tag-live">live</span></div>
+          <div class="step-desc">Start a real campaign (pool=2 baseline → agent diagnoses pool saturation → proposes pool=20). Active tab streams the raw log. Show each PDMA phase: Perception (collector), Memory (journal RAG query), Decision (diagnosis + proposal), Action (apply + deploy). The approve button appears when the proposal is ready. Show the exact diff. Approve.</div>
+          <div class="step-cli">crucible approve &lt;run_id&gt; &lt;experiment_id&gt;</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">9</div>
+        <div class="step-body">
+          <div class="step-title">Datadog live metrics during the run <span class="step-tag tag-live">live</span></div>
+          <div class="step-desc">Switch to the Datadog tab. Show <code>perflab.http.requests.total</code>, HikariCP pool metrics, JVM GC. Note that Crucible also polls these via the Datadog adapter — the agent sees the same numbers the dashboard shows, not a copy in Prometheus. Mention: metrics also flow via Prometheus to Grafana as an alternative view.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">10</div>
+        <div class="step-body">
+          <div class="step-title">Results tab — outcome + calibration <span class="step-tag tag-live">live</span></div>
+          <div class="step-desc">Show the completed run. Baseline p99 (pool=2: ~1206 ms), final p99 (pool=20: ~58 ms), verdict CHANGE_KEPT. Show the agent's prediction vs measured — calibration score. Show that the experiment commit is recorded and the change is traceable to a specific SHA.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">11</div>
+        <div class="step-body">
+          <div class="step-title">History &amp; Diff — past runs + ceiling probe mention <span class="step-tag tag-live">live</span></div>
+          <div class="step-desc">History table now loads from the live API. Select two runs (advisory baseline + semi-auto improved run). Show the comparison. Mention ceiling probe: "what is the service actually capable of?" — a separate campaign type that escalates load until the SLA is first missed, reports a pair (last passing level, first failing level).</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">12</div>
+        <div class="step-body">
+          <div class="step-title">Benchmarks tab — harness depth <span class="step-tag tag-explain">explain</span></div>
+          <div class="step-desc">Show the 8 cause families × multiple providers fixture matrix. Explain replay vs live split: diagnosis runs against captured snapshots in ~2 s — hundreds of replay runs during development without ever touching a real service. Show the scoring grid: outcome alone is not enough; the LUCKY quadrant (wrong diagnosis, correct fix by accident) fails on a different fixture.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">13</div>
+        <div class="step-body">
+          <div class="step-title">Memory + backend files <span class="step-tag tag-explain">explain</span></div>
+          <div class="step-desc">Show the 7 memory kinds on screen or by opening the SQLite + FAISS files. Policy memory: operator-only, contains the SLA. Episode memory: the journal, append-only. Audit memory: every guard refusal, every approval. Fact memory: things the agent confirmed during a run ("this app resets by truncate+reseed"). Show the manifest JSON on disk — every result is a file, not a database row.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">14</div>
+        <div class="step-body">
+          <div class="step-title">CLI parity — every UI click has a command <span class="step-tag tag-explain">explain</span></div>
+          <div class="step-desc">Point out the "CLI twin" labels in the UI. Every action calls the same function as the CLI command. The UI is not a shortcut — it calls the same guard, the same approval binding, the same deploy logic. Crucible runs headless on a scheduled cron or from CI/CD without any UI at all.</div>
+          <div class="step-cli">crucible run | approve | abort | pause | resume | score | diff | bench</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div style="border-top:1px solid var(--bd);padding-top:24px;font-size:12px;color:var(--lo);text-align:center;">
+    Crucible · Capstone · EAG V3 · Raghu · <code>capstone/perf-agent</code> branch
+  </div>
+
+</div>

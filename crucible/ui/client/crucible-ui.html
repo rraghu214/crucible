@@ -1569,9 +1569,10 @@ const CHAT_CONTEXT={
   'preflight':'📍 Preflight — verifying target readiness',
   'active':'📍 Active: TR-004 · Approval pending',
   'results':'📍 Results: TR-003 — ask about findings',
-  'benchmarks':'📍 Benchmarks — ask about accuracy',
-  'guardrails':'📍 Guardrails — ask about any rule',
+  'benchmarks':'📍 Benchmarks — ask about accuracy and LUCKY quadrant',
+  'guardrails':'📍 Guardrails — ask about any rule or property bound',
   'library':'📍 Library — ask about a collection',
+  'history':'📍 History & Diff — ask about any run or compare two',
   'settings':'📍 Settings'
 };
 const ONBOARD_MSGS={
@@ -1645,11 +1646,39 @@ function wzGo(n){
 }
 
 /* ── Mode selector ───────────────────────────────────────────────────── */
+const BUDGET_BY_MODE={
+  'Advisory':{sub:'Advisory · human applies all changes · no deploy automation',trials:2,clock:'~2.5 h',calls:3,cost:'$0.006',note:'Wall clock is shorter — no automated deploy waits. Every change is applied manually by you after reviewing the diagnosis.'},
+  'Semi-Automated':{sub:'Semi-Automated · you approve each change, AI applies · max 8 trials',trials:4,clock:'~3.5 h',calls:8,cost:'$0.016',note:'Wall clock dominates — not model cost. Adding a third scenario adds ~40 min, not cents. Plan accordingly.'},
+  'Fully Automated':{sub:'Fully Automated · AI acts within guardrail bounds · up to 12 trials',trials:6,clock:'~5 h',calls:14,cost:'$0.028',note:'More trials possible — no approval wait between experiments. Bounded by property limits in profile.yaml. Campaign pauses only if a watchdog tripwire fires or the budget cap is hit.'},
+  'Ceiling Probe':{sub:'Ceiling Probe · characterises capacity · no config changes',trials:0,clock:'~1.5 h',calls:2,cost:'$0.004',note:'No experiments — load escalates in steps until the SLA breaks. Reports the last passing level and the first failing level as a pair.'},
+};
+function updateBudgetForMode(name){
+  const m=BUDGET_BY_MODE[name]||BUDGET_BY_MODE['Semi-Automated'];
+  const sub=document.querySelector('#wp-3 .card-sub');
+  if(sub) sub.textContent=m.sub;
+  const rows=document.querySelectorAll('.budget-table tr');
+  if(rows.length>=2){
+    const tot=rows[rows.length-1];
+    const cells=tot.querySelectorAll('td');
+    if(cells.length>=5){cells[1].textContent='Max '+m.trials+' trials';cells[2].textContent=m.clock;cells[3].textContent='~'+m.calls+' calls';cells[4].textContent='~'+m.cost;}
+  }
+  const noteEl=document.querySelector('#wp-3 .card > div[style*="font-size:12px"]');
+  if(noteEl) noteEl.textContent='💡 '+m.note;
+  if(!document.getElementById('chatPane').classList.contains('collapsed')){
+    const tip=name==='Advisory'?'No GitHub connection needed — you apply every change manually after reviewing the diagnosis.':
+              name==='Fully Automated'?'Make sure the property bounds in <code>profile.yaml</code> are set before starting — the agent won\'t ask for approval between experiments.':
+              name==='Ceiling Probe'?'No config changes are made — the probe escalates load in steps and stops at the first level that breaks your SLA.':
+              'You\'ll get an approval prompt for each proposed change before it deploys.';
+    addChatMsg('ai','Switched to <strong>'+name+'</strong>. Estimated wall clock: <strong>'+m.clock+'</strong>. '+tip);
+  }
+}
 function selMode(el,type){
   document.querySelectorAll('.mode-card').forEach(c=>c.classList.remove('on'));
   el.classList.add('on');
   const cfg=document.getElementById('ceilingCfg');
   if(cfg) cfg.classList.toggle('show', type==='ceiling');
+  const name=el.querySelector('.mode-card-name')?.textContent||'';
+  updateBudgetForMode(name);
 }
 
 /* ── Scenarios ───────────────────────────────────────────────────────── */
@@ -1983,11 +2012,61 @@ function sendChat(){
   document.getElementById('chatQuick').style.display='none';
   const t=showTyping();
   const lc=text.toLowerCase();
-  let reply='Based on what I can see right now, the connection pool is the bottleneck. Happy to dig into any specific signal.';
-  if(lc.includes('why 20')||lc.includes('not 10')||lc.includes('why pool=20')) reply='Pool utilisation at 50 users peaks at ~22 active connections based on the wait distribution. 10 would help but still queue at burst. 20 gives safe headroom to ~200 users without further changes — and the min/max bounds in Guardrails allow up to 50, so this is well within policy.';
-  else if(lc.includes('evidence')||lc.includes('proof')) reply='<strong>Pool</strong>: 43 threads waiting, 2/2 active (100% saturated), max acquire wait 2406 ms.<br><strong>GC</strong>: 4% overhead — healthy.<br><strong>CPU</strong>: 28% at peak load — healthy.<br><strong>Network</strong>: box-to-box RTT 0.3 ms.<br>Only the pool is saturated.';
-  else if(lc.includes('scenario')||lc.includes('users')) reply='I\'d start with a steady-state scenario at your normal load (50 users, 300s), then add a 2× burst (100 users, 180s). That covers normal operation and a traffic spike without running for hours.';
-  else if(lc.includes('sla')||lc.includes('goal')) reply='Your current goal translates to: p99 ceiling 200 ms, error budget 1.0%, noise threshold 5%. Does that match what you\'d accept in production?';
+  let reply;
+  // Keyword-first — these override page context
+  if(lc.includes('why 20')||lc.includes('not 10')||lc.includes('why pool=20')){
+    reply='Pool utilisation at 50 users peaks at ~22 active connections based on the wait distribution. 10 would help but still queue at burst. 20 gives safe headroom to ~200 users without further changes — and the min/max bounds in Guardrails allow up to 50, so this is well within policy.';
+  } else if(lc.includes('evidence')||lc.includes('proof')){
+    reply='<strong>Pool</strong>: 43 threads waiting, 2/2 active (100% saturated), max acquire wait 2406 ms.<br><strong>GC</strong>: 4% overhead — healthy.<br><strong>CPU</strong>: 28% at peak load — healthy.<br><strong>Network</strong>: box-to-box RTT 0.3 ms.<br>Only the pool is saturated.';
+  } else if(lc.includes('sla')||lc.includes('goal')){
+    reply='Your current goal translates to: p99 ceiling 200 ms, error budget 1.0%, noise threshold 5%. Does that match what you\'d accept in production?';
+  }
+  // History / diff context
+  else if(currentPage==='history'||lc.includes('diff')||lc.includes('tr-00')||lc.includes('compare')||lc.includes('reveal')){
+    if(lc.includes('diff')||lc.includes('reveal')||lc.includes('tr-002')||lc.includes('tr-003')){
+      reply='<strong>TR-002 vs TR-003:</strong> baseline p99 went from <strong>1206 ms → 58 ms</strong> — a 95.2% improvement. The only change was <code>maximum-pool-size: 2 → 20</code>. TR-002 was the diagnostic run (pool saturation: 43 waiters, 2406 ms acquire). TR-003 applied and verified the fix. Comparability score ✓ — same model, same environment, same scenario.';
+    } else if(lc.includes('ceiling')||lc.includes('cp-')){
+      reply='CP-001 is a ceiling probe — it escalated load in steps (no config changes). Result: the service handled up to <strong>200 users</strong> meeting the SLA, broke at <strong>225 users</strong>. That\'s the headroom above your normal 50-user load. Ceiling probes characterise the service as-is; they are never compared against experiment runs.';
+    } else {
+      reply='The History table shows each completed campaign. Select two rows and click "Compare" for a side-by-side view of their findings, exact config diff, and improvement margin. Which runs are you looking at?';
+    }
+  }
+  // Guardrails context
+  else if(currentPage==='guardrails'){
+    reply='The guardrails show what the agent can and can\'t change. Green "Always enforced" rules can\'t be toggled — they exist because removing them caused a real failure in our feasibility spike. The property bounds come from <code>profile.yaml</code> for your runtime and define the agent\'s operating envelope. SKILL.md tells the agent <em>how</em> to reason; <code>profile.yaml</code> is what grants actual authority — they are deliberately separate.';
+  }
+  // Benchmarks context
+  else if(currentPage==='benchmarks'){
+    reply='The benchmark table runs the agent against pre-captured telemetry fixtures — no live service needed. Each replay takes ~2 s. The LUCKY quadrant (wrong diagnosis, fix worked anyway) is scored separately — an agent right by accident fails the next similar fixture, so outcome alone isn\'t enough. Click any problem type to see individual fixture results.';
+  }
+  // Active run context
+  else if(currentPage==='active'){
+    reply='The active tab streams the campaign log in real time. The four PDMA phases are: <strong>Perception</strong> (collector reads telemetry), <strong>Memory</strong> (journal RAG checks for disproven hypotheses), <strong>Decision</strong> (diagnosis + proposal), <strong>Action</strong> (apply → deploy → verify). In Semi-Automated mode the approval button appears between Decision and Action.';
+  }
+  // Setup wizard context
+  else if(currentPage==='new-test'){
+    if(lc.includes('scenario')||lc.includes('users')){
+      reply='I\'d start with a steady-state scenario at your normal load (50 users, 300s), then add a 2× burst (100 users, 180s). That covers normal operation and a traffic spike without running for hours.';
+    } else if(lc.includes('mode')||lc.includes('automated')||lc.includes('advisory')){
+      reply='<strong>Advisory</strong>: AI diagnoses, you apply every change manually — no GitHub needed.<br><strong>Semi-Automated</strong>: you approve each diff, AI deploys — good for first runs.<br><strong>Fully Automated</strong>: AI acts within guardrail bounds without waiting — requires pre-approved property bounds in <code>profile.yaml</code>.';
+    } else if(lc.includes('budget')||lc.includes('cost')||lc.includes('time')){
+      reply='Wall clock is the real budget, not money. Most runs cost $0.01–$0.03 but take 2–5 hours. Adding a third scenario costs cents but adds ~40 min. The budget step on the next wizard pane shows a full phase-by-phase breakdown.';
+    } else {
+      reply='I can help set up this run. Tell me the service name, the endpoint that feels slow, and the normal load (concurrent users). I\'ll suggest the SLA, two scenarios, and the right automation mode.';
+    }
+  }
+  // Preflight context
+  else if(currentPage==='preflight'){
+    reply='Preflight exercises the full deploy loop once before any measurement: deploys a no-op change → confirms the target reports it live (property read-back from <code>/actuator/env</code>) → reverts → confirms the revert. These same verification steps run before every experiment in a real campaign. A failure here costs nothing — it\'s much cheaper than finding a broken deploy pipeline eight minutes into a campaign.';
+  }
+  // Results context
+  else if(currentPage==='results'){
+    reply='The results tab shows what was measured, what was changed, and whether the verdict was verified. The key row is <strong>comparability</strong> — same model, same environment, and same scenario across baseline and post-change. A campaign with mismatched models is flagged; its numbers can\'t be compared as if they were alike.';
+  }
+  // Default: reference the current screen
+  else {
+    reply='I\'m on the <strong>'+currentPage+'</strong> screen. What would you like to know? I can explain any metric, interpret a result, or answer questions about how the agent reached its decisions.';
+  }
   setTimeout(()=>{t.remove();addChatMsg('ai',reply);},900+Math.random()*400);
 }
 function chatAsk(q){addChatMsg('user',q);const t=showTyping();const replies={'Why pool=20 and not pool=10?':'Pool utilisation at 50 users peaks at ~22 active connections. 10 would still queue at burst. 20 gives headroom to ~200 users and stays within the allowed bound of 50.','Show me the full evidence':'<strong>Pool saturation</strong>: 43 waiters, 2406 ms max acquire.<br><strong>GC</strong>: 4% — healthy.<br><strong>CPU</strong>: 28% — healthy.<br><strong>Network RTT</strong>: 0.3 ms.<br>The pool is the only thing saturated.'};setTimeout(()=>{t.remove();addChatMsg('ai',replies[q]||'Great question — let me look into that for this run.');document.getElementById('chatQuick').style.display='none';},900);}
