@@ -118,6 +118,16 @@ body{background:var(--bg);color:var(--hi);font-family:var(--f-body);font-size:14
 .chat-input:focus{border-color:var(--fire);}
 .chat-send{background:var(--fire);border:none;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;flex-shrink:0;transition:background .12s;}
 .chat-send:hover{background:#f87a42;}
+/* ── Live-AI toggle ── */
+.live-toggle{display:flex;align-items:center;gap:5px;cursor:pointer;flex-shrink:0;user-select:none;}
+.live-toggle input{display:none;}
+.live-toggle-track{width:28px;height:16px;border-radius:8px;background:var(--s3);border:1px solid var(--bd2);position:relative;transition:background .2s,border-color .2s;flex-shrink:0;}
+.live-toggle-thumb{position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:var(--lo);transition:transform .2s,background .2s;}
+.live-toggle input:checked ~ .live-toggle-track{background:var(--ok-d);border-color:var(--ok);}
+.live-toggle input:checked ~ .live-toggle-track .live-toggle-thumb{transform:translateX(12px);background:var(--ok);}
+.live-toggle-label{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--lo);transition:color .2s;}
+.live-toggle input:checked ~ .live-toggle-label,.live-toggle input:checked+.live-toggle-track+.live-toggle-label{color:var(--ok);}
+.live-toggle input:checked~.live-toggle-label{color:var(--ok);}
 .typing-dots{display:flex;gap:4px;padding:4px 2px;}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--mid);animation:blink 1.4s infinite;}
 .dot:nth-child(2){animation-delay:.2s;}
@@ -1532,8 +1542,13 @@ scenarios:
       <div class="chat-avatar" style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--fire),var(--warn));display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">🔥</div>
       <div style="flex:1;min-width:0;">
         <div class="chat-pane-title">Crucible AI</div>
-        <div class="chat-ai-status">● diagnosing TR-004</div>
+        <div class="chat-ai-status" id="chatAiStatus">● scripted</div>
       </div>
+      <label class="live-toggle" title="OFF = scripted demo responses · ON = live LLM call via GLC v5">
+        <input type="checkbox" id="liveAiToggle" onchange="onLiveToggle(this.checked)">
+        <span class="live-toggle-track"><span class="live-toggle-thumb"></span></span>
+        <span class="live-toggle-label">Live AI</span>
+      </label>
       <button class="chat-collapse-btn" onclick="collapseChat()" title="Collapse panel">‹</button>
     </div>
     <div class="chat-context-bar" id="chatContextBar">
@@ -2005,11 +2020,42 @@ function showTyping(){
   d.innerHTML='<div class="msg-av">🔥</div><div class="msg-bubble-ai"><div class="typing-dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div></div>';
   msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;return d;
 }
+async function _sendChatLive(text){
+  const t=showTyping();
+  try{
+    const res=await fetch('/v1/perf/chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({message:text, screen:currentPage})
+    });
+    t.remove();
+    if(!res.ok){
+      addChatMsg('ai','⚠ Gateway error (HTTP '+res.status+'). Is GLC v5 reachable? You can switch back to Scripted mode.');
+      return;
+    }
+    const data=await res.json();
+    addChatMsg('ai', data.reply||'(empty reply)');
+  }catch(e){
+    t.remove();
+    addChatMsg('ai','⚠ Could not reach the backend: '+e.message+'. Switch to Scripted mode if GLC is not running.');
+  }
+}
+
+function onLiveToggle(on){
+  const status=document.getElementById('chatAiStatus');
+  if(status) status.textContent=on?'● live · GLC v5':'● scripted';
+  addChatMsg('ai', on
+    ? 'Live AI mode enabled — responses will go through GLC v5. There may be a cold-start delay on the first call.'
+    : 'Scripted mode — responses are pre-written and instant. Toggle on for real LLM responses.');
+}
+
 function sendChat(){
   const inp=document.getElementById('chatInput');
   const text=inp.value.trim();if(!text)return;
   addChatMsg('user',text);inp.value='';
   document.getElementById('chatQuick').style.display='none';
+  const liveMode=document.getElementById('liveAiToggle')?.checked;
+  if(liveMode){ _sendChatLive(text); return; }
   const t=showTyping();
   const lc=text.toLowerCase();
   let reply;

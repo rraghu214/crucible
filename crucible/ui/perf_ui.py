@@ -1599,6 +1599,62 @@ async def perf_decision(run_id: str, experiment: int, body: DecisionBody, reques
     return {"written": path.name, "action": body.action, "reason": decision.reason}
 
 
+class ChatBody(BaseModel):
+    message: str = Field(min_length=1, max_length=2000)
+    screen: str = Field(default="overview", max_length=64)
+
+
+_SCREEN_HINTS: dict[str, str] = {
+    "history":    "The user is on the History & Diff screen, which shows past campaign runs in a table with outcome pills (IMPROVED / REVERTED / BASELINE MET) and p99 before/after columns. They may ask about specific run IDs like TR-001, TR-002, TR-003.",
+    "active":     "The user is watching an active campaign in progress. The screen shows real-time logs and the current PDMA loop phase.",
+    "results":    "The user is on the Results screen for a completed campaign run.",
+    "guardrails": "The user is on the Guardrails screen, which shows which properties the agent may change and within what bounds.",
+    "benchmarks": "The user is on the Benchmarks screen, which shows replay eval results across 8 cause families and the LUCKY quadrant scoring.",
+    "new-test":   "The user is in the New Test Run wizard, configuring a campaign.",
+    "preflight":  "The user is on the Preflight screen, which exercises the deploy loop before a real campaign.",
+    "overview":   "The user is on the Overview dashboard.",
+}
+
+_CHAT_SYSTEM = """You are the Crucible AI assistant embedded in the Crucible performance-engineering product.
+
+Crucible is an autonomous performance engineer: it runs load experiments against a Spring Boot service (PerfLab) on Oracle Cloud Box A, diagnoses bottlenecks from Actuator/Prometheus/Datadog telemetry, proposes bounded config changes, and verifies every change with a fresh measurement.
+
+Key facts about this deployment:
+- Box A (129.213.121.108): Spring Boot 3.3 PerfLab, Postgres, Redis, Prometheus, Jaeger
+- Box B (150.136.143.227): Crucible agent + Locust load generator
+- GLC v5 (https://glc-v5-rraghu214.onrender.com): LLM gateway, Gemini keys in rotation
+- Recent campaigns: TR-001 (baseline), TR-002 (pool=2 diagnosed: saturation, 43 waiters, 2406 ms acquire), TR-003 (pool=20 applied and verified: p99 improved from 1206 ms → 58 ms, CHANGE_KEPT), CP-001 (ceiling probe: 200 users passes SLA, 225 users breaks it)
+- SLA: /api/db p99 ≤ 120 ms at 50 users
+- Sandbox branch: perftest_sandbox (only branch the agent can push to)
+- Seven memory kinds: Working, Episode, Fact, Playbook, Policy (SLA lives here — agent has no write permission), Audit, Document chunk
+
+Answer concisely. Use HTML for emphasis (<strong>, <code>) since the chat renders HTML. Stay factual — only claim things that can be measured."""
+
+
+@router.post("/v1/perf/chat")
+async def perf_chat(body: ChatBody, request: Request):
+    """Context-aware AI chat backed by GLC v5.
+
+    Passes the current screen name as a hint so the model can give relevant answers
+    about what is visible. Falls back gracefully if the gateway is unavailable.
+    """
+    from ..gateway import GatewayClient
+
+    screen_hint = _SCREEN_HINTS.get(body.screen, f"The user is on the '{body.screen}' screen.")
+    prompt = f"[Context: {screen_hint}]\n\nUser: {body.message}"
+    client = GatewayClient()
+    try:
+        result = await client.chat(
+            prompt=prompt,
+            system=_CHAT_SYSTEM,
+            request={"max_tokens": 400, "temperature": 0},
+        )
+        reply = result.get("text") or "(no reply)"
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"gateway error: {exc}") from exc
+    return {"reply": reply}
+
+
 @router.get("/perf", response_class=HTMLResponse)
 @router.get("/perf/", response_class=HTMLResponse)
 async def perf_client():
