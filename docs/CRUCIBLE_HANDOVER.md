@@ -1,12 +1,20 @@
 # Crucible — Handover
 
-**Written 7 September 2026.** Everything here is grounded in the conversation that
-produced it. Where something was never decided, it says so rather than guessing.
+**Written 7 September 2026. Architecture current as of 18 October 2026.**
 
-**How to use this.** Paste or upload this file at the start of a new conversation.
-It carries the origin, every design decision with the reason it exists, current
-state, open questions and the roadmap. It does not carry the screen mockups —
-those live in `crucible-screens-v2.html`, which should be uploaded alongside it.
+> **Current state (18 October 2026):** Four weeks of development complete.
+> All four campaign modes implemented (Advisory, Semi-Automated, Fully Automated,
+> Ceiling Probe). Three metrics backends (Actuator, PromQL, Datadog), Jaeger
+> traces, Spring Boot and FastAPI profiles, 1460 tests passing, full replay
+> benchmark (21/28 pass, 0 traps). Live campaigns verified on Box B. The demo
+> UI is a polished SPA at `crucible serve` → port 8113 → `/dashboard`, separate
+> from the NiceGUI production UI at `serve-ui` → port 8765. See
+> `docs/myfolder/DEMO_SCRIPT.md` for the recording script and
+> `docs/myfolder/CrucibleFromScratch.md` for the full current architecture.
+
+**How to use this.** This file carries the project origin, design rationale and
+feasibility spike results. For current architecture, read `CrucibleFromScratch.md`
+instead. The screen mockups live in `crucible-screens-v2.html`.
 
 ---
 

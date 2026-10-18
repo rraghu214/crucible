@@ -145,10 +145,33 @@ CRUCIBLE_UI_TOKEN=...             # only if the UI listens on a network address
 
 ## 3. Opening the UI
 
-### On the load box, viewed through an SSH tunnel (recommended)
+Two UIs are available. Use the SPA for demos; use NiceGUI for live campaign operations.
+
+| UI | Command | Port | Best for |
+|---|---|---|---|
+| **SPA demo UI** | `uv run crucible serve` | 8113 | Demo recordings, overview, History & Diff |
+| **NiceGUI production UI** | `uv run crucible serve-ui` | 8765 | Live campaigns, approvals, benchmark |
+
+### SPA demo UI (polished, at `/dashboard`)
 
 ```bash
-# On the load box, inside tmux so it survives your logout
+# On Box B, inside tmux
+cd ~/crucible
+set -a; . ./.env; set +a
+uv run crucible serve
+
+# On your laptop — tunnel to port 8113
+ssh -i <key> -L 9113:127.0.0.1:8113 ubuntu@<load-box-ip>
+```
+
+Open **http://localhost:9113/dashboard**. The chat pane has a **Live AI** toggle
+in its header: when OFF responses are scripted (instant, reliable); when ON the
+chat calls GLC v5 live. Toggle to ON only when GLC v5 is warm.
+
+### NiceGUI production UI (seven pages, on SSH tunnel)
+
+```bash
+# On Box B, inside tmux
 cd ~/crucible
 set -a; . ./.env; set +a
 uv run crucible serve-ui --port 8765
@@ -184,6 +207,21 @@ recorded on every approval you make, and the approval dialogs pre-fill it.
 The bar at the top has seven pages. Every button on them runs a real `crucible`
 command; the command line is shown next to its output, so you always know what
 ran.
+
+**SPA demo UI pages** (at `localhost:9113/dashboard`):
+
+| Tab | What it's for |
+|---|---|
+| **Overview** | Four KPIs: runs, best p99, improvement %, AI accuracy. Architecture diagram. |
+| **New Test Run** | Wizard: target & repo (doc upload for Knowledge RAG), goal & SLA, scenarios, mode & budget, review. |
+| **Active** | Live PDMA task graph, approval gate card, pool metrics, p99/RPS charts. |
+| **Results** | Latest campaign outcome, trial breakdown, metric before/after. |
+| **History & Diff** | Live campaign history table (fetches from `/v1/perf/screens/17`), compare two runs. |
+| **Benchmarks** | Replay accuracy, fixture table, cause-family breakdown, LUCKY quadrant. |
+| **Guardrails** | Always-enforced rules + property bounds from profile.yaml. |
+| **Preflight** | Pre-flight checklist, CLI command twin. |
+
+**NiceGUI production UI pages** (at `localhost:8765`):
 
 | Page | What it's for |
 |---|---|
@@ -413,9 +451,18 @@ It never calls a model, so scoring is free and repeatable.
 **New → 3 · Ceiling probe.** When your service already meets its goal, this
 raises the load in steps until the goal is missed, and reports the **knee**: the
 last level that passed and the first that failed. It changes the load profile,
-which the agent may never do, so only you can start it, and you set the bounds.
-The maximum users field is required. A ceiling result describes the service; it
-is never presented as a verdict on a change.
+which the agent may never do, so only you can start it, and you set the bounds
+(min users, max users, step size). The maximum users field is required.
+
+A ceiling result describes the service's capacity; it is never presented as a
+verdict on a change. In the SPA demo UI it appears as the fourth mode card in
+the Budget step of the New Test Run wizard.
+
+CLI equivalent:
+```bash
+uv run crucible ceiling --min-users 50 --max-users 300 --step-size 50 \
+    --run-id demo-ceiling
+```
 
 ### Capture fixtures and run the replay benchmark
 

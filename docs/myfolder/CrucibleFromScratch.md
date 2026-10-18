@@ -5,7 +5,7 @@ knew it, and needs to understand all of it: why it exists, how the machines are
 wired, how a campaign moves through the code, what lands on disk, how it is
 evaluated, how the UI works, what the tests protect, and what is still missing.
 
-It describes the code on branch `capstone/perf-agent` as of **11 October 2026**.
+It describes the code on branch `capstone/perf-agent` as of **18 October 2026**.
 Where it states what a function does, that was checked by reading the function.
 File references are clickable from VS Code.
 
@@ -939,7 +939,12 @@ button -> actions.<command>_args(...)   builds argv, validates input
 
 `perf_ui.py` is the older nineteen-screen A2UI, still mounted by `crucible serve`
 with its own token-checked approval route. The NiceGUI app replaced it as the
-user-facing UI.
+production UI. A third UI is the polished SPA demo UI (`crucible/ui/client/
+crucible-ui.html`), mounted at `/dashboard` by `crucible serve` (port 8113) and
+accessed for demos via `localhost:9113/dashboard`. It includes a context-aware
+chat pane with a Live AI toggle (OFF = scripted keyword responses; ON = real GLC
+v5 call via `POST /v1/perf/chat`), live History & Diff from `/v1/perf/screens/17`,
+and four campaign mode cards with dynamic budget tables.
 
 ---
 

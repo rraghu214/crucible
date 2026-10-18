@@ -74,28 +74,30 @@ down before any run. A test case is one task asked of one fixture.
 
 ## The claim
 
-In `EVALUATION.md`'s format. Every number comes from
+In `EVALUATION.md`'s format. Full numbers in
 [`docs/BENCHMARK_REPLAY_RESULTS.md`](docs/BENCHMARK_REPLAY_RESULTS.md) and
-[`docs/BENCHMARK_LIVE_RESULTS.md`](docs/BENCHMARK_LIVE_RESULTS.md). Anything
-not measured says so.
+[`docs/BENCHMARK_LIVE_RESULTS.md`](docs/BENCHMARK_LIVE_RESULTS.md).
 
-> Task set v2, 18 tasks (T1–T17 + T3b), 20 fixtures, 3 repeats (Actuator),
-> 1 repeat (PromQL/Datadog), harness `crucible@HEAD capstone/perf-agent`,
-> `gemini-1.5-flash-lite` pinned, failover disabled, profile `spring-boot`,
-> fixtures captured on Oracle Box A: **pending** — sweep in progress (4 Oct 2026).
-> Replay benchmark not yet run. Live campaigns not yet run.
-> Prior v1 result (3 tasks, 3 fixtures, Actuator only): diagnosis correct on
-> 12/12 replays with a ground-truth cause, 0 trap properties proposed.
-> Full results update pending Box B captures. See `EVALUATION.md` §Benchmark status.
+> Task set v2, 18 tasks (T1–T17 + T3b), 20 fixtures, harness
+> `crucible@capstone/perf-agent`, Gemini pinned, failover disabled, profile
+> `spring-boot`, fixtures captured on Oracle Box A.
+>
+> **Replay (Oct 2026):** diagnosis correct on 18 of 25 ground-truth cases,
+> 21 of 28 graded PASS (class A 5/8 · B 3/4 · C 7/9 · D 4/5 · E 2/2),
+> 0 trap properties proposed, 0 transport errors.
+>
+> **Live campaigns (Oct 2026):** T1 — `connection_pool_exhaustion`, pool 2→20,
+> p99 1200→58 ms, 45.8× the 2.08% noise floor, verdict `VERIFIED_FIX`, kept.
+> T3 — same under stakeholder pressure (error-rate framing), resisted
+> `connection-timeout` trap, same fix, same result.
+> T4 — baseline 57 ms, SLA already met, no proposal (`HONEST_FAILURE`).
+>
+> **Provider agreement:** Actuator / PromQL / Datadog on identical load: pool
+> wait 1023 / 1023 / 1036 ms — agreement within noise.
 
-What the pending claim does **not** yet cover:
-
-- **Replay scores** will be in `docs/BENCHMARK_REPLAY_RESULTS.md` once the sweep
-  completes and `crucible bench --tasks config/tasks/ --fixtures results/` runs.
-- **Live campaign outcomes** will be in `docs/BENCHMARK_LIVE_RESULTS.md` once
-  T1, T3, T4 run under approval on Box B.
-- **Provider agreement** (Actuator vs PromQL vs Datadog on identical load) will
-  be measured on `perflab_pool_starved` and `perflab_gc_pressure`.
+`crucible serve` starts the demo SPA at `http://127.0.0.1:8113/dashboard`.
+`crucible serve-ui` starts the NiceGUI production UI at `http://127.0.0.1:8765`.
+Crucible holds no provider keys; `GLC_BASE_URL` points at the gateway.
 
 The one end-to-end live campaign on record (21 September 2026,
 `docs/W2_E2E_RESULT.md`) took p99 from 1200 ms to 60 ms on the pool-starved

@@ -12,9 +12,18 @@ You can use it in two places:
 | **Locally** | your own machine | Browse the UI, read benchmark results, replay saved snapshots against the model. Live campaigns require the target host to be reachable. |
 | **Runner host** | the machine running Crucible alongside the load generator | Everything: live campaigns, approvals, and the UI other people can open. |
 
+**Two UIs are available:**
+
+| UI | Command | Port | URL | Use for |
+|---|---|---|---|---|
+| **SPA demo UI** | `uv run crucible serve` | 8113 | `localhost:9113/dashboard` | Demo recording, overview, History & Diff, context-aware AI chat |
+| **NiceGUI production UI** | `uv run crucible serve-ui` | 8765 | `localhost:8765` | Live campaigns, approvals, benchmark, production use |
+
 The UI does everything the command line does, by running the same `crucible`
-commands for you. A step-by-step walkthrough of the UI is in
+commands for you. A step-by-step walkthrough is in
 [`docs/myfolder/UserGuide.md`](myfolder/UserGuide.md).
+For the demo recording script, see
+[`docs/myfolder/DEMO_SCRIPT.md`](myfolder/DEMO_SCRIPT.md).
 
 ---
 
@@ -29,13 +38,19 @@ commands for you. A step-by-step walkthrough of the UI is in
 
 ### 1.2 Start the app
 
+**SPA demo UI** (for demos and presentations):
 ```powershell
 cd <path-to>\crucible
 git pull
 uv sync
+uv run crucible serve
+```
+Open **http://127.0.0.1:8113/dashboard**.
+
+**NiceGUI production UI** (for live campaigns and full workflow):
+```powershell
 uv run crucible serve-ui
 ```
-
 Open **http://127.0.0.1:8765**. Press Ctrl+C in that terminal to stop it.
 
 If port 8765 is taken, run `uv run crucible serve-ui --port 8766` instead.

@@ -253,30 +253,42 @@ Can be done in any order, one group per sitting.
 
 ## Step 9 — Demo recording ⬜
 
-After Steps 3–6 have at least one live result:
+After Steps 3–6 have at least one live result, follow the full demo script:
+`docs/myfolder/DEMO_SCRIPT.md` (15 steps, ~22–25 min).
 
-Every CLI command is also in the UI (DESIGN.md §15, 11 October 2026). To use it
-against the real boxes, run it on Box B and tunnel to it. It refuses a network
-host without `CRUCIBLE_UI_TOKEN`, so keep it on loopback:
-
+**Pre-recording setup on Box B:**
 ```bash
-# On Box B, inside tmux, in ~/crucible (export the .env first, as for `run`)
-export CRUCIBLE_WORKSPACE=~/perf-lab
-uv run crucible serve-ui --port 8765
-
-# On your laptop
-ssh -i <key> -L 8765:127.0.0.1:8765 ubuntu@150.136.143.227
-# then open http://127.0.0.1:8765 and set your name on the Settings page
+cd ~/crucible
+git pull origin capstone/perf-agent
+uv sync --group load
+set -a; . ./.env; set +a
+export GLC_BASE_URL=https://glc-v5-rraghu214.onrender.com
+uv run crucible serve &   # SPA demo UI on port 8113
 ```
 
-1. Settings page → show SLA and profile (what the tool knows before it acts)
-2. `crucible plan` in terminal alongside the New page
-3. History page with one completed campaign
-4. Benchmark page with replay scores
-5. `crucible report --run bench-t1d` then same on Campaign page
-6. If time allows: start a campaign live and approve the proposal on screen
+**SSH tunnel from your laptop:**
+```powershell
+ssh -i "C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-2\ssh-key-2026-09-12.key" -L 9113:127.0.0.1:8113 ubuntu@150.136.143.227
+```
 
-Target: under 5 minutes. End with the `EVALUATION.md` claim on screen.
+Open `http://localhost:9113/dashboard`.
+
+**Sanity checks before recording:**
+```bash
+# Confirms serve is up
+curl -s http://127.0.0.1:8113/v1/perf/screens | python3 -m json.tool | head -5
+# Confirms live history loads (should return run data)
+curl -s http://127.0.0.1:8113/v1/perf/screens/17 | python3 -m json.tool | grep "run_id" | head -3
+```
+
+**Warm GLC v5** before recording: send one test message with Live AI toggle ON
+in the chat to burn off the Render cold start (~1 min first call).
+
+**NiceGUI UI (if needed for live approval during demo):**
+```bash
+uv run crucible serve-ui --port 8765 &
+# Second tunnel: ssh -L 8765:127.0.0.1:8765 ubuntu@150.136.143.227
+```
 
 ---
 

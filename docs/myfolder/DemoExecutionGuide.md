@@ -1,5 +1,18 @@
 # Demo execution guide
 
+> **Quick start for the SPA demo.** Open `docs/myfolder/DEMO_SCRIPT.md`
+> for the precise step-by-step recording script (15 steps, ~22 min, covers all
+> screens). This guide covers CLI commands, Box A/B state management, and
+> troubleshooting — treat it as the backstage reference alongside the script.
+>
+> **Two UIs exist:**
+> | UI | Command | Port | URL |
+> |---|---|---|---|
+> | Polished SPA demo | `uv run crucible serve` | 8113 | `localhost:9113/dashboard` |
+> | NiceGUI production UI | `uv run crucible serve-ui` | 8765 | `localhost:8765` |
+>
+> For the demo recording, use the SPA. Tunnel: `ssh -i ssh-key-2026-09-12.key -L 9113:127.0.0.1:8113 ubuntu@150.136.143.227`
+
 This guide tells you what to run, what to show, and what to verify — for both
 the CLI and the UI — covering every persona who might be in the room.
 
@@ -33,7 +46,17 @@ curl http://10.0.0.79:8080/actuator/metrics/hikaricp.connections.max \
 
 ### Decide how the browser will reach the UI
 
-**Option A — public URL (trainer can open without SSH):**
+**Option A — SPA demo UI at `/dashboard` (recommended for recording):**
+
+1. On Box B: `cd ~/crucible && uv run crucible serve &` (port 8113, background)
+2. SSH tunnel from your laptop:
+   ```powershell
+   ssh -i "C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-2\ssh-key-2026-09-12.key" -L 9113:127.0.0.1:8113 ubuntu@150.136.143.227
+   ```
+3. Open `http://localhost:9113/dashboard`
+4. Follow `docs/myfolder/DEMO_SCRIPT.md` step by step
+
+**Option B (NiceGUI UI) — public URL (trainer can open without SSH):**
 
 1. Port 8765 must be open in the Oracle VCN security group (GETTING_STARTED.md §2.3).
 2. Start the UI: `uv run crucible serve-ui --host 0.0.0.0 --port 8765`
@@ -42,7 +65,7 @@ curl http://10.0.0.79:8080/actuator/metrics/hikaricp.connections.max \
    on the Settings page **only when you are already connected via SSH tunnel**
    (plain HTTP is unsafe for the token).
 
-**Option B — SSH tunnel (private, no open port, token safe):**
+**Option C (NiceGUI UI) — SSH tunnel (private, no open port, token safe):**
 
 From **your laptop** (keep this terminal open throughout):
 

@@ -1,4 +1,11 @@
-# Crucible: recording script
+# Crucible: recording script (CLI-only, ~8 min)
+
+> **This is the short CLI-focused demo.** For the full end-to-end SPA demo
+> (polished UI, ~22–25 min, with Live AI toggle and all screens), use
+> [`docs/myfolder/DEMO_SCRIPT.md`](DEMO_SCRIPT.md).
+>
+> **Browser:** The SPA runs at `localhost:9113/dashboard` (tunnel port 8113,
+> not 8765). Start with `uv run crucible serve` on Box B.
 
 **Length:** about 8 minutes as written. A 5-minute cut is marked at the end.
 
