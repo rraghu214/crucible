@@ -22,7 +22,7 @@ from crucible.capabilities import (
 from crucible.coding import EditLedger, Workspace
 from crucible.core.live_graph import Deferred, GraphStore, LiveGraphExecutor, TaskSpec
 from crucible.core.memory import MemoryKind, MemoryRecord, MemoryScope, MemoryStore, Principal, SourceRef
-from crucible.core.memory.embeddings import OllamaNomicEmbedder
+from crucible.core.memory.embeddings import GlcEmbedder, OllamaNomicEmbedder
 from crucible.economics import (
     TIER_KEY,
     BudgetAwarePlanner,
@@ -100,7 +100,9 @@ class AgentRuntime:
         # between those profiles.
         self.root = root or Path(os.getenv("CRUCIBLE_DATA_DIR", str(Path.home() / ".crucible")))
         self.root.mkdir(parents=True, exist_ok=True)
-        self.memory = MemoryStore(self.root / "memory.sqlite", embedder=OllamaNomicEmbedder())
+        glc_url = os.getenv("GLC_BASE_URL", "").strip().rstrip("/")
+        embedder = GlcEmbedder(glc_url) if glc_url else OllamaNomicEmbedder()
+        self.memory = MemoryStore(self.root / "memory.sqlite", embedder=embedder)
         self.graph = GraphStore(self.root / "graphs")
         self.outbox = ActionOutbox(self.root / "outbox")
         # One registry per runtime: the single source of truth for what a

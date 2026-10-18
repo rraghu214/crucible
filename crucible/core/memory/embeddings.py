@@ -1,4 +1,4 @@
-"""Embedding seam: production can use local Ollama; tests inject deterministic vectors."""
+"""Embedding seam: production calls GLC v5 (→ Gemini); tests inject deterministic vectors."""
 from __future__ import annotations
 
 import json
@@ -86,6 +86,41 @@ class DeterministicEmbedder:
 
     def embed_query(self, text: str) -> list[float]:
         return self.embed(text)
+
+
+class GlcEmbedder:
+    """Calls GLC v5's /v1/embed endpoint, which routes to Gemini embedding-001 at 768d.
+
+    On Render, Ollama is not available and GLC v5 uses its Gemini fallback
+    automatically (controlled by EMBED_ORDER env var on the gateway).
+    """
+
+    def __init__(self, base_url: str = "http://127.0.0.1:8111"):
+        self.base_url = base_url.rstrip("/")
+
+    @property
+    def fingerprint(self) -> str:
+        return f"glc:{self.base_url}:gemini-embedding-001:768"
+
+    def embed(self, text: str) -> list[float]:
+        return self._call(text, "retrieval_document")
+
+    def embed_document(self, text: str) -> list[float]:
+        return self._call(text, "retrieval_document")
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._call(text, "retrieval_query")
+
+    def _call(self, text: str, task_type: str) -> list[float]:
+        body = json.dumps({"text": text, "task_type": task_type}).encode()
+        req = Request(
+            self.base_url + "/v1/embed",
+            data=body,
+            headers={"Content-Type": "application/json"},
+        )
+        with urlopen(req, timeout=60) as resp:  # nosec B310: internal gateway URL from config
+            data = json.load(resp)
+        return list(data["embedding"])
 
 
 def cosine(left: list[float], right: list[float]) -> float:
