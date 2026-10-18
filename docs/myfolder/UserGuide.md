@@ -138,7 +138,7 @@ Optional, only if you'll use them:
 DATADOG_API_KEY=...        # for Datadog captures; never typed into the UI
 DATADOG_APP_KEY=...
 CRUCIBLE_WORKSPACE=~/perf-lab     # pre-fills the workspace box in the UI
-CRUCIBLE_UI_TOKEN=...             # only if the UI listens on a network address
+CRUCIBLE_CONTROL_TOKEN=...        # required for all write actions (launch, approve, abort, pause)
 ```
 
 ---
@@ -214,8 +214,8 @@ ran.
 |---|---|
 | **Overview** | Four KPIs: runs, best p99, improvement %, AI accuracy. Architecture diagram. |
 | **New Test Run** | Wizard: target & repo (doc upload for Knowledge RAG), goal & SLA, scenarios, mode & budget, review. |
-| **Active** | Live PDMA task graph, approval gate card, pool metrics, p99/RPS charts. |
-| **Results** | Latest campaign outcome, trial breakdown, metric before/after. |
+| **Active** | Polls `GET /v1/perf/campaign/active` every 5 s. When a real campaign is running: live run-id, status, elapsed, real approval gate, job log. When idle: TR-004 demo view. |
+| **Results** | Loads latest run from `GET /v1/perf/runs/latest/report` on open. Shows real KPIs, Chart.js Before/After bar chart, experiment table. ↺ refreshes; ▼ Pick run switches campaigns. |
 | **History & Diff** | Live campaign history table (fetches from `/v1/perf/screens/17`), compare two runs. |
 | **Benchmarks** | Replay accuracy, fixture table, cause-family breakdown, LUCKY quadrant. |
 | **Guardrails** | Always-enforced rules + property bounds from profile.yaml. |
@@ -493,8 +493,11 @@ The page grades the latest run the same way `crucible score` does: an error is
 
 | What you see | What to check |
 |---|---|
-| A button says "Enter the control token on the Settings page first" | `CRUCIBLE_UI_TOKEN` is set; enter it on Settings → You. |
-| `serve-ui` exits with "refusing to serve the UI on '0.0.0.0'" | Set `CRUCIBLE_UI_TOKEN`, or bind to 127.0.0.1 and use the tunnel. |
+| A write action (launch, approve, abort, pause) returns 401 | Token not saved in Settings → Control token. Paste `CRUCIBLE_CONTROL_TOKEN` value and click Save. |
+| A write action returns 503 | `CRUCIBLE_CONTROL_TOKEN` not set in Box B `.env`. Add it and `sudo systemctl restart crucible-ui`. |
+| `serve-ui` exits with "refusing to serve the UI on '0.0.0.0'" | Set `CRUCIBLE_CONTROL_TOKEN`, or bind to 127.0.0.1 and use the tunnel. |
+| Active tab shows TR-004 but a campaign is running | Poll endpoint unreachable — check `curl 127.0.0.1:8113/v1/perf/campaign/active` on Box B. |
+| Results tab shows demo data after a campaign finished | No manifest on disk yet — check `curl .../v1/perf/runs`; may need a full campaign to complete first. |
 | A job shows **EXIT 2** right away | It was refused (`2` is the CLI's "refused" code; `1` is a failure). The output says why: production environment, missing SLA, an unsafe comparison... |
 | The campaign fails at the baseline | The service isn't reachable from the load box, or not in the state you expect. Run Preflight. |
 | `git push failed ... (fetch first)` in the output | Your workspace is behind the deploy remote. In the workspace: `git pull perftest perftest_sandbox`, then start again. |

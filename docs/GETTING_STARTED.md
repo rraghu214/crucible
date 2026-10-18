@@ -23,6 +23,15 @@ The SPA's write actions (launch, approve, pause, abort, ceiling probe, bench) ca
 the same REST API as the CLI. Set `CRUCIBLE_CONTROL_TOKEN` in your `.env` and paste
 the same value in the SPA's **Settings → Control token** field before using them.
 
+The **Active** tab polls `GET /v1/perf/campaign/active` every 5 seconds when open.
+When a campaign is running it shows the live run-id, status, elapsed time, the real
+approval gate (cause / proposed change / evidence), and the job log. When idle it
+shows a demo view.
+
+The **Results** tab loads `GET /v1/perf/runs/latest/report` on open and renders a
+Chart.js Before/After bar chart alongside the KPIs and experiment table. Click
+↺ to refresh or ▼ Pick run to view any past campaign.
+
 The UI does everything the command line does, by running the same `crucible`
 commands for you. A step-by-step walkthrough is in
 [`docs/myfolder/UserGuide.md`](myfolder/UserGuide.md).

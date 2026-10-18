@@ -7,33 +7,111 @@
 > LIVE/SCRIPTED table at the bottom). Everything is noted so you know exactly
 > what to expect.
 >
-> **New since October 2026:** All write actions (Launch, Preflight, Abort, Pause,
-> Approve/Reject, Ceiling Probe, Bench) now call the live REST API instead of
-> simulating locally. A **Jobs** tab shows the output of every background command.
-> Enter the `CRUCIBLE_CONTROL_TOKEN` in Settings before using any write action.
+> **October 2026:** All write actions (Launch, Preflight, Abort, Pause,
+> Approve/Reject, Ceiling Probe, Bench) call the live REST API. The **Active**
+> tab polls live campaign state every 5 seconds; the **Results** tab loads the
+> latest run report on open. Enter `CRUCIBLE_CONTROL_TOKEN` in Settings before
+> any write action.
 
 ---
 
-## Pre-flight checklist (do before recording)
+## Part 0 — Prep commands (run once before recording)
 
-```
-Box B  : uv run crucible serve   →  port 8113
-Tunnel : ssh -i ssh-key-2026-09-12.key -L 9113:127.0.0.1:8113 ubuntu@150.136.143.227
-Browser: localhost:9113/dashboard
-GLC v5 : warm — send one test message with Live AI toggle to burn off cold start
-Box A  : ensure pool_size = 2 in application.properties (so the campaign has something to fix)
-Token  : Settings → Control token → paste CRUCIBLE_CONTROL_TOKEN → Save
-         (required before any write action: launch, approve, abort, pause)
-```
+> Run these **on Box B** over SSH, in order. They set the stage so the demo
+> campaign starts from a clean, known state.
 
-**Quick sanity check — run these on Box B before recording:**
+### 0.1 Pull latest code and restart the UI
+
 ```bash
-# confirms serve is up
+ssh -i "C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-1\ssh-key-2026-09-12.key" ubuntu@150.136.143.227
+
+# Once on Box B:
+cd ~/crucible
+git pull origin capstone/perf-agent
+uv sync
+sudo systemctl restart crucible-ui
+systemctl status crucible-ui       # must show: active (running)
+```
+
+### 0.2 Verify Box A is reachable and pool=2
+
+```bash
+# Health check
+curl -s http://10.0.0.79:8080/actuator/health | python3 -c "import json,sys; print(json.load(sys.stdin)['status'])"
+# Expected: UP
+
+# Confirm pool size is 2 (the "broken" state we're going to fix)
+curl -s http://10.0.0.79:8080/actuator/metrics/hikaricp.connections.max \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['measurements'][0]['value'])"
+# Expected: 2.0
+# If it shows 20.0, reset application.properties first (see §0.3)
+```
+
+### 0.3 Reset Box A to pool=2 (only if needed)
+
+```bash
+# On Box B — reset to the "broken" baseline commit
+cd ~/perf-lab
+git checkout perftest_sandbox
+git log --oneline -5     # find the pool=2 commit
+# Edit spring-boot application.properties -> maximum-pool-size=2
+git add src/main/resources/application.properties
+git commit -m "reset: pool=2 for demo baseline"
+git push origin perftest_sandbox
+# Box A post-receive hook rebuilds; wait ~90 s then verify pool=2 above
+```
+
+### 0.4 Warm up GLC v5
+
+```bash
+# Send one LLM call to burn off the Render cold start (up to 60 s)
+curl -s -X POST https://glc-v5-rraghu214.onrender.com/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gemini-2.5-flash","messages":[{"role":"user","content":"ping"}]}' \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)['choices'][0]['message']['content'][:40])"
+```
+
+### 0.5 Confirm SPA endpoints are up
+
+```bash
+# Serve check
 curl -s http://127.0.0.1:8113/v1/perf/screens | python3 -m json.tool | head -5
-# confirms live history loads (should return run data)
-curl -s http://127.0.0.1:8113/v1/perf/screens/17 | python3 -m json.tool | grep "run_id" | head -3
-# confirms jobs endpoint is up
+# Jobs endpoint
 curl -s http://127.0.0.1:8113/v1/perf/jobs | python3 -m json.tool
+# Active campaign endpoint (should return {active: false})
+curl -s http://127.0.0.1:8113/v1/perf/campaign/active | python3 -m json.tool
+# Latest run report (should return the last completed run)
+curl -s http://127.0.0.1:8113/v1/perf/runs/latest/report | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('run_id','(no run yet)'), d.get('outcome',''))"
+```
+
+### 0.6 Open tunnel and browser
+
+```powershell
+# On your Windows laptop — keep this terminal open throughout the recording
+ssh -i "C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-1\ssh-key-2026-09-12.key" `
+    -L 9113:127.0.0.1:8113 ubuntu@150.136.143.227
+```
+
+Open **http://localhost:9113/dashboard** and:
+
+1. Go to **Settings → Control token** → paste `CRUCIBLE_CONTROL_TOKEN` → Save.
+2. Confirm token status shows "Token saved".
+3. Go to **Results** tab — it auto-loads the latest run; confirm KPIs and chart appear.
+4. Go to **Active** tab — it should show the TR-004 demo view (no live campaign yet).
+
+---
+
+## Pre-flight checklist (confirm before pressing Record)
+
+```
+Box B  : crucible-ui.service active (running) on port 8113
+Tunnel : ssh -i ... -L 9113:127.0.0.1:8113 ubuntu@150.136.143.227
+Browser: localhost:9113/dashboard
+GLC v5 : warmed (§0.4 complete)
+Box A  : pool_size = 2  (§0.2 confirmed)
+Token  : Settings → Control token → saved  (§0.6 complete)
+Results: tab shows real run data + Before/After chart
+Active : tab shows TR-004 demo view (no live campaign)
 ```
 
 ---
@@ -232,18 +310,32 @@ a config file in the wrong location — it fails in 5 minutes, not 40."
 
 ---
 
-## Step 9 — Active campaign: PDMA loop + Approval (3 min) [UI — MIXED]
+## Step 9 — Active campaign: PDMA loop + Approval (3 min) [LIVE when running / DEMO when idle]
 
 **Navigate to:** Active tab (left nav).
 
-**Note:** The charts and metric numbers are pre-loaded demo data (TR-004, pool=2,
-43 pending threads). The **Approve, Reject, Pause, and Abort buttons now call the
-real API** — they require the control token to have been saved in Settings. If you
-want to show the approval without a live campaign, click Approve: it still animates
-the gate locally but also sends the real decision to the server (a 401 if no token
-is set is fine to explain — just shows the auth layer working).
+**What you see depends on whether a live campaign is in progress:**
 
-**What to say and point at:**
+- **No live campaign (demo mode):** The TR-004 demo screen appears — pre-loaded
+  with pool=2 / 43 pending data. Charts and metrics are illustrative.
+- **Live campaign running:** The TR-004 header hides and a green ● LIVE overlay
+  appears at the top, polling `GET /v1/perf/campaign/active` every 5 seconds.
+  It shows the real run-id, status, elapsed time, and — when the model has a
+  proposal — the live approval gate with cause, params and evidence.
+
+> **To launch a real campaign** for the demo (takes ~14 min total — start during
+> a natural pause):
+> ```bash
+> # From Box B over SSH
+> cd ~/crucible
+> source .env
+> uv run crucible run --run-id demo-live-1 --workspace ~/perf-lab \
+>     --provider gemini --model gemini-2.5-flash --experiments 3 &
+> ```
+> Or click **New Test Run → Launch** in the SPA (requires token saved in Settings).
+> Then navigate to Active tab — the live overlay appears within 5 seconds.
+
+**What to say and point at (demo mode):**
 
 "This is a campaign in progress. The metric band across the top shows the
 live readings: p99 is 312 ms — well above the 120 ms SLA. Pool active is
@@ -268,7 +360,11 @@ After I approve, the campaign will push to the perftest_sandbox branch,
 wait for the read-back from /actuator/env to confirm the property is live,
 then run a fresh 300-second measurement window."
 
-**Click Approve** → the gate animates to "Change applied — measuring now".
+**Click Approve** → gate animates to "Change applied — measuring now".
+
+> **If a live campaign is running:** clicking Approve calls
+> `POST /v1/perf/runs/{run_id}/experiments/{n}/decision` for real.
+> The live overlay shows the updated status within 5 seconds.
 
 **Show the CLI twin labels:**  
 "Every button has a CLI equivalent shown below it. Crucible can run entirely
@@ -276,20 +372,35 @@ headless — no UI required. CI/CD pipelines use `crucible approve` directly."
 
 ---
 
-## Step 10 — Results: outcome + calibration (1.5 min) [UI — SCRIPTED SCREEN]
+## Step 10 — Results: outcome + calibration (1.5 min) [LIVE]
 
 **Navigate to:** Results tab.
 
-"TR-003 — the completed run. Baseline p99 was 1206 ms with pool=2. After
-raising pool to 20: 58 ms. A 95.2% improvement. The SLA was 120 ms — met
-with comfortable headroom.
+> The Results tab loads automatically from `GET /v1/perf/runs/latest/report`
+> on open. If a completed run exists on Box B, you see real data. If not, the
+> TR-003 demo data is shown unchanged.
 
-The trial breakdown shows exactly what changed between T1 and T2: pending
+"The Results tab loaded the latest completed run — the data you see is from
+the actual manifest file on Box B, not hardcoded.
+
+The Before / After chart shows the measurement delta across all three
+percentiles — p50, p95, p99. This isn't a prediction; these are the two
+real measured windows, one before and one after the change.
+
+The trial breakdown shows exactly what changed between experiments: pending
 threads dropped from 43 to 0, pool utilisation dropped from 100% to 20%.
 
 Every result is a manifest JSON file on disk — not a database row that can
 be lost. The manifest records the commit SHA, the model that ran the diagnosis,
 the environment, and the collector version."
+
+**Point at the ↺ Latest run button:**  
+"This refreshes from the API — so if a new campaign just finished, one click
+shows its results here."
+
+**Point at the ▼ Pick run button (if visible):**  
+"Multiple runs are available. I can switch to any previous campaign without
+leaving the tab."
 
 ---
 
@@ -452,9 +563,11 @@ Nothing is claimed that wasn't measured."
 | Approve / Reject | **LIVE** | POSTs to `/v1/perf/runs/{id}/experiments/{n}/decision` |
 | Pause button | **LIVE** | POSTs to `/v1/perf/campaign/{id}/pause` — requires token |
 | Abort button | **LIVE** | POSTs to `/v1/perf/campaign/{id}/abort` — requires token |
+| **Active tab — live campaign** | **LIVE** | Polls `GET /v1/perf/campaign/active` every 5 s; shows real run-id, status, elapsed, approval gate, job log |
+| **Active tab — no campaign** | **DEMO** | TR-004 pre-loaded; demo approval still animates locally |
+| **Results tab** | **LIVE** | Fetches `GET /v1/perf/runs/latest/report` on open; renders Chart.js Before/After bar chart and real experiment table |
 | Chat with Live AI OFF | **SCRIPTED** | Keyword-matched, instant, no network |
-| Active tab charts/data | **SCRIPTED** | Pre-loaded TR-004 demo state (pool=2, 43 pending) |
-| Results tab (TR-003) | **SCRIPTED** | Hardcoded but data matches real run manifest |
+| Active tab charts/data | **SCRIPTED** | Demo p99/RPS charts (pre-loaded TR-004 state) |
 | Benchmarks tab | **SCRIPTED** | Data accurate (from real fixtures), no backend call |
 | Guardrails tab | **SCRIPTED** | Static content from profile.yaml values |
 | Doc upload chip | **SCRIPTED** | Adds chip to UI; actual RAG indexing via CLI |
@@ -474,3 +587,6 @@ Nothing is claimed that wasn't measured."
 | Write action returns 401 | Token not saved — go to Settings, paste `CRUCIBLE_CONTROL_TOKEN`, Save |
 | Write action returns 503 | `CRUCIBLE_CONTROL_TOKEN` not set in Box B `.env` — restart crucible serve after adding it |
 | Jobs tab shows no output | Job may still be starting — click Refresh or wait 5 s |
+| Active tab shows TR-004 but a campaign is running | Campaign endpoint unreachable — check `curl 127.0.0.1:8113/v1/perf/campaign/active` on Box B |
+| Results tab shows demo data (TR-003) | No completed run on Box B yet — run at least one campaign, or check `curl .../v1/perf/runs` |
+| Results chart does not appear | Chart.js CDN blocked — reload; the KPI strip still shows the numbers |
