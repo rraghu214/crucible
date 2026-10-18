@@ -186,12 +186,18 @@ Use this when nobody else needs to see the UI. It needs no open port and no
 control token, because the connection never leaves the encrypted SSH channel.
 Run this **on your own machine**:
 
+**SPA demo UI (port 8113 on Box B → local port 9113):**
+```powershell
+ssh -i <path-to-runner-host-key> -L 9113:127.0.0.1:8113 <user>@<runner-host-ip>
+```
+Browse to **http://localhost:9113/dashboard**.
+
+**NiceGUI production UI (port 8765 on Box B → local port 8765):**
 ```powershell
 ssh -i <path-to-runner-host-key> -L 8765:127.0.0.1:8765 <user>@<runner-host-ip>
 ```
-
-Keep that window open, then browse to **http://localhost:8765**. Over the
-tunnel it is safe to paste the control token into the sidebar.
+Browse to **http://localhost:8765**. Over the tunnel it is safe to paste the
+control token into the sidebar.
 
 ---
 
