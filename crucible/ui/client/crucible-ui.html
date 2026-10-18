@@ -1854,12 +1854,28 @@ let _activeRunId='TR-004';
 function getActiveRunId(){return _activeRunId;}
 
 /* ── Approval ────────────────────────────────────────────────────────── */
+// Returns true if a real campaign (not the demo placeholder) is active.
+// Used to decide whether to send the decision to the server.
+async function _isRealCampaign(runId){
+  if(!runId||runId==='TR-004') return false;
+  try{
+    const r=await fetch('/v1/perf/campaign/'+runId+'/state');
+    if(!r.ok) return false;
+    const d=await r.json();
+    return d.status!=='idle';
+  }catch(e){return false;}
+}
 async function doApprove(){
   document.getElementById('approvalGate').style.display='none';
   document.getElementById('diagResult').style.display='flex';
   const runId=getActiveRunId();
   const expEl=document.getElementById('pendingExpNum');
   const expNum=expEl?parseInt(expEl.textContent||'1',10):1;
+  const real=await _isRealCampaign(runId);
+  if(!real){
+    addChatMsg('ai','Change approved ✓ — deploying pool=20 to perftest_sandbox now. I\'ll start the re-measurement window once /actuator/env confirms the property is live.');
+    return;
+  }
   addChatMsg('ai','Change approved ✓ — sending approval to server…');
   try{
     await apiPost('/v1/perf/runs/'+runId+'/experiments/'+expNum+'/decision',{responder:'operator',approved:true});
@@ -1873,20 +1889,26 @@ async function doReject(){
   const runId=getActiveRunId();
   const expEl=document.getElementById('pendingExpNum');
   const expNum=expEl?parseInt(expEl.textContent||'1',10):1;
+  const real=await _isRealCampaign(runId);
+  if(!real){
+    addChatMsg('ai','Rejected. I\'ll keep the baseline and look for other hypotheses. Want me to probe for slow queries or GC pressure next?');
+    return;
+  }
   try{
     await apiPost('/v1/perf/runs/'+runId+'/experiments/'+expNum+'/decision',{responder:'operator',approved:false});
     addChatMsg('ai','Rejected. I\'ll keep the baseline and look for other hypotheses.');
   }catch(e){
-    addChatMsg('ai','Rejected locally — server returned: '+e.message);
+    addChatMsg('ai','Rejected — server: '+e.message);
   }
 }
 async function confirmAbort(){
   const runId=getActiveRunId();
   if(!confirm('Abort '+runId+'? The in-progress trial will be discarded and the last good commit will be redeployed.')) return;
+  const real=await _isRealCampaign(runId);
+  if(!real){addChatMsg('ai','Abort initiated — redeploying last good commit and stopping the load generator.');return;}
   addChatMsg('ai','Abort initiated…');
   try{
     const job=await apiPost('/v1/perf/campaign/'+runId+'/abort',{reason:'operator abort from UI'});
-    _activeRunId=job.id;
     addChatMsg('ai','Abort job started ('+job.id+'). Redeploying last good commit. <a href="#" onclick="go(\'jobs\')">Watch in Jobs →</a>');
     updateJobsBadge();
   }catch(e){addChatMsg('ai','⚠ Abort failed: '+e.message);}
@@ -1894,6 +1916,8 @@ async function confirmAbort(){
 async function confirmPause(){
   const runId=getActiveRunId();
   if(!confirm('Pause '+runId+'? The load generator stops; nothing measured so far is lost.')) return;
+  const real=await _isRealCampaign(runId);
+  if(!real){addChatMsg('ai','Campaign paused — load generator stopped. Nothing measured so far is lost. Resume when ready.');return;}
   addChatMsg('ai','Pause initiated…');
   try{
     const job=await apiPost('/v1/perf/campaign/'+runId+'/pause',{reason:'operator pause from UI'});
