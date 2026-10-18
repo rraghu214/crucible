@@ -292,16 +292,18 @@ blockquote{border-left:3px solid var(--fire);padding:12px 16px;background:var(--
     </div>
 
     <div style="margin-top:24px;" class="card">
-      <div class="card-title">Three automation modes</div>
-      <div class="card-body" style="margin-bottom:14px;">The mode controls how many human gates exist in the loop. The underlying code path is identical in all three — only the gate configuration differs.</div>
+      <div class="card-title">Four campaign modes</div>
+      <div class="card-body" style="margin-bottom:14px;">Three modes control how many human gates sit in the improvement loop — the underlying code path is identical, only the gate configuration differs. A fourth mode, Ceiling Probe, is a different kind of campaign entirely: it answers "how much headroom do I have?" rather than "what is broken?"</div>
       <div class="tbl-wrap"><table class="nfr-table">
         <tr><th>Mode</th><th>Gate at proposal</th><th>Gate at apply</th><th>Who decides</th></tr>
         <tr><td>Advisory</td><td>Full stop — human reviews diagnosis + proposal</td><td>Human executes</td><td>Human leads, agent advises</td></tr>
         <tr><td>Semi-Automated</td><td>Approve / reject the diff</td><td>Automated after approval</td><td>Human approves, agent executes</td></tr>
         <tr><td>Fully Automated</td><td>None — bounded by policy</td><td>Automated</td><td>Agent decides within guardrail bounds</td></tr>
+        <tr style="background:var(--warn-d);"><td style="color:var(--warn);">Ceiling Probe</td><td style="color:var(--mid);">N/A — no config changes made</td><td style="color:var(--mid);">N/A — load escalates, service is never modified</td><td style="color:var(--mid);">Operator sets max load + step size; probe stops at first SLA miss</td></tr>
       </table></div>
       <div style="margin-top:12px;font-size:13px;color:var(--mid);">
-        Fully Automated mode is inspired by the idea of an AI scientist that can propose experiments, run them unattended, and iterate on evidence — as Andrej Karpathy has described for LLM-driven research pipelines. Crucible applies this to performance engineering: bounded by the property list in <code>profile.yaml</code>, every "experiment" is a real measurement, and every result is a manifest on disk, not a claim in memory.
+        <strong style="color:var(--warn);">Ceiling Probe</strong> answers a different question: not "what is broken?" but "what can this service handle?" It escalates load in steps, holds each step long enough to measure (120 s warmup + 300 s measured, same as any experiment), and stops at the first step that misses the SLA. The result is a pair — last passing level and first failing level — with both measurements attached. It is deliberately started by an operator flag: because it changes the load profile, it is the one action the agent can never initiate on its own.<br><br>
+        <strong>Fully Automated mode</strong> is inspired by the idea of an AI scientist that can propose experiments, run them unattended, and iterate on evidence — as Andrej Karpathy has described for LLM-driven research pipelines. Crucible applies this to performance engineering: every "experiment" is bounded by the property list in <code>profile.yaml</code>, every result is a manifest on disk, and the watchdog runs arithmetic checks every 5 minutes to decide whether to continue.
       </div>
     </div>
   </div>
