@@ -16,8 +16,12 @@ You can use it in two places:
 
 | UI | Command | Port | URL | Use for |
 |---|---|---|---|---|
-| **SPA demo UI** | `uv run crucible serve` | 8113 | `localhost:9113/dashboard` | Demo recording, overview, History & Diff, context-aware AI chat |
-| **NiceGUI production UI** | `uv run crucible serve-ui` | 8765 | `localhost:8765` | Live campaigns, approvals, benchmark, production use |
+| **SPA demo UI** | `uv run crucible serve` | 8113 | `localhost:9113/dashboard` | Demo recording, launching runs, approvals, Jobs log, History & Diff, AI chat |
+| **NiceGUI production UI** | `uv run crucible serve-ui` | 8765 | `localhost:8765` | Alternative campaign UI with richer live charts |
+
+The SPA's write actions (launch, approve, pause, abort, ceiling probe, bench) call
+the same REST API as the CLI. Set `CRUCIBLE_CONTROL_TOKEN` in your `.env` and paste
+the same value in the SPA's **Settings → Control token** field before using them.
 
 The UI does everything the command line does, by running the same `crucible`
 commands for you. A step-by-step walkthrough is in
@@ -284,8 +288,9 @@ In the UI, the same results are on the **Campaign** and **History** pages.
 | Page will not load on the public URL | On the runner host, `curl localhost:8765`. If that fails, run `systemctl status crucible-ui` and `journalctl -u crucible-ui -n 50`. |
 | Loads on the runner host but not from outside | `sudo iptables -L INPUT -n \| grep 8765`, then the cloud firewall ingress rule, including its source IP. |
 | Locally, `address already in use` | Another server holds 8765. Use `--port 8766`. |
-| Approve says **401** | Wrong control token. |
-| Approve says **503** | No `CRUCIBLE_UI_TOKEN` in the server's `.env`. |
+| Approve says **401** | Wrong control token — check Settings → Control token matches `CRUCIBLE_CONTROL_TOKEN` in the server `.env`. |
+| Approve says **503** | No `CRUCIBLE_CONTROL_TOKEN` in the server's `.env`. Add it and restart `crucible serve`. |
+| Launch / Preflight / Abort returns **401** | Same as above — all write actions use the same token. |
 | Approve says **409** | Already decided, or the values did not match the proposal. |
 | `crucible run` fails at the baseline | The target is not reachable, or not in the expected state. Run `crucible preflight`. |
 | `crucible bench` refuses the task set | A task names a fixture not yet captured. Add `--skip-missing-fixtures` to skip those tasks. |

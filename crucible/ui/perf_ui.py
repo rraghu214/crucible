@@ -55,7 +55,10 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 from ..auth import require_control
+from . import actions as _actions
+from .actions import ActionError
 from .hitl import PendingAction, decide_resume
+from .jobs import Job, get_job, list_jobs, read_output, start_job
 from .validator import validate_surface
 
 # ---------------------------------------------------------------------------
@@ -1653,6 +1656,251 @@ async def perf_chat(body: ChatBody, request: Request):
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"gateway error: {exc}") from exc
     return {"reply": reply}
+
+
+# ---------------------------------------------------------------------------
+# Job action endpoints — write operations that spawn long-lived processes
+# ---------------------------------------------------------------------------
+
+
+def _job_dict(j: Job) -> dict[str, Any]:
+    return {
+        "id": j.id, "label": j.label, "status": j.status,
+        "started_at": j.started_at_epoch_s, "exit_code": j.exit_code,
+        "command_line": j.command_line,
+    }
+
+
+class RunBody(BaseModel):
+    run_id: str = ""
+    profile: str = ""
+    sla: str = ""
+    scenario: str = ""
+    users: int | None = None
+    warmup: float | None = None
+    measure: float | None = None
+    experiments: int | None = None
+    workspace: str = ""
+    approve: str = "file"
+    approval_timeout: float | None = None
+    provider: str = ""
+    model: str = ""
+    stakeholder_request: str = ""
+
+
+@router.post("/v1/perf/jobs/run", dependencies=[Depends(require_control)])
+async def perf_run(body: RunBody, request: Request):
+    """Start a ``crucible run`` campaign as a background job."""
+    ctx = _context(request)
+    try:
+        args = _actions.run_args(
+            run_id=body.run_id, profile=body.profile, sla=body.sla,
+            scenario=body.scenario, users=body.users, warmup=body.warmup,
+            measure=body.measure, experiments=body.experiments,
+            workspace=body.workspace, approve=body.approve,
+            approval_timeout=body.approval_timeout,
+            provider=body.provider, model=body.model,
+            state_dir=str(ctx.state),
+            stakeholder_request=body.stakeholder_request,
+        )
+    except ActionError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    label = f"run {body.run_id}" if body.run_id else "crucible run"
+    job = start_job(ctx.state, ctx.root, args, label=label)
+    return _job_dict(job)
+
+
+class PreflightBody(BaseModel):
+    profile: str = ""
+    sla: str = ""
+    workspace: str = ""
+    apply_probe: bool = False
+    probe_timeout: float | None = None
+
+
+@router.post("/v1/perf/jobs/preflight", dependencies=[Depends(require_control)])
+async def perf_preflight_job(body: PreflightBody, request: Request):
+    """Start a ``crucible preflight`` check as a background job."""
+    ctx = _context(request)
+    try:
+        args = _actions.preflight_args(
+            profile=body.profile, sla=body.sla, workspace=body.workspace,
+            apply_probe=body.apply_probe, probe_timeout=body.probe_timeout,
+        )
+    except ActionError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    label = "crucible preflight --apply-probe" if body.apply_probe else "crucible preflight"
+    job = start_job(ctx.state, ctx.root, args, label=label)
+    return _job_dict(job)
+
+
+class CeilingBody(BaseModel):
+    run_id: str = ""
+    profile: str = ""
+    sla: str = ""
+    scenario: str = ""
+    users: int | None = None
+    warmup: float | None = None
+    measure: float | None = None
+    min_users: int | None = None
+    max_users: int  # required per DESIGN.md §20.2
+    step: int | None = None
+
+
+@router.post("/v1/perf/jobs/ceiling", dependencies=[Depends(require_control)])
+async def perf_ceiling(body: CeilingBody, request: Request):
+    """Start a ``crucible ceiling`` probe as a background job."""
+    ctx = _context(request)
+    try:
+        args = _actions.ceiling_args(
+            run_id=body.run_id, profile=body.profile, sla=body.sla,
+            scenario=body.scenario, users=body.users, warmup=body.warmup,
+            measure=body.measure, min_users=body.min_users,
+            max_users=body.max_users, step=body.step,
+            state_dir=str(ctx.state),
+        )
+    except ActionError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    label = f"ceiling {body.run_id}" if body.run_id else "crucible ceiling"
+    job = start_job(ctx.state, ctx.root, args, label=label)
+    return _job_dict(job)
+
+
+class BenchBody(BaseModel):
+    tasks: str = "config/tasks"
+    fixtures: str = "results"
+    profile: str = ""
+    sla: str = ""
+    out: str = ""
+    provider: str = ""
+    model: str = ""
+    skip_missing_fixtures: bool = True
+
+
+@router.post("/v1/perf/jobs/bench", dependencies=[Depends(require_control)])
+async def perf_bench_job(body: BenchBody, request: Request):
+    """Start a ``crucible bench`` replay run as a background job."""
+    ctx = _context(request)
+    try:
+        args = _actions.bench_args(
+            tasks=body.tasks or str(ctx.path(ctx.tasks_dir)),
+            fixtures=body.fixtures or str(ctx.path(ctx.fixture_dir)),
+            profile=body.profile, sla=body.sla, out=body.out,
+            provider=body.provider, model=body.model,
+            skip_missing_fixtures=body.skip_missing_fixtures,
+        )
+    except ActionError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    job = start_job(ctx.state, ctx.root, args, label="crucible bench")
+    return _job_dict(job)
+
+
+class AbortBody(BaseModel):
+    reason: str = ""
+    clear: bool = False
+
+
+@router.post("/v1/perf/campaign/{run_id}/abort", dependencies=[Depends(require_control)])
+async def perf_abort(run_id: str, body: AbortBody, request: Request):
+    """Abort a running campaign (discards in-flight, redeploys last good commit)."""
+    ctx = _context(request)
+    try:
+        args = _actions.abort_args(
+            run_id=run_id, reason=body.reason, clear=body.clear,
+            state_dir=str(ctx.state),
+        )
+    except ActionError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    job = start_job(ctx.state, ctx.root, args, label=f"abort {run_id}")
+    return _job_dict(job)
+
+
+class PauseBody(BaseModel):
+    reason: str = ""
+
+
+@router.post("/v1/perf/campaign/{run_id}/pause", dependencies=[Depends(require_control)])
+async def perf_pause(run_id: str, body: PauseBody, request: Request):
+    """Pause a running campaign (holds the state; nothing measured is lost)."""
+    ctx = _context(request)
+    try:
+        args = _actions.pause_args(run_id=run_id, reason=body.reason, state_dir=str(ctx.state))
+    except ActionError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    job = start_job(ctx.state, ctx.root, args, label=f"pause {run_id}")
+    return _job_dict(job)
+
+
+class ResumeBody(BaseModel):
+    profile: str = ""
+    sla: str = ""
+    scenario: str = ""
+    workspace: str = ""
+
+
+@router.post("/v1/perf/campaign/{run_id}/resume", dependencies=[Depends(require_control)])
+async def perf_resume(run_id: str, body: ResumeBody, request: Request):
+    """Resume a paused campaign."""
+    ctx = _context(request)
+    try:
+        args = _actions.resume_args(
+            run_id=run_id, state_dir=str(ctx.state),
+            profile=body.profile, sla=body.sla,
+            scenario=body.scenario, workspace=body.workspace,
+        )
+    except ActionError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    job = start_job(ctx.state, ctx.root, args, label=f"resume {run_id}")
+    return _job_dict(job)
+
+
+@router.get("/v1/perf/jobs")
+async def perf_list_jobs(request: Request, limit: int = 50):
+    """List recent background jobs, newest first."""
+    ctx = _context(request)
+    jobs = list_jobs(ctx.state, limit=limit)
+    return {"jobs": [_job_dict(j) for j in jobs]}
+
+
+@router.get("/v1/perf/jobs/{job_id}")
+async def perf_get_job(job_id: str, request: Request):
+    """Get a single job's metadata."""
+    ctx = _context(request)
+    j = get_job(ctx.state, job_id)
+    if j is None:
+        raise HTTPException(404, f"no job {job_id}")
+    return _job_dict(j)
+
+
+@router.get("/v1/perf/jobs/{job_id}/output", response_class=PlainTextResponse)
+async def perf_job_output(job_id: str, request: Request):
+    """Tail the output log of a job (last 200 KB)."""
+    ctx = _context(request)
+    j = get_job(ctx.state, job_id)
+    if j is None:
+        raise HTTPException(404, f"no job {job_id}")
+    return read_output(j)
+
+
+@router.get("/v1/perf/campaign/{run_id}/state")
+async def perf_campaign_state(run_id: str, request: Request):
+    """Return the current state of a campaign: active, pending approvals, lock."""
+    from ..perf.approval import pending_approvals, pending_manual_steps
+    from ..perf.campaign import abort_requested
+
+    ctx = _context(request)
+    active = _active_runs(ctx)
+    is_active = any(r.get("run_id") == run_id for r in active)
+    approvals = pending_approvals(ctx.state, run_id) if is_active else []
+    manual_steps = pending_manual_steps(ctx.state, run_id) if is_active else []
+    aborting = abort_requested(ctx.state, run_id) if is_active else False
+    status = "aborting" if aborting else ("needs_approval" if approvals else ("manual_step" if manual_steps else ("running" if is_active else "idle")))
+    return {
+        "run_id": run_id,
+        "status": status,
+        "approvals": approvals,
+        "manual_steps": manual_steps,
+    }
 
 
 @router.get("/perf", response_class=HTMLResponse)

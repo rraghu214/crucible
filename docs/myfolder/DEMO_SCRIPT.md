@@ -2,9 +2,15 @@
 
 > **How to use this file**  
 > Follow each numbered step in order. Steps marked **[LIVE]** make real network
-> calls. Steps marked **[UI]** are polished static screens — the data is
-> accurate but the buttons don't call the backend. Everything is noted so you
-> know exactly what to expect.
+> calls (REST API on Box B). Steps marked **[UI]** are polished screens — the
+> data is accurate and most buttons now call real endpoints too (see the
+> LIVE/SCRIPTED table at the bottom). Everything is noted so you know exactly
+> what to expect.
+>
+> **New since October 2026:** All write actions (Launch, Preflight, Abort, Pause,
+> Approve/Reject, Ceiling Probe, Bench) now call the live REST API instead of
+> simulating locally. A **Jobs** tab shows the output of every background command.
+> Enter the `CRUCIBLE_CONTROL_TOKEN` in Settings before using any write action.
 
 ---
 
@@ -16,6 +22,8 @@ Tunnel : ssh -i ssh-key-2026-09-12.key -L 9113:127.0.0.1:8113 ubuntu@150.136.143
 Browser: localhost:9113/dashboard
 GLC v5 : warm — send one test message with Live AI toggle to burn off cold start
 Box A  : ensure pool_size = 2 in application.properties (so the campaign has something to fix)
+Token  : Settings → Control token → paste CRUCIBLE_CONTROL_TOKEN → Save
+         (required before any write action: launch, approve, abort, pause)
 ```
 
 **Quick sanity check — run these on Box B before recording:**
@@ -24,6 +32,8 @@ Box A  : ensure pool_size = 2 in application.properties (so the campaign has som
 curl -s http://127.0.0.1:8113/v1/perf/screens | python3 -m json.tool | head -5
 # confirms live history loads (should return run data)
 curl -s http://127.0.0.1:8113/v1/perf/screens/17 | python3 -m json.tool | grep "run_id" | head -3
+# confirms jobs endpoint is up
+curl -s http://127.0.0.1:8113/v1/perf/jobs | python3 -m json.tool
 ```
 
 ---
@@ -222,13 +232,16 @@ a config file in the wrong location — it fails in 5 minutes, not 40."
 
 ---
 
-## Step 9 — Active campaign: PDMA loop + Approval (3 min) [UI — SCRIPTED SCREEN]
+## Step 9 — Active campaign: PDMA loop + Approval (3 min) [UI — MIXED]
 
 **Navigate to:** Active tab (left nav).
 
-**Important note to self:** This screen shows TR-004 in a pre-loaded state
-(pool=2, 43 pending threads, approval gate open). It is a scripted demo
-screen — it does not call the backend in real time.
+**Note:** The charts and metric numbers are pre-loaded demo data (TR-004, pool=2,
+43 pending threads). The **Approve, Reject, Pause, and Abort buttons now call the
+real API** — they require the control token to have been saved in Settings. If you
+want to show the approval without a live campaign, click Approve: it still animates
+the gate locally but also sends the real decision to the server (a 401 if no token
+is set is fine to explain — just shows the auth layer working).
 
 **What to say and point at:**
 
@@ -431,8 +444,16 @@ Nothing is claimed that wasn't measured."
 | History & Diff table | **LIVE** | Fetches `/v1/perf/screens/17` from Box B |
 | Chat with Live AI ON | **LIVE** | POSTs to `/v1/perf/chat` → GLC v5 |
 | Budget table by mode | **LIVE** | JS calculates from mode selection |
+| Jobs tab | **LIVE** | Fetches `/v1/perf/jobs`; polls badge every 10 s |
+| Launch Test Run button | **LIVE** | POSTs to `/v1/perf/jobs/run` — requires token |
+| Preflight "Run checks" | **LIVE** | POSTs to `/v1/perf/jobs/preflight` — requires token |
+| Apply Probe button | **LIVE** | Same as above with `apply_probe:true` |
+| Launch Ceiling Probe | **LIVE** | POSTs to `/v1/perf/jobs/ceiling` — requires token |
+| Approve / Reject | **LIVE** | POSTs to `/v1/perf/runs/{id}/experiments/{n}/decision` |
+| Pause button | **LIVE** | POSTs to `/v1/perf/campaign/{id}/pause` — requires token |
+| Abort button | **LIVE** | POSTs to `/v1/perf/campaign/{id}/abort` — requires token |
 | Chat with Live AI OFF | **SCRIPTED** | Keyword-matched, instant, no network |
-| Active tab (TR-004) | **SCRIPTED** | Pre-loaded state, Approve button animates locally |
+| Active tab charts/data | **SCRIPTED** | Pre-loaded TR-004 demo state (pool=2, 43 pending) |
 | Results tab (TR-003) | **SCRIPTED** | Hardcoded but data matches real run manifest |
 | Benchmarks tab | **SCRIPTED** | Data accurate (from real fixtures), no backend call |
 | Guardrails tab | **SCRIPTED** | Static content from profile.yaml values |
@@ -450,3 +471,6 @@ Nothing is claimed that wasn't measured."
 | Box B unreachable | History tab will show "Could not load history" — explain the API call |
 | History shows no rows | Run `crucible run` on Box B first to generate a manifest |
 | Approval gate already dismissed | Refresh the page — the active screen resets on load |
+| Write action returns 401 | Token not saved — go to Settings, paste `CRUCIBLE_CONTROL_TOKEN`, Save |
+| Write action returns 503 | `CRUCIBLE_CONTROL_TOKEN` not set in Box B `.env` — restart crucible serve after adding it |
+| Jobs tab shows no output | Job may still be starting — click Refresh or wait 5 s |

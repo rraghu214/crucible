@@ -465,6 +465,11 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
       <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M8 4v4l3 2"/><path d="M3.5 3.5A6.5 6.5 0 0 0 2 8" stroke-dasharray="2 1.5"/></svg>
       History &amp; Diff
     </a>
+    <a class="nav-item" id="nav-jobs" onclick="go('jobs')">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="2.5" rx="1"/><rect x="2" y="7" width="8" height="2.5" rx="1"/><rect x="2" y="11" width="10" height="2.5" rx="1"/></svg>
+      Jobs
+      <span class="nav-badge" id="jobs-badge" style="display:none">0</span>
+    </a>
     <div class="nav-sec">Safety</div>
     <a class="nav-item" onclick="go('guardrails')">
       <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5L2 4v4c0 3 2.5 5.5 6 6.5 3.5-1 6-3.5 6-6.5V4L8 1.5z"/></svg>
@@ -1086,7 +1091,7 @@ scenarios:
     <div class="ph-actions">
       <span class="pill running">RUNNING</span>
       <div style="display:flex;flex-direction:column;align-items:center;">
-        <button class="btn btn-ghost btn-sm">⏸ Pause</button>
+        <button class="btn btn-ghost btn-sm" onclick="confirmPause()">⏸ Pause</button>
         <div class="cli-twin">crucible pause TR-004</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:center;">
@@ -1522,6 +1527,47 @@ scenarios:
     <div class="guard-row"><div class="guard-info"><div class="guard-name">Repo</div><div class="guard-desc">https://github.com/rraghu214/perf-lab</div></div><span class="pill ok">Reachable</span></div>
     <div class="guard-row"><div class="guard-info"><div class="guard-name">Sandbox branch</div><div class="guard-desc">The only branch Crucible ever writes to.</div></div><code style="font-family:var(--f-mono);font-size:12px;color:var(--blue);background:var(--blue-d);padding:4px 8px;border-radius:4px;">perftest_sandbox</code></div>
   </div>
+  <div class="card">
+    <div class="card-h"><div class="card-title">Control token</div></div>
+    <div style="font-size:12px;color:var(--mid);margin-bottom:10px;">Required for write actions (start, approve, pause, abort). Stored in your browser only — never sent to a third party. Set <code style="font-size:11px;font-family:var(--f-mono);">CRUCIBLE_CONTROL_TOKEN</code> on the server to enable this.</div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input id="tokenInput" type="password" class="form-input" placeholder="Paste token here…" style="flex:1;font-family:var(--f-mono);font-size:12px;">
+      <button class="btn btn-primary btn-sm" onclick="saveToken()">Save</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearToken()">Clear</button>
+    </div>
+    <div id="tokenStatus" style="margin-top:6px;font-size:11px;color:var(--lo);"></div>
+  </div>
+</section>
+
+<!-- ── JOBS ── -->
+<section class="pg" id="pg-jobs">
+  <div class="page-header">
+    <div class="ph-left"><div class="ph-eyebrow">Background work</div><div class="ph-title">Jobs</div><div class="ph-sub">Every command started from the UI — campaigns, preflight, bench, ceiling probes</div></div>
+    <div class="ph-actions">
+      <button class="btn btn-ghost btn-sm" onclick="loadJobs()">↺ Refresh</button>
+    </div>
+  </div>
+  <div class="card" id="jobs-list-card">
+    <div id="jobs-empty" style="text-align:center;padding:32px;color:var(--lo);font-size:13px;">No jobs yet. Start a run, preflight or benchmark from the other tabs.</div>
+    <div id="jobs-table" style="display:none;">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead><tr style="color:var(--lo);font-size:11px;text-align:left;">
+          <th style="padding:6px 8px;font-weight:600;">Label</th>
+          <th style="padding:6px 8px;font-weight:600;">Started</th>
+          <th style="padding:6px 8px;font-weight:600;">Status</th>
+          <th style="padding:6px 8px;font-weight:600;">Action</th>
+        </tr></thead>
+        <tbody id="jobs-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+  <div id="job-output-card" style="display:none;" class="card">
+    <div class="card-h">
+      <div class="card-title" id="job-output-title">Output</div>
+      <button class="btn btn-ghost btn-sm" onclick="closeJobOutput()">✕ Close</button>
+    </div>
+    <pre id="job-output-pre" style="font-family:var(--f-mono);font-size:11px;line-height:1.5;overflow-x:auto;white-space:pre-wrap;max-height:480px;overflow-y:auto;background:var(--s2);padding:12px;border-radius:var(--rs);color:var(--hi);margin-top:8px;"></pre>
+  </div>
 </section>
 
 </main>
@@ -1577,7 +1623,7 @@ scenarios:
 
 <script>
 /* ── Page nav ─────────────────────────────────────────────────────────── */
-const PAGES={'overview':'pg-overview','library':'pg-library','new-test':'pg-new-test','preflight':'pg-preflight','active':'pg-active','results':'pg-results','benchmarks':'pg-benchmarks','guardrails':'pg-guardrails','history':'pg-history','settings':'pg-settings'};
+const PAGES={'overview':'pg-overview','library':'pg-library','new-test':'pg-new-test','preflight':'pg-preflight','active':'pg-active','results':'pg-results','benchmarks':'pg-benchmarks','guardrails':'pg-guardrails','history':'pg-history','settings':'pg-settings','jobs':'pg-jobs'};
 const CHAT_CONTEXT={
   'overview':'📍 Overview — ask about any run',
   'new-test':'📍 Setup wizard — I can help fill in fields',
@@ -1588,7 +1634,8 @@ const CHAT_CONTEXT={
   'guardrails':'📍 Guardrails — ask about any rule or property bound',
   'library':'📍 Library — ask about a collection',
   'history':'📍 History & Diff — ask about any run or compare two',
-  'settings':'📍 Settings'
+  'settings':'📍 Settings',
+  'jobs':'📍 Jobs — background commands started from this UI'
 };
 const ONBOARD_MSGS={
   'new-test':'👋 Starting a new test run? I can help! Tell me the service you want to test and what feels slow — I\'ll suggest the right scenario, SLA, and mode.',
@@ -1615,6 +1662,7 @@ function go(p){
 
   if(p==='active') setTimeout(initActiveCharts,80);
   if(p==='history') loadHistory();
+  if(p==='jobs') loadJobs();
   window.scrollTo(0,0);
   currentPage=p;
   const ctx=document.getElementById('chatContextBar');
@@ -1764,13 +1812,112 @@ function initActiveCharts(){
   }catch(e){}
 }
 
+/* ── Auth token ──────────────────────────────────────────────────────── */
+function getToken(){try{return localStorage.getItem('crucible_token')||'';}catch(e){return '';}}
+function getAuthHeaders(){const t=getToken();return t?{'Authorization':'Bearer '+t,'Content-Type':'application/json'}:{'Content-Type':'application/json'};}
+function saveToken(){
+  const t=document.getElementById('tokenInput').value.trim();
+  const st=document.getElementById('tokenStatus');
+  if(!t){st.textContent='Enter a token first.';st.style.color='var(--warn)';return;}
+  try{localStorage.setItem('crucible_token',t);}catch(e){}
+  document.getElementById('tokenInput').value='';
+  st.textContent='Token saved to browser storage.';st.style.color='var(--ok)';
+}
+function clearToken(){
+  try{localStorage.removeItem('crucible_token');}catch(e){}
+  const st=document.getElementById('tokenStatus');
+  st.textContent='Token cleared.';st.style.color='var(--lo)';
+}
+(function initTokenDisplay(){
+  const st=document.getElementById('tokenStatus');
+  if(!st)return;
+  const t=getToken();
+  if(t) st.textContent='Token loaded from storage.';
+  else st.textContent='No token saved — read-only until one is set.';
+  st.style.color=t?'var(--ok)':'var(--lo)';
+})();
+
+/* ── API helpers ─────────────────────────────────────────────────────── */
+async function apiPost(url,body){
+  const res=await fetch(url,{method:'POST',headers:getAuthHeaders(),body:JSON.stringify(body)});
+  if(!res.ok){
+    let msg;try{const d=await res.json();msg=d.detail||JSON.stringify(d);}catch(e){msg=res.statusText;}
+    if(res.status===401||res.status===403) throw new Error('401: wrong or missing control token — set it in Settings');
+    if(res.status===503) throw new Error('503: server has no CRUCIBLE_CONTROL_TOKEN configured');
+    throw new Error('HTTP '+res.status+': '+msg);
+  }
+  return res.json();
+}
+
+/* ── Current run id (read from URL hash or last launched run) ────────── */
+let _activeRunId='TR-004';
+function getActiveRunId(){return _activeRunId;}
+
 /* ── Approval ────────────────────────────────────────────────────────── */
-function doApprove(){document.getElementById('approvalGate').style.display='none';document.getElementById('diagResult').style.display='flex';addChatMsg('ai','Change approved ✓ — deploying pool=20 to perftest_sandbox now. I\'ll start the re-measurement window once /actuator/env confirms the property is live.');}
-function doReject(){document.getElementById('approvalGate').style.display='none';addChatMsg('ai','Rejected. I\'ll keep the baseline and look for other hypotheses. Want me to probe for slow queries or GC pressure next?');}
-function confirmAbort(){if(confirm('Abort TR-004? The in-progress trial will be discarded and the last good commit will be redeployed.'))addChatMsg('ai','Abort initiated — redeploying last good commit and stopping the load generator.');}
+async function doApprove(){
+  document.getElementById('approvalGate').style.display='none';
+  document.getElementById('diagResult').style.display='flex';
+  const runId=getActiveRunId();
+  const expEl=document.getElementById('pendingExpNum');
+  const expNum=expEl?parseInt(expEl.textContent||'1',10):1;
+  addChatMsg('ai','Change approved ✓ — sending approval to server…');
+  try{
+    await apiPost('/v1/perf/runs/'+runId+'/experiments/'+expNum+'/decision',{responder:'operator',approved:true});
+    addChatMsg('ai','Approval recorded — deploying to perftest_sandbox. Measurement starts once /actuator/env confirms the property is live.');
+  }catch(e){
+    addChatMsg('ai','⚠ Approval failed: '+e.message);
+  }
+}
+async function doReject(){
+  document.getElementById('approvalGate').style.display='none';
+  const runId=getActiveRunId();
+  const expEl=document.getElementById('pendingExpNum');
+  const expNum=expEl?parseInt(expEl.textContent||'1',10):1;
+  try{
+    await apiPost('/v1/perf/runs/'+runId+'/experiments/'+expNum+'/decision',{responder:'operator',approved:false});
+    addChatMsg('ai','Rejected. I\'ll keep the baseline and look for other hypotheses.');
+  }catch(e){
+    addChatMsg('ai','Rejected locally — server returned: '+e.message);
+  }
+}
+async function confirmAbort(){
+  const runId=getActiveRunId();
+  if(!confirm('Abort '+runId+'? The in-progress trial will be discarded and the last good commit will be redeployed.')) return;
+  addChatMsg('ai','Abort initiated…');
+  try{
+    const job=await apiPost('/v1/perf/campaign/'+runId+'/abort',{reason:'operator abort from UI'});
+    _activeRunId=job.id;
+    addChatMsg('ai','Abort job started ('+job.id+'). Redeploying last good commit. <a href="#" onclick="go(\'jobs\')">Watch in Jobs →</a>');
+    updateJobsBadge();
+  }catch(e){addChatMsg('ai','⚠ Abort failed: '+e.message);}
+}
+async function confirmPause(){
+  const runId=getActiveRunId();
+  if(!confirm('Pause '+runId+'? The load generator stops; nothing measured so far is lost.')) return;
+  addChatMsg('ai','Pause initiated…');
+  try{
+    const job=await apiPost('/v1/perf/campaign/'+runId+'/pause',{reason:'operator pause from UI'});
+    addChatMsg('ai','Pause job started ('+job.id+'). Campaign is holding — resume when ready. <a href="#" onclick="go(\'jobs\')">Watch in Jobs →</a>');
+    updateJobsBadge();
+  }catch(e){addChatMsg('ai','⚠ Pause failed: '+e.message);}
+}
 
 /* ── Launch ──────────────────────────────────────────────────────────── */
-function launchRun(){go('active');setTimeout(()=>addChatMsg('ai','TR-004 launched! Running preflight first — test deploy, check readiness probe, then revert. I\'ll tell you when the first real measurement begins.'),400);}
+async function launchRun(){
+  const runIdEl=document.getElementById('wz-run-id');
+  const runId=(runIdEl&&runIdEl.value.trim())||('run-'+Date.now());
+  addChatMsg('ai','Starting '+runId+'…');
+  try{
+    const job=await apiPost('/v1/perf/jobs/run',{run_id:runId,approve:'file'});
+    _activeRunId=runId;
+    go('jobs');
+    addChatMsg('ai',runId+' launched — job <code>'+job.id+'</code>. Preflight runs first. <a href="#" onclick="go(\'active\')">Watch live →</a>');
+    updateJobsBadge();
+  }catch(e){
+    addChatMsg('ai','⚠ Launch failed: '+e.message);
+    go('active');
+  }
+}
 
 /* ── Info banners ────────────────────────────────────────────────────── */
 function dismissBanner(id){
@@ -1933,10 +2080,17 @@ function showDiff(){
 }
 
 /* ── Ceiling probe ────────────────────────────────────────────────────── */
-function launchCeiling(){
+async function launchCeiling(){
   if(!confirm('This will intentionally drive your service past its SLA to find its ceiling. Confirm you are targeting a pre-prod environment.')) return;
-  alert('Ceiling probe queued. Track progress on the Active Run page.');
-  go('active');
+  const maxEl=document.getElementById('ceiling-max-users');
+  const maxUsers=maxEl?parseInt(maxEl.value||'200',10):200;
+  addChatMsg('ai','Ceiling probe starting (max '+maxUsers+' users)…');
+  try{
+    const job=await apiPost('/v1/perf/jobs/ceiling',{max_users:maxUsers,run_id:'ceiling-'+Date.now()});
+    go('jobs');
+    addChatMsg('ai','Ceiling probe queued — job <code>'+job.id+'</code>. Escalating load in steps until the SLA breaks. <a href="#" onclick="go(\'jobs\')">Watch in Jobs →</a>');
+    updateJobsBadge();
+  }catch(e){addChatMsg('ai','⚠ Ceiling probe failed: '+e.message);}
 }
 
 /* ── Thermal latency encoding ─────────────────────────────────────────── */
@@ -1967,34 +2121,31 @@ const PF_CHECKS=[
   {id:'pf6', label:'Environment kind',  cmd:'crucible preflight --check env',         desc:'Environment declared non-production'},
   {id:'pf7', label:'Manual overrides',  cmd:'crucible preflight --check overrides',   desc:'Any manual step will be flagged on the manifest'},
 ];
-let pfRunning=false;
-function runPreflight(applyProbe){
-  if(pfRunning) return;
+async function runPreflight(applyProbe){
   if(applyProbe&&!confirm('Apply-probe will perform a real deploy and revert — the target service will restart once. Confirm you are on pre-prod.')) return;
-  pfRunning=true;
   const rows=document.querySelectorAll('.pf-row');
   rows.forEach(r=>{
     r.querySelector('.pf-status').textContent='…';
     r.querySelector('.pf-status').style.color='var(--mid)';
   });
-  rows.forEach((r,i)=>{
-    setTimeout(()=>{
-      const st=r.querySelector('.pf-status');
-      st.textContent='✓ Pass';
-      st.style.color='var(--ok)';
-      if(i===rows.length-1){
-        pfRunning=false;
-        const summary=document.getElementById('pfSummary');
-        if(summary){
-          summary.style.display='block';
-          summary.textContent=applyProbe
-            ? '✓ All 7 checks passed · Apply probe complete — target restarted and reverted successfully. Ready to launch.'
-            : '✓ All 7 checks passed. Run preflight --apply-probe for a full end-to-end deploy + revert test.';
-          summary.style.color='var(--ok)';
-        }
-      }
-    }, 600*(i+1));
-  });
+  const summary=document.getElementById('pfSummary');
+  if(summary){summary.style.display='none';}
+  addChatMsg('ai',(applyProbe?'Apply-probe':'Preflight')+' starting — sending to server…');
+  try{
+    const job=await apiPost('/v1/perf/jobs/preflight',{apply_probe:applyProbe});
+    if(summary){
+      summary.style.display='block';
+      summary.textContent='Job '+job.id+' queued — check Jobs tab for live output.';
+      summary.style.color='var(--ok)';
+    }
+    addChatMsg('ai','Preflight job <code>'+job.id+'</code> started. <a href="#" onclick="go(\'jobs\')">Watch in Jobs →</a>');
+    updateJobsBadge();
+    rows.forEach(r=>{r.querySelector('.pf-status').textContent='→ running';r.querySelector('.pf-status').style.color='var(--warn)';});
+  }catch(e){
+    if(summary){summary.style.display='block';summary.textContent='Error: '+e.message;summary.style.color='var(--err)';}
+    rows.forEach(r=>{r.querySelector('.pf-status').textContent='?';r.querySelector('.pf-status').style.color='var(--lo)';});
+    addChatMsg('ai','⚠ Preflight failed to start: '+e.message);
+  }
 }
 
 /* ── Chat pane ───────────────────────────────────────────────────────── */
@@ -2118,6 +2269,62 @@ function sendChat(){
 function chatAsk(q){addChatMsg('user',q);const t=showTyping();const replies={'Why pool=20 and not pool=10?':'Pool utilisation at 50 users peaks at ~22 active connections. 10 would still queue at burst. 20 gives headroom to ~200 users and stays within the allowed bound of 50.','Show me the full evidence':'<strong>Pool saturation</strong>: 43 waiters, 2406 ms max acquire.<br><strong>GC</strong>: 4% — healthy.<br><strong>CPU</strong>: 28% — healthy.<br><strong>Network RTT</strong>: 0.3 ms.<br>The pool is the only thing saturated.'};setTimeout(()=>{t.remove();addChatMsg('ai',replies[q]||'Great question — let me look into that for this run.');document.getElementById('chatQuick').style.display='none';},900);}
 function chatApprove(){addChatMsg('user','Approve the change');const t=showTyping();setTimeout(()=>{t.remove();doApprove();},700);}
 function chatReject(){addChatMsg('user','Reject');const t=showTyping();setTimeout(()=>{t.remove();doReject();},700);}
+
+/* ── Jobs ────────────────────────────────────────────────────────────── */
+const STATUS_COLOR={'RUNNING':'var(--warn)','FINISHED':'var(--ok)','UNKNOWN':'var(--lo)'};
+function _statusPill(s,exit){
+  const c=STATUS_COLOR[s]||'var(--lo)';
+  const label=s==='FINISHED'?(exit===0?'✓ Done':'✗ Failed'):s==='RUNNING'?'⟳ Running':'?';
+  const bg=s==='FINISHED'?(exit===0?'var(--ok-d)':'var(--err-d)'):s==='RUNNING'?'var(--warn-d)':'var(--s3)';
+  return `<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:${bg};color:${c};font-weight:600;">${label}</span>`;
+}
+async function loadJobs(){
+  let jobs=[];
+  try{const r=await fetch('/v1/perf/jobs?limit=30');if(r.ok){const d=await r.json();jobs=d.jobs||[];}}catch(e){}
+  const empty=document.getElementById('jobs-empty');
+  const table=document.getElementById('jobs-table');
+  const tbody=document.getElementById('jobs-tbody');
+  if(!empty||!table||!tbody)return;
+  if(!jobs.length){empty.style.display='block';table.style.display='none';return;}
+  empty.style.display='none';table.style.display='block';
+  tbody.innerHTML=jobs.map(j=>{
+    const when=j.started_at?new Date(j.started_at*1000).toLocaleTimeString():'—';
+    return `<tr style="border-top:1px solid var(--bd);">
+      <td style="padding:8px;"><span style="font-family:var(--f-mono);font-size:11px;color:var(--fire);">${j.id.slice(0,8)}</span> ${j.label||''}</td>
+      <td style="padding:8px;color:var(--lo);">${when}</td>
+      <td style="padding:8px;">${_statusPill(j.status,j.exit_code)}</td>
+      <td style="padding:8px;"><button class="btn btn-ghost btn-sm" style="font-size:11px;" onclick="showJobOutput('${j.id}','${(j.label||'').replace(/'/g,'')}')">View log</button></td>
+    </tr>`;
+  }).join('');
+  updateJobsBadge(jobs);
+}
+async function showJobOutput(jobId,label){
+  const card=document.getElementById('job-output-card');
+  const pre=document.getElementById('job-output-pre');
+  const title=document.getElementById('job-output-title');
+  if(!card||!pre)return;
+  title.textContent=label||jobId;
+  pre.textContent='Loading…';
+  card.style.display='block';
+  card.scrollIntoView({behavior:'smooth',block:'start'});
+  try{
+    const r=await fetch('/v1/perf/jobs/'+jobId+'/output');
+    pre.textContent=r.ok?await r.text():'Error '+r.status;
+  }catch(e){pre.textContent='Error: '+e.message;}
+}
+function closeJobOutput(){const c=document.getElementById('job-output-card');if(c)c.style.display='none';}
+function updateJobsBadge(jobs){
+  fetch('/v1/perf/jobs?limit=50').then(r=>r.ok?r.json():null).then(d=>{
+    if(!d)return;
+    const running=(d.jobs||[]).filter(j=>j.status==='RUNNING').length;
+    const badge=document.getElementById('jobs-badge');
+    if(!badge)return;
+    if(running>0){badge.textContent=running;badge.style.display='flex';}
+    else{badge.style.display='none';}
+  }).catch(()=>{});
+}
+// Poll running jobs every 10s to refresh badge
+setInterval(updateJobsBadge,10000);
 
 /* ── Resize handle ───────────────────────────────────────────────────── */
 (function(){
