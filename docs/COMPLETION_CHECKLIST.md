@@ -251,9 +251,137 @@ Can be done in any order, one group per sitting.
 
 ---
 
-## Step 9 — Demo recording ⬜
+## Step 9 — UI dry-run verification ⬜
 
-After Steps 3–6 have at least one live result, follow the full demo script:
+Do this once before recording to confirm all UI paths work end-to-end.
+
+### 9a — Bring everything up
+
+**Box A** (SSH from laptop):
+```bash
+ssh -i "C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-1\ssh-key-2026-09-12.key" ubuntu@129.213.121.108
+cd ~/perf-lab && ./mvnw spring-boot:run -Dspring-boot.run.profiles=lab &
+# Wait ~45s, then:
+curl -s http://localhost:8080/actuator/health | python3 -c "import json,sys; print(json.load(sys.stdin)['status'])"
+# Expected: UP
+curl -s http://localhost:8080/actuator/metrics/hikaricp.connections.max \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); print('pool=', d['measurements'][0]['value'])"
+# Expected: pool= 2.0
+```
+
+**Box B** (SSH from laptop, separate terminal):
+```bash
+ssh -i "C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-1\ssh-key-2026-09-12.key" ubuntu@150.136.143.227
+cd ~/crucible
+git pull origin capstone/perf-agent
+uv sync --group load
+nohup uv run crucible serve > ~/crucible-serve.log 2>&1 &
+echo "PID: $!"
+curl -s http://127.0.0.1:8113/healthz   # confirm: {"ok":true,...}
+
+# One-time: if GLC_BASE_URL in .env still points to 127.0.0.1:8111, fix it:
+#   sed -i 's|GLC_BASE_URL=.*|GLC_BASE_URL=https://glc-v5-rraghu214.onrender.com|' ~/crucible/.env
+```
+
+**SSH tunnel** (PowerShell on laptop):
+```powershell
+ssh -i "C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-1\ssh-key-2026-09-12.key" `
+    -L 9113:127.0.0.1:8113 `
+    ubuntu@150.136.143.227
+```
+Open `http://localhost:9113/dashboard`.
+
+**Warm GLC v5** (PowerShell on laptop — one call before anything else):
+```powershell
+$body = '{"model":"gemini-2.5-flash","messages":[{"role":"user","content":"ping"}]}'
+(Invoke-RestMethod -Uri "https://glc-v5-rraghu214.onrender.com/v1/chat" -Method Post -ContentType "application/json" -Body $body).text
+# Expected: any response (burns Render cold start)
+```
+
+### 9b — Control token
+
+The control token gates all write paths. Find it on Box B:
+```bash
+grep CRUCIBLE_CONTROL_TOKEN ~/crucible/.env
+```
+
+If it still reads `replace-with-a-long-random-local-token`, generate a real one:
+```bash
+TOK=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
+sed -i "s/CRUCIBLE_CONTROL_TOKEN=.*/CRUCIBLE_CONTROL_TOKEN=$TOK/" ~/crucible/.env
+echo "Token: $TOK"   # copy this — restart crucible serve after changing .env
+```
+
+In the browser: **Settings → Control token → paste the token → Save**.
+Confirm write buttons are no longer locked.
+
+### 9c — RAG indexing (verifies GlcEmbedder)
+
+On Box B, check current index state:
+```bash
+ls -lh ~/.crucible/memory/ 2>/dev/null || echo "no index yet"
+```
+
+In the browser: **New Test Run → Step 1 (Target & Repo)** → drag
+`docs/PERF_LAB_PRODUCT.md` from the perf-lab checkout onto the doc drop zone.
+
+Back on Box B within a few seconds:
+```bash
+ls -lh ~/.crucible/memory/
+# memory.faiss must exist and be non-zero → GlcEmbedder is working end-to-end
+```
+
+### 9d — Live AI RAG retrieval
+
+In the browser chat pane, toggle **Live AI ON**. Ask:
+
+> What cause families does PerfLab declare, and what is the fix for connection_pool_exhaustion?
+
+Response must reference `maximum-pool-size` and `/api/db`. A generic answer
+means indexing failed — re-check Step 9c before proceeding.
+
+### 9e — Live campaign dry run
+
+```bash
+# On Box B — open a second terminal (tmux detach from serve terminal)
+cd ~/crucible && set -a; . ./.env; set +a
+export GLC_BASE_URL=https://glc-v5-rraghu214.onrender.com
+uv run crucible run --run-id dry-run-1 --workspace ~/perf-lab \
+    --provider gemini --model gemini-2.5-flash --experiments 2
+```
+
+In the browser, verify in order:
+1. **Jobs tab** — job appears, output streams
+2. **Active tab** — within 5s of `[AWAITING APPROVAL]` in terminal, live overlay shows with real proposal
+3. Click **Approve** in the browser
+4. After campaign: **Results tab → ↺** — chart appears with real Before/After data
+5. **History & Diff tab** — row for `dry-run-1` is visible
+
+### 9f — Pre-recording checklist
+
+All items must be ✅ before recording starts.
+
+```
+[ ] Box A UP and pool=2 confirmed
+[ ] Box B running — crucible serve on port 8113
+[ ] Tunnel open — http://localhost:9113/dashboard loads
+[ ] GLC v5 warmed — first chat response received
+[ ] Control token saved in Settings — write buttons unlocked
+[ ] memory.faiss present after doc upload (9c passed)
+[ ] Live AI returns doc-grounded answer — references maximum-pool-size (9d passed)
+[ ] Active tab showed live overlay during dry-run campaign (9e passed)
+[ ] Approval from UI worked (9e passed)
+[ ] Results tab showed real chart (9e passed)
+[ ] History row for dry-run-1 visible (9e passed)
+```
+
+→ **All checked = READY TO RECORD**
+
+---
+
+## Step 10 — Demo recording ⬜
+
+After Step 9 passes, follow the full demo script:
 `docs/myfolder/DEMO_SCRIPT.md` (15 steps, ~22–25 min).
 
 **Pre-recording setup on Box B:**
@@ -261,9 +389,7 @@ After Steps 3–6 have at least one live result, follow the full demo script:
 cd ~/crucible
 git pull origin capstone/perf-agent
 uv sync --group load
-set -a; . ./.env; set +a
-export GLC_BASE_URL=https://glc-v5-rraghu214.onrender.com
-uv run crucible serve &   # SPA demo UI on port 8113
+nohup uv run crucible serve > ~/crucible-serve.log 2>&1 &   # SPA demo UI on port 8113
 ```
 
 **SSH tunnel from your laptop:**
@@ -281,18 +407,9 @@ curl -s http://127.0.0.1:8113/v1/perf/screens | python3 -m json.tool | head -5
 curl -s http://127.0.0.1:8113/v1/perf/screens/17 | python3 -m json.tool | grep "run_id" | head -3
 ```
 
-**Warm GLC v5** before recording: send one test message with Live AI toggle ON
-in the chat to burn off the Render cold start (~1 min first call).
-
-**NiceGUI UI (if needed for live approval during demo):**
-```bash
-uv run crucible serve-ui --port 8765 &
-# Second tunnel: ssh -L 8765:127.0.0.1:8765 ubuntu@150.136.143.227
-```
-
 ---
 
-## Step 10 — Final submission ⬜
+## Step 11 — Final submission ⬜
 
 1. Verify `uv run pytest -q` and `uv run ruff check .` pass clean locally.
 2. Push the branch: `git push origin capstone/perf-agent`

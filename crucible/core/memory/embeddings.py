@@ -113,7 +113,7 @@ class GlcEmbedder:
 
     def _call(self, text: str, task_type: str) -> list[float]:
         import time
-        time.sleep(3)  # Gemini free-tier RPM limit — AGENTS.md: 2–3s between LLM calls
+        time.sleep(6)  # GLC v5 enforces 5s cooldown between embed calls; 6s clears it safely
         body = json.dumps({"text": text, "task_type": task_type}).encode()
         req = Request(
             self.base_url + "/v1/embed",
