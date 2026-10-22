@@ -112,6 +112,8 @@ class GlcEmbedder:
         return self._call(text, "retrieval_query")
 
     def _call(self, text: str, task_type: str) -> list[float]:
+        import time
+        time.sleep(3)  # Gemini free-tier RPM limit — AGENTS.md: 2–3s between LLM calls
         body = json.dumps({"text": text, "task_type": task_type}).encode()
         req = Request(
             self.base_url + "/v1/embed",
