@@ -113,16 +113,26 @@ class GlcEmbedder:
 
     def _call(self, text: str, task_type: str) -> list[float]:
         import time
-        time.sleep(6)  # GLC v5 enforces 5s cooldown between embed calls; 6s clears it safely
+        from urllib.error import HTTPError as _HTTPError
         body = json.dumps({"text": text, "task_type": task_type}).encode()
         req = Request(
             self.base_url + "/v1/embed",
             data=body,
             headers={"Content-Type": "application/json"},
         )
-        with urlopen(req, timeout=60) as resp:  # nosec B310: internal gateway URL from config
-            data = json.load(resp)
-        return list(data["embedding"])
+        for attempt in range(4):
+            try:
+                with urlopen(req, timeout=60) as resp:  # nosec B310
+                    data = json.load(resp)
+                if attempt > 0:
+                    time.sleep(6)  # inter-chunk gap after a retry recovery
+                return list(data["embedding"])
+            except _HTTPError as exc:
+                if exc.code == 503 and attempt < 3:
+                    wait = (attempt + 1) * 20  # 20s, 40s, 60s
+                    time.sleep(wait)
+                    continue
+                raise
 
 
 def cosine(left: list[float], right: list[float]) -> float:
