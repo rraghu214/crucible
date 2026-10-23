@@ -52,6 +52,7 @@ from .campaign import (
     request_pause,
 )
 from .deploy import GitPushDeployer, ManualDeployer, read_running_commit
+from .loadprofile import tag_for_endpoint
 from .profile import TargetProfile
 
 OK = 0
@@ -316,6 +317,14 @@ def preflight_checks(
                 f"matches {hit!r}" if hit else "NOT protected by this profile -- the agent could write it",
             )
         )
+
+    # Blocking: a campaign on an endpoint the load profile cannot drive would
+    # measure something else, so preflight fails and the run refuses to start.
+    try:
+        checks.append(PreflightCheck("load profile drives the SLA endpoint", True,
+                                     f"{sla.endpoint} -> tag {tag_for_endpoint(sla.endpoint)}"))
+    except ValueError as exc:
+        checks.append(PreflightCheck("load profile drives the SLA endpoint", False, str(exc)))
 
     # Metrics reachability. Non-blocking on its own: the operator may be running
     # preflight from a machine with no route to the target, and that is worth
@@ -1059,7 +1068,7 @@ def build_campaign(
         users=users,
         warmup_s=warmup_s,
         measure_s=measure_s,
-        tags=("db",) if sla.endpoint.endswith("/db") else (),
+        tags=(tag_for_endpoint(sla.endpoint),),
     )
 
     measure = build_measure(
@@ -1204,6 +1213,7 @@ def cmd_ceiling(
     try:
         profile = TargetProfile.named(profile_name)
         sla = Sla.load(sla_path)
+        tag = tag_for_endpoint(sla.endpoint)
     except (CampaignRefused, FileNotFoundError, ValueError) as exc:
         print(f"configuration error: {exc}")
         return REFUSED
@@ -1214,6 +1224,7 @@ def cmd_ceiling(
         users=users,
         warmup_s=warmup_s,
         measure_s=measure_s,
+        tags=(tag,),
     )
     measure = build_measure(profile, sla, jaeger_url=jaeger_url, jaeger_service=jaeger_service)
 
@@ -1707,7 +1718,11 @@ def cmd_capture(
         # noise of a load profile no fixture uses -- and it was the blend that
         # made three runs agree to 0.1 ms on Box A, because the aggregate p99
         # was pinned by /api/downstream rather than by anything the SLA is about.
-        k1_tag = tag or ("db" if sla.endpoint.endswith("/db") else "")
+        try:
+            k1_tag = tag or tag_for_endpoint(sla.endpoint)
+        except ValueError as exc:
+            print(f"capture refused: {exc}")
+            return REFUSED
         scenario = Scenario(
             name=scenario_name,
             host=sla.target_base_url,
