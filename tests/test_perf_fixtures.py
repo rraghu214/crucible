@@ -1,6 +1,6 @@
 """Fixture capture assertions — week 3, new group 21. EVALUATION.md, DESIGN.md §7.
 
-DRAFTED by Claude Code. NOT YET REVIEWED by the operator.
+DRAFTED by Claude Code. REVIEWED AND APPROVED by the operator, 26 September 2026 (see docs/CRUCIBLE_TEST_ASSERTIONS.md).
 
 **What is and is not covered here.** Deliverable 6 is an overnight run against
 the cloud box; this file covers the parts that can be asserted without one —
@@ -258,7 +258,7 @@ class TestK1Revalidation:
 # ---------------------------------------------------------------------------
 # 21.5 — a capture is labelled with the provider that actually measured it
 #
-# DRAFTED by Claude Code, 26 September 2026. NOT YET REVIEWED by the operator.
+# DRAFTED by Claude Code, 26 September 2026. REVIEWED AND APPROVED by the operator, 16 October 2026 (see docs/CRUCIBLE_TEST_ASSERTIONS.md).
 # ---------------------------------------------------------------------------
 
 

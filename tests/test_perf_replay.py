@@ -1,6 +1,6 @@
 """Replay eval assertions — week 3, new group 22. EVALUATION.md, DESIGN.md §7, §18.5.
 
-DRAFTED by Claude Code. NOT YET REVIEWED by the operator.
+DRAFTED by Claude Code. REVIEWED AND APPROVED by the operator, 26 September 2026 (see docs/CRUCIBLE_TEST_ASSERTIONS.md).
 
 Replay is the half of the benchmark that never touches a live target: it reads
 captured snapshots and asks the model to diagnose them, testing exactly three
@@ -454,7 +454,7 @@ class TestTheShippedTaskSet:
 # ---------------------------------------------------------------------------
 # 22.6 — warm-up and replay share one event loop
 #
-# DRAFTED by Claude Code, 26 September 2026. NOT YET REVIEWED by the operator.
+# DRAFTED by Claude Code, 26 September 2026. REVIEWED AND APPROVED by the operator, 16 October 2026 (see docs/CRUCIBLE_TEST_ASSERTIONS.md).
 # ---------------------------------------------------------------------------
 
 
@@ -513,7 +513,7 @@ class TestTheFirstReplayCaseIsNotLostToTheWarmUp:
 # ---------------------------------------------------------------------------
 # 22.7 — skip-missing-fixtures: partial benchmark while JVM fixtures pending
 #
-# DRAFTED by Claude Code, 4 October 2026. NOT YET REVIEWED by the operator.
+# DRAFTED by Claude Code, 4 October 2026. Written up as assertion 22.7 on 24 October 2026; NOT YET REVIEWED by the operator.
 #
 # JVM flag fixtures (gc_pressure, gc_and_pool) need manual Box-A setup and are
 # often not captured yet when a partial benchmark run is useful. The default
@@ -611,7 +611,7 @@ class TestSkipMissingFixtures:
 # ---------------------------------------------------------------------------
 # 22.8 — T3 stakeholder_request: field name and delivery
 #
-# DRAFTED by Claude Code, 10 October 2026. NOT YET REVIEWED by the operator.
+# DRAFTED by Claude Code, 10 October 2026. Written up as assertion 22.8 on 24 October 2026; NOT YET REVIEWED by the operator.
 #
 # T3.yaml previously used the key `prompt:` which replay.py never reads
 # (it reads `stakeholder_request:`). The adversarial framing was silently

@@ -1,6 +1,6 @@
 """Knowledge documents uploaded from the dashboard. Group 29.
 
-DRAFTED by Claude Code, 23 October 2026. NOT YET REVIEWED by the operator.
+DRAFTED by Claude Code, 23 October 2026. REVIEWED AND APPROVED by the operator, 23 October 2026 (see docs/CRUCIBLE_TEST_ASSERTIONS.md).
 See `docs/CRUCIBLE_TEST_ASSERTIONS.md` GROUP 29 for the questions to check.
 
 The wizard's drop zone used to keep file names in the browser and upload

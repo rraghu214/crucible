@@ -1,6 +1,6 @@
 """Campaign UI assertions -- the nineteen screens. New group 28.
 
-DRAFTED by Claude Code, 26 September 2026. NOT YET REVIEWED by the operator.
+DRAFTED by Claude Code, 26 September 2026. REVIEWED AND APPROVED by the operator, 24 October 2026 (see docs/CRUCIBLE_TEST_ASSERTIONS.md).
 See `docs/CRUCIBLE_TEST_ASSERTIONS.md` GROUP 28 for the questions to check.
 
 `crucible/ui/perf_ui.py` renders `docs/crucible-screens-v2.html`'s nineteen

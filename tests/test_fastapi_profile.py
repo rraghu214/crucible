@@ -2,7 +2,7 @@
 `docs/CRUCIBLE_TEST_ASSERTIONS.md` (the profile / authority boundary) to a
 second runtime.
 
-DRAFTED by Claude Code. NOT YET REVIEWED by the operator.
+DRAFTED by Claude Code. REVIEWED AND APPROVED by the operator, 24 October 2026 (see docs/CRUCIBLE_TEST_ASSERTIONS.md).
 
 The point of a second profile is not the properties it lists -- it is proving
 that `crucible/perf/profile.py` needed no code change to gain one, and that

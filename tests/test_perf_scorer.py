@@ -1,6 +1,6 @@
 """Scorer assertions -- week 3, Group 8. DESIGN.md §4.6-4.7, EVALUATION.md.
 
-DRAFTED by Claude Code. NOT YET REVIEWED by the operator -- see AGENTS.md's
+DRAFTED by Claude Code. REVIEWED AND APPROVED by the operator, 26 September 2026 -- see AGENTS.md's
 rule that Claude Code drafts assertions and their reasoning, and the operator
 decides what's correct before anything here is committed.
 
@@ -579,7 +579,7 @@ class TestRescoringWithoutRerunning:
 # ---------------------------------------------------------------------------
 # 8.6 -- a replay case is graded against its task class, never given an outcome
 #
-# DRAFTED by Claude Code, 26 September 2026. NOT YET REVIEWED by the operator.
+# DRAFTED by Claude Code, 26 September 2026. REVIEWED AND APPROVED by the operator, 26 September 2026 (see docs/CRUCIBLE_TEST_ASSERTIONS.md).
 # ---------------------------------------------------------------------------
 
 from crucible.perf.scorer import FAIL, NOT_GRADED, PASS, grade_replay_case, score_replay  # noqa: E402

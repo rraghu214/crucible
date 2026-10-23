@@ -1,6 +1,6 @@
 """Datadog adapter assertions — week 3, new group 19. DESIGN.md §4.1, §4.8, §5, §16.
 
-DRAFTED by Claude Code. NOT YET REVIEWED by the operator.
+DRAFTED by Claude Code. REVIEWED AND APPROVED by the operator, 16 October 2026 (see docs/CRUCIBLE_TEST_ASSERTIONS.md).
 
 The third metrics provider, and the first that shares neither PromQL's API nor
 Micrometer's units. Two things are being asserted here and they carry very

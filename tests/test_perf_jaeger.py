@@ -1,6 +1,6 @@
 """Jaeger trace provider assertions — week 3, new group 20. DESIGN.md §4.3, §5, §16.
 
-DRAFTED by Claude Code. NOT YET REVIEWED by the operator.
+DRAFTED by Claude Code. REVIEWED AND APPROVED by the operator, 26 September 2026 (see docs/CRUCIBLE_TEST_ASSERTIONS.md).
 
 This is GROUP 5 (evidence honesty) given a backend. The assertions that matter
 are not about reading spans — they are about what the snapshot says when there
