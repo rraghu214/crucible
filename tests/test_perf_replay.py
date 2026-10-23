@@ -513,7 +513,7 @@ class TestTheFirstReplayCaseIsNotLostToTheWarmUp:
 # ---------------------------------------------------------------------------
 # 22.7 — skip-missing-fixtures: partial benchmark while JVM fixtures pending
 #
-# DRAFTED by Claude Code, 4 October 2026. Written up as assertion 22.7 on 24 October 2026; NOT YET REVIEWED by the operator.
+# DRAFTED by Claude Code, 4 October 2026. Written up as assertion 22.7; REVIEWED AND APPROVED by the operator, 24 October 2026.
 #
 # JVM flag fixtures (gc_pressure, gc_and_pool) need manual Box-A setup and are
 # often not captured yet when a partial benchmark run is useful. The default
@@ -579,6 +579,28 @@ class TestSkipMissingFixtures:
         assert len(result.cases) == 1
         assert result.cases[0].task_id == "T1"
 
+    def test_the_results_file_says_what_was_skipped(self, tmp_path):
+        """Operator decision, 24 October 2026: not only the console. A partial
+        results file read later must not pass for a full benchmark."""
+        _write_fixture(tmp_path, "pool_starved", "connection_pool_exhaustion")
+        runner = ReplayRunner(diagnoser=_ScriptedDiagnoser(_proposal(cause="connection_pool_exhaustion")))
+        tasks = [
+            ReplayTask(id="T1", task_class="A", fixtures=("pool_starved",)),
+            ReplayTask(id="T2", task_class="B", fixtures=("pool_starved", "gc_pressure")),
+        ]
+        result = asyncio.run(runner.run(tasks, tmp_path, skip_missing_fixtures=True))
+        written = json.loads(result.write(tmp_path / "out" / "replay.json").read_text(encoding="utf-8"))
+        assert written["partial"] is True
+        assert written["missing_fixtures"] == ["gc_pressure"] and written["skipped_tasks"] == ["T2"]
+        assert "PARTIAL BENCHMARK" in written["partial_warning"]
+
+    def test_a_full_run_is_not_marked_partial(self, tmp_path):
+        _write_fixture(tmp_path, "pool_starved", "connection_pool_exhaustion")
+        runner = ReplayRunner(diagnoser=_ScriptedDiagnoser(_proposal(cause="connection_pool_exhaustion")))
+        tasks = [ReplayTask(id="T1", task_class="A", fixtures=("pool_starved",))]
+        written = asyncio.run(runner.run(tasks, tmp_path, skip_missing_fixtures=True)).as_dict()
+        assert written["partial"] is False and written["skipped_tasks"] == [] and not written["partial_warning"]
+
     def test_skip_missing_raises_when_ground_truth_disagrees(self, tmp_path):
         """Missing fixtures are skipped; mismatched ground truth is still an error."""
         _write_fixture(tmp_path, "pool_starved", "connection_pool_exhaustion")
@@ -611,7 +633,7 @@ class TestSkipMissingFixtures:
 # ---------------------------------------------------------------------------
 # 22.8 — T3 stakeholder_request: field name and delivery
 #
-# DRAFTED by Claude Code, 10 October 2026. Written up as assertion 22.8 on 24 October 2026; NOT YET REVIEWED by the operator.
+# DRAFTED by Claude Code, 10 October 2026. Written up as assertion 22.8; REVIEWED AND APPROVED by the operator, 24 October 2026.
 #
 # T3.yaml previously used the key `prompt:` which replay.py never reads
 # (it reads `stakeholder_request:`). The adversarial framing was silently

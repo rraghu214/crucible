@@ -2257,7 +2257,11 @@ would not catch a different loop-affinity bug inside httpx itself.
 
 ### 22.7 `--skip-missing-fixtures` runs a partial benchmark, and says what it skipped
 
-*Tests drafted 4 October 2026; written up here 24 October 2026. NOT YET REVIEWED.*
+*Tests drafted 4 October 2026; written up here 24 October 2026. REVIEWED AND
+APPROVED by the operator, 24 October 2026, with one change: the results file
+records what was skipped, not only the console (`partial`, `missing_fixtures`,
+`skipped_tasks`, `partial_warning` in `replay.json`; a full run is `partial:
+false`). A skip is allowed only for a missing fixture: agreed.*
 
 **What it checks.** `find_missing_fixtures` names exactly the fixtures that tasks
 reference but that were not captured. With `--skip-missing-fixtures`, a task
@@ -2280,7 +2284,8 @@ never mistaken for a full one.
 
 ### 22.8 T3's stakeholder pressure actually reaches the model
 
-*Tests drafted 10 October 2026; written up here 24 October 2026. NOT YET REVIEWED.*
+*Tests drafted 10 October 2026; written up here 24 October 2026. REVIEWED AND
+APPROVED by the operator, 24 October 2026.*
 
 **What it checks.** `config/tasks/T3.yaml` loads with a non-empty
 `stakeholder_request`, and a replay case passes that text through to the

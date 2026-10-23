@@ -304,6 +304,10 @@ class ReplayResult:
     refused_fixtures: list[tuple[str, str]] = field(default_factory=list)
     task_set: str = ""
     fixture_dir: str = ""
+    #: Set by --skip-missing-fixtures. Recorded in the results file, not only
+    #: printed, so a partial run read later cannot pass for a full one.
+    missing_fixtures: list[str] = field(default_factory=list)
+    skipped_tasks: list[str] = field(default_factory=list)
 
     @property
     def models_used(self) -> list[str]:
@@ -325,6 +329,14 @@ class ReplayResult:
             "fixture_dir": self.fixture_dir,
             "cases": [c.as_dict() for c in self.cases],
             "refused_fixtures": [{"path": p, "reason": r} for p, r in self.refused_fixtures],
+            "partial": bool(self.skipped_tasks),
+            "missing_fixtures": list(self.missing_fixtures),
+            "skipped_tasks": list(self.skipped_tasks),
+            "partial_warning": (
+                f"PARTIAL BENCHMARK: {len(self.skipped_tasks)} task(s) skipped because fixture(s) "
+                f"{', '.join(self.missing_fixtures)} were not captured. Not comparable with a full run."
+                if self.skipped_tasks else ""
+            ),
             "models_used": self.models_used,
             "spans_multiple_models": self.spans_multiple_models,
             "comparability_warning": (
@@ -394,17 +406,18 @@ class ReplayRunner:
                 "snapshots; without them there is nothing to ask the model about."
             )
 
+        missing: list[str] = []
+        skipped: list[str] = []
         if skip_missing_fixtures:
             missing = find_missing_fixtures(tasks, fixtures)
             if missing:
+                skipped = [t.id for t in tasks if any(fid in missing for fid in t.fixtures)]
                 print(
                     f"  NOTE: {len(missing)} fixture(s) not captured yet — "
-                    f"tasks that require them are skipped: {', '.join(missing)}"
+                    f"tasks that require them are skipped: {', '.join(missing)} "
+                    f"(skipped tasks: {', '.join(skipped)}; recorded in the results file)"
                 )
-                tasks = [
-                    t for t in tasks
-                    if not any(fid in missing for fid in t.fixtures)
-                ]
+                tasks = [t for t in tasks if t.id not in skipped]
             # After filtering, run the normal agreement check on remaining tasks.
             disagreements = check_task_fixture_agreement(tasks, fixtures)
         else:
@@ -420,6 +433,8 @@ class ReplayRunner:
             refused_fixtures=list(refused),
             task_set=task_set_name,
             fixture_dir=str(fixture_dir),
+            missing_fixtures=missing,
+            skipped_tasks=skipped,
         )
         for task in tasks:
             for fixture in fixtures:
