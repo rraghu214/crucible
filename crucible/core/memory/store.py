@@ -184,6 +184,16 @@ class MemoryStore:
         return {"document_id": document_id, "version": version, "idempotent": False, "record_ids": record_ids,
                 "source_sha256": source_hash, "prepared_sha256": prepared_hash}
 
+    def active_documents(self, tenant_id: str) -> list[dict[str, object]]:
+        rows = self.db.execute(
+            "SELECT d.document_id, d.version, d.source_uri, d.created_at, "
+            "(SELECT COUNT(*) FROM records r WHERE r.status='current' AND r.kind='document_chunk' "
+            " AND json_extract(r.metadata_json, '$.document_id')=d.document_id) AS chunks "
+            "FROM documents d WHERE d.state='active' AND d.tenant_id=? ORDER BY d.created_at",
+            (tenant_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     def get(self, record_id: str) -> MemoryRecord | None:
         row = self.db.execute("SELECT * FROM records WHERE id=?", (record_id,)).fetchone()
         return self._to_record(row) if row else None

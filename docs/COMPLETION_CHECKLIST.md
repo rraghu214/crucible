@@ -317,28 +317,41 @@ Confirm write buttons are no longer locked.
 
 ### 9c — RAG indexing (verifies GlcEmbedder)
 
-On Box B, check current index state:
+The control token must be saved in Settings first (9b), because uploading is a
+write.
+
+1. **New Test Run → Target & Repo → Knowledge Docs.** Drop
+   `perf-lab/docs/PERF_LAB_PRODUCT.md` (from your laptop) onto the zone. It
+   appears as a chip reading "ready to upload". `.pdf`/`.docx` are refused on
+   the chip with the reason.
+2. Click **Upload & index**. The chip changes to "queued", then "indexing…".
+   Indexing takes a few minutes: one gateway embed per chunk, with the
+   gateway's cooldown between embeds. You can carry on with the wizard.
+3. When it finishes, the chat announces "PERF_LAB_PRODUCT.md indexed — N
+   chunks". The file then moves to **In the knowledge base** with its chunk
+   count. Screen 2 (Service settings) shows the same count.
+
+On Box B, the originals and the index are in separate folders:
 ```bash
-ls -lh ~/.crucible/memory/ 2>/dev/null || echo "no index yet"
+ls -lh ~/.crucible/knowledge/         # PERF_LAB_PRODUCT.md, as uploaded
+ls -lh ~/.crucible/knowledge-index/   # knowledge.sqlite and memory.faiss, both non-zero
 ```
 
-In the browser: **New Test Run → Step 1 (Target & Repo)** → drag
-`docs/PERF_LAB_PRODUCT.md` from the perf-lab checkout onto the doc drop zone.
-
-Back on Box B within a few seconds:
-```bash
-ls -lh ~/.crucible/memory/
-# memory.faiss must exist and be non-zero → GlcEmbedder is working end-to-end
-```
+If an upload fails, the chip says `failed:` with the gateway's error. Most often
+that is a 503 from the embed cooldown after the retries ran out. Upload again;
+identical text is not re-embedded twice.
 
 ### 9d — Live AI RAG retrieval
 
-In the browser chat pane, toggle **Live AI ON**. Ask:
+In the browser chat pane, toggle **Live AI ON**. Ask a question that only the
+document can answer:
 
-> What cause families does PerfLab declare, and what is the fix for connection_pool_exhaustion?
+> How many requests must Micrometer meters be initialised within, and how long may PerfLab take to start?
 
-Response must reference `maximum-pool-size` and `/api/db`. A generic answer
-means indexing failed — re-check Step 9c before proceeding.
+It passes if the reply says **10 requests** and **60 seconds** (NFR-05 and
+NFR-06), and a "Sources: PERF_LAB_PRODUCT.md › …" line appears under it. If the
+reply has no Sources line, retrieval found nothing and the 9c index needs
+re-checking.
 
 ### 9e — Live campaign dry run
 
@@ -367,8 +380,8 @@ All items must be ✅ before recording starts.
 [ ] Tunnel open — http://localhost:9113/dashboard loads
 [ ] GLC v5 warmed — first chat response received
 [ ] Control token saved in Settings — write buttons unlocked
-[ ] memory.faiss present after doc upload (9c passed)
-[ ] Live AI returns doc-grounded answer — references maximum-pool-size (9d passed)
+[ ] PERF_LAB_PRODUCT.md uploaded from the UI and listed as indexed (9c passed)
+[ ] Live AI answers 10 requests / 60 s with a Sources line (9d passed)
 [ ] Active tab showed live overlay during dry-run campaign (9e passed)
 [ ] Approval from UI worked (9e passed)
 [ ] Results tab showed real chart (9e passed)

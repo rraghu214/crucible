@@ -474,6 +474,32 @@ at 3072 are both truthfully "gemini-embedding-001". A startup canary that
 embeds a fixed sentence and compares it against a stored reference vector for
 that `embedder_id` catches this in a single call.
 
+**The Knowledge RAG corpus is uploaded from the dashboard and read by the chat
+(23 October 2026).** Until then the wizard's drop zone uploaded nothing, and the
+Live AI chat retrieved nothing: its "facts" were a hardcoded prompt that could
+disagree with `slo.yaml`. Now dropping a file only lists it in the browser.
+Clicking **Upload & index** sends it, the server saves the original and queues
+it, and one background worker indexes it. Every chat turn searches the corpus,
+cites the files it used, and takes its SLA and profile facts from the files on
+disk. The decisions, each with its reason:
+
+- **Indexing runs after the upload call returns, not inside it.** Each chunk is
+  one gateway embed under a cooldown, so a document takes minutes. Indexed
+  inside the call, it would block the server's event loop for that whole time.
+- **Originals in `<state>/knowledge/`, the index in `<state>/knowledge-index/`.**
+  An operator decision. Keeping the source files is what makes re-indexing
+  possible when the embedder changes, which the correction above requires.
+- **The index is its own store, not the agent runtime's `memory.sqlite`.**
+  `MemoryStore` embeds inside its write transaction, which would hold the agent
+  memory's write lock for minutes. Every store in one directory also shares a
+  single `memory.faiss` sidecar.
+- **`.md` and `.txt` only.** An operator decision: no PDF or DOCX parsers as new
+  dependencies.
+
+The reply is HTML-escaped except for a short allowlist of attribute-free tags,
+because uploaded text now reaches the prompt, and the operator's browser holds
+the control token.
+
 ## 15 · Screens → capability mapping
 
 Nineteen screens exist as design reference in `crucible-screens-v2.html`.

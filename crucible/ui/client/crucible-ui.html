@@ -738,14 +738,21 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
     </div>
 
     <div class="card">
-      <div class="card-h"><div><div class="card-title">Knowledge Docs <span style="font-size:11px;font-weight:400;color:var(--lo);">optional</span></div><div class="card-sub">Runbooks, architecture docs, incident reports — fed into the AI's Knowledge RAG</div></div></div>
+      <div class="card-h"><div><div class="card-title">Knowledge Docs <span style="font-size:11px;font-weight:400;color:var(--lo);">optional</span></div><div class="card-sub">Runbooks, architecture docs, incident reports — indexed into the knowledge base the AI chat searches</div></div></div>
       <div class="doc-drop" id="docDrop" onclick="document.getElementById('docFile').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDocDrop(event)">
         <div style="font-size:26px;margin-bottom:6px;">📄</div>
         <div style="font-size:13px;font-weight:600;margin-bottom:2px;">Drop files here or click to browse</div>
-        <div style="font-size:11px;color:var(--lo);">.pdf · .md · .txt · .docx</div>
-        <input type="file" id="docFile" multiple accept=".pdf,.md,.txt,.docx" style="display:none" onchange="handleDocInput(this)">
+        <div style="font-size:11px;color:var(--lo);">.md · .txt</div>
+        <input type="file" id="docFile" multiple accept=".md,.txt" style="display:none" onchange="handleDocInput(this)">
       </div>
       <div class="doc-chips" id="docChips"></div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;">
+        <button class="btn btn-primary btn-sm" id="docUploadBtn" onclick="uploadDocs()" disabled>Upload &amp; index</button>
+        <span id="docStatus" style="font-size:12px;color:var(--mid);"></span>
+      </div>
+      <div style="font-size:11px;color:var(--lo);margin-top:6px;">Each chunk is one embedding call through the gateway, so a document takes a few minutes. You can carry on with the wizard while it indexes.</div>
+      <div style="font-size:12px;font-weight:600;color:var(--mid);margin-top:12px;">In the knowledge base</div>
+      <div class="doc-chips" id="docIndexed"><span style="font-size:12px;color:var(--lo);">Nothing indexed yet.</span></div>
     </div>
     <div class="wz-nav"><div></div><button class="btn btn-primary" onclick="wzGo(1)">Next: Goal &amp; SLA →</button></div>
   </div>
@@ -1828,10 +1835,81 @@ function suggestSLA(){addChatMsg('user','Suggest an SLA for me');setTimeout(()=>
 function suggestScenarios(){addChatMsg('user','Suggest scenarios');setTimeout(()=>addChatMsg('ai','I\'d recommend two: (1) steady_50u — 50 users, 300s, 30s ramp — your normal load; (2) burst_100u — 100 users, 180s, 15s ramp — a 2× spike. That covers normal operation and a peak without running too long.'),700);}
 
 /* ── Docs ────────────────────────────────────────────────────────────── */
-const docFiles=[];
-function addDoc(name){docFiles.push(name);const c=document.getElementById('docChips');const chip=document.createElement('div');chip.className='doc-chip';chip.innerHTML=`📄 ${name} <span class="doc-chip-rm" onclick="this.closest('.doc-chip').remove()">✕</span>`;c.appendChild(chip);const rd=document.getElementById('rev-docs');if(rd)rd.textContent=docFiles.length+' uploaded';}
-function handleDocDrop(e){e.preventDefault();document.getElementById('docDrop').classList.remove('drag');Array.from(e.dataTransfer.files).forEach(f=>addDoc(f.name));}
-function handleDocInput(inp){Array.from(inp.files).forEach(f=>addDoc(f.name));}
+const DOC_EXT=['.md','.txt'];
+const pendingDocs=[];
+const docRejected=[];
+const docAnnounced=new Set();
+let docState={documents:[],uploads:[]};
+let docPoll=null;
+let docLoaded=false;
+function escHtml(s){const d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
+function addDocFiles(files){
+  Array.from(files).forEach(f=>{
+    const lower=f.name.toLowerCase();
+    if(!DOC_EXT.some(e=>lower.endsWith(e))){docRejected.push({name:f.name,reason:'only .md and .txt can be indexed'});return;}
+    if(!pendingDocs.some(p=>p.name===f.name)) pendingDocs.push({name:f.name,file:f});
+  });
+  renderDocs();
+}
+function handleDocDrop(e){e.preventDefault();document.getElementById('docDrop').classList.remove('drag');addDocFiles(e.dataTransfer.files);}
+function handleDocInput(inp){addDocFiles(inp.files);inp.value='';}
+function _docChip(label,detail,tone,onRemove){
+  const chip=document.createElement('div');chip.className='doc-chip';
+  const name=document.createElement('span');name.textContent='📄 '+label;chip.appendChild(name);
+  if(detail){const d=document.createElement('span');d.textContent=detail;d.style.color=tone?'var(--'+tone+')':'var(--lo)';chip.appendChild(d);}
+  if(onRemove){const x=document.createElement('span');x.className='doc-chip-rm';x.textContent='✕';x.onclick=onRemove;chip.appendChild(x);}
+  return chip;
+}
+function renderDocs(){
+  const c=document.getElementById('docChips');if(!c)return;
+  c.replaceChildren();
+  pendingDocs.forEach((p,i)=>c.appendChild(_docChip(p.name,'ready to upload',null,()=>{pendingDocs.splice(i,1);renderDocs();})));
+  docRejected.forEach((r,i)=>c.appendChild(_docChip(r.name,'not added: '+r.reason,'err',()=>{docRejected.splice(i,1);renderDocs();})));
+  docState.uploads.filter(u=>u.status!=='indexed').forEach(u=>{
+    const detail=u.status==='failed'?'failed: '+(u.error||'unknown error'):(u.status==='queued'?'queued':'indexing…');
+    c.appendChild(_docChip(u.filename,detail,u.status==='failed'?'err':'warn',null));
+  });
+  const btn=document.getElementById('docUploadBtn');
+  if(btn){btn.disabled=!pendingDocs.length;btn.style.opacity=pendingDocs.length?'1':'.5';btn.textContent=pendingDocs.length?'Upload & index ('+pendingDocs.length+')':'Upload & index';}
+  const list=document.getElementById('docIndexed');
+  if(list){
+    list.replaceChildren();
+    if(!docState.documents.length){const e=document.createElement('span');e.style.cssText='font-size:12px;color:var(--lo);';e.textContent='Nothing indexed yet.';list.appendChild(e);}
+    docState.documents.forEach(d=>list.appendChild(_docChip(d.filename,d.chunks+' chunks · v'+d.version,'ok',null)));
+  }
+  const busy=docState.uploads.filter(u=>u.status==='queued'||u.status==='indexing').length;
+  const st=document.getElementById('docStatus');
+  if(st) st.textContent=busy?('Indexing '+busy+' file'+(busy>1?'s':'')+'… the chat can use each one once it shows here as indexed.'):'';
+  const rd=document.getElementById('rev-docs');
+  if(rd) rd.textContent=docState.documents.length+' indexed'+(busy?' · '+busy+' indexing':'');
+}
+async function refreshDocs(){
+  try{const r=await fetch('/v1/perf/knowledge/documents');if(r.ok) docState=await r.json();}catch(e){}
+  const silent=!docLoaded;docLoaded=true;
+  docState.uploads.forEach(u=>{
+    if(docAnnounced.has(u.id)||(u.status!=='indexed'&&u.status!=='failed')) return;
+    docAnnounced.add(u.id);
+    if(silent) return;
+    addChatMsg('ai',u.status==='indexed'
+      ?'<strong>'+escHtml(u.filename)+'</strong> indexed — '+u.chunks+' chunks'+(u.unchanged?' (unchanged since last upload)':'')+'. Live AI answers can now draw on it.'
+      :'⚠ Indexing <strong>'+escHtml(u.filename)+'</strong> failed: '+escHtml(u.error||'unknown error'));
+  });
+  renderDocs();
+  const busy=docState.uploads.some(u=>u.status==='queued'||u.status==='indexing');
+  if(busy&&!docPoll) docPoll=setInterval(refreshDocs,3000);
+  if(!busy&&docPoll){clearInterval(docPoll);docPoll=null;}
+}
+async function uploadDocs(){
+  const batch=pendingDocs.splice(0);
+  renderDocs();
+  for(const p of batch){
+    try{
+      await apiPost('/v1/perf/knowledge/documents',{filename:p.name,text:await p.file.text()});
+    }catch(e){docRejected.push({name:p.name,reason:e.message});}
+  }
+  refreshDocs();
+}
+refreshDocs();
 
 /* ── GitHub test ─────────────────────────────────────────────────────── */
 function testGithubConn(){
@@ -2277,7 +2355,8 @@ async function _sendChatLive(text){
       return;
     }
     const data=await res.json();
-    addChatMsg('ai', data.reply||'(empty reply)');
+    const cited=(data.sources||[]).map(s=>'<code>'+escHtml(s.source)+(s.heading?' › '+escHtml(s.heading):'')+'</code>').join(' ');
+    addChatMsg('ai', (data.reply||'(empty reply)')+(cited?'<div style="margin-top:6px;font-size:11px;color:var(--lo);">Sources: '+cited+'</div>':''));
   }catch(e){
     t.remove();
     addChatMsg('ai','⚠ Could not reach the backend: '+e.message+'. Switch to Scripted mode if GLC is not running.');

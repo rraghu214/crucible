@@ -3215,6 +3215,144 @@ record and the process list (§19.8).
 
 ---
 
+# GROUP 29 — Knowledge documents from the dashboard, and a chat that reads them
+
+*Drafted 23 October 2026 by Claude Code. NOT YET REVIEWED. Implemented in
+`tests/test_ui_knowledge.py` (19). Code: `crucible/ui/knowledge.py`, the
+`/v1/perf/knowledge/documents` and `/v1/perf/chat` routes in
+`crucible/ui/perf_ui.py`, and the wizard's Knowledge Docs card in
+`crucible/ui/client/crucible-ui.html`. DESIGN.md §14 (Knowledge RAG).*
+
+*Why the group exists: until now the dashboard's drop zone kept file names in
+the browser and uploaded nothing, the review step called them "uploaded", and
+the Live AI chat sent a hardcoded system prompt with no retrieval. Its facts
+(an SLA of 120 ms, campaigns TR-001 to TR-003) were typed into the source, so
+they could disagree with `slo.yaml` without anything noticing. A correct chat
+answer was being read as proof that RAG worked when nothing was retrieved.*
+
+---
+
+### 29.1 Upload & index starts indexing; the upload call itself returns at once
+
+**What it checks.** Dropping files sends nothing; the browser only lists them.
+Clicking **Upload & index** sends `POST /v1/perf/knowledge/documents` for each
+file. That call saves the original under `<state>/knowledge/`, queues the file
+and returns 202 within seconds, even while the embedder is held, with status
+`queued` or `indexing`. Indexing then runs on a background worker. Once the
+embedder is released, the upload reaches `indexed`, and the document is listed
+with the same chunk count the upload reported.
+
+The original is stored byte for byte, and nothing else is written to that
+folder. The index (`knowledge.sqlite`, `memory.faiss`) lives in
+`<state>/knowledge-index/`. A refused upload saves no original.
+
+**Why it exists.** Each chunk is one gateway embed, and the hosted gateway
+enforces a cooldown between embeds. The existing `/v1/agent/documents` route
+indexes synchronously inside an `async` handler, which blocks the server's event
+loop for the whole index. Originals are kept apart from the index (operator
+decision, 23 October 2026) so the corpus can be re-indexed from source when the
+embedder changes, which §14 requires instead of querying across embedders.
+
+**For review:**
+- Uploads are indexed one at a time on a single worker. Parallel workers would
+  only collect 503s from the gateway cooldown. Is serial the right call?
+- The upload list lives in process memory, so it is lost on a `crucible serve`
+  restart. Indexed documents are on disk and survive, but an upload that was
+  in flight at restart simply vanishes from the list. Acceptable, or should
+  in-flight uploads be persisted and resumed?
+
+---
+
+### 29.2 Only text the chunker can read is accepted, and a refusal says why
+
+**What it checks.** `.pdf`, `.docx`, `../escape.md` and `dir/notes.md` are
+refused with 422 and nothing is queued. An empty file is refused, and the reason
+names it. The browser rejects other extensions before upload and shows the reason
+on the file's chip.
+
+**Why it exists.** Operator decision, 23 October 2026: `.md` and `.txt` only, with
+no new dependencies for PDF or DOCX. The drop zone used to advertise all four
+formats. A file name becomes the document's `source_uri`, so it must be a plain
+name and not a path.
+
+**For review:** the size limit is 500,000 characters. Is that the right ceiling
+for a runbook corpus?
+
+---
+
+### 29.3 Writing to the knowledge base needs the control token, failing closed
+
+**What it checks.** With no `CRUCIBLE_CONTROL_TOKEN` configured, an upload gets
+503. With a wrong token it gets 401. In both cases nothing is queued. Listing
+documents needs no token.
+
+**Why it exists.** Uploaded text goes into every later chat prompt. Writing it is
+a control-plane action, and `auth.py` fails closed.
+
+**For review:** listing is open, in the same way the screens are read-only and
+open. Document *names* are visible to anyone who can reach the port. Behind the
+SSH tunnel that is the operator. Is that acceptable?
+
+---
+
+### 29.4 A failed index is reported on the upload, never shown as indexed
+
+**What it checks.** If the embedder raises, the upload ends as `failed` with the
+error text, and the document list stays empty.
+
+**Why it exists.** Principle 2. A document the chat cannot search must not look
+searchable. `ingest_document` rolls back the whole transaction, so no partial
+document is left behind.
+
+---
+
+### 29.5 Re-uploading replaces the document, and old text stops being found
+
+**What it checks.** Identical text a second time is reported as `unchanged`, and
+the version stays at 1. New text under the same file name becomes version 2, and
+a search no longer returns text that only the first version had.
+
+**Why it exists.** The same rule as §14's re-index: a superseded runbook that is
+still retrievable is a wrong answer with no error attached.
+
+---
+
+### 29.6 The chat searches the documents, cites them, and takes its facts from disk
+
+**What it checks.** The prompt carries the matching excerpt, and the response
+lists its source file. With nothing indexed, the prompt says no document matched
+and no source is cited. The SLA in the prompt is the one in the SLA file the
+context points at: changing `p99_ms` to 175 there puts 175, not 120, into the
+prompt.
+
+**Why it exists.** Principle 1 for the assistant: its facts come from the files
+the campaign reads, not from a second copy in the source.
+
+**For review:**
+- This tests that retrieval *reaches the prompt*. It does not test that the model
+  *uses* it. That is a model-quality question for live verification (checklist
+  9d), not something a unit test can settle. Is that the right split?
+- The facts list shows the last five campaign manifests in `results/`. Too many,
+  too few, or the wrong summary?
+
+---
+
+### 29.7 Markup in a reply is escaped, except a few attribute-free tags
+
+**What it checks.** A reply containing `<img onerror=…>` and `<script>` comes
+back escaped, while `<strong>` survives.
+
+**Why it exists.** The chat inserts the reply as HTML, and the prompt now
+carries uploaded document text. A document can therefore steer the model into
+emitting script, and the operator's browser holds the control token in
+`localStorage`. Allowlist, never blocklist (the same rule as §12).
+
+**For review:** the allowed tags are `strong`, `code`, `em`, `br`, `ul`, `li` and
+`p`, and none may carry attributes. Is any of them unnecessary? Should links be
+allowed? (They are not, deliberately: an `href` is an attribute.)
+
+---
+
 # Review decisions — week 1
 
 Raised by Claude Code while implementing, decided by the operator on 10 September 2026.

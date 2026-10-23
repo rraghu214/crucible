@@ -40,13 +40,16 @@ the scope line that matters -- one implementation of each capability -- holds.
 from __future__ import annotations
 
 import ast
+import asyncio
 import contextlib
+import html
 import io
 import json
 import os
+import re
 import subprocess
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
@@ -59,6 +62,7 @@ from . import actions as _actions
 from .actions import ActionError
 from .hitl import PendingAction, decide_resume
 from .jobs import Job, get_job, list_jobs, read_output, start_job
+from .knowledge import MAX_CHARS, KnowledgeBase, UploadRefused, default_embedder
 from .validator import validate_surface
 
 # ---------------------------------------------------------------------------
@@ -316,6 +320,15 @@ def _active_runs(ctx: PerfContext) -> list[dict[str, Any]]:
     return runs
 
 
+def _knowledge_summary(ctx: PerfContext) -> str:
+    # Listing makes no embed call, but the store must be opened with the corpus's
+    # own embedder: any other one marks every vector stale and empties memory.faiss.
+    documents = KnowledgeBase.under(ctx.state, default_embedder()).documents()
+    if not documents:
+        return "none indexed"
+    return f"{len(documents)} indexed: " + ", ".join(f"{d['filename']} ({d['chunks']} chunks)" for d in documents)
+
+
 def _pricing() -> Any:
     from ..economics.pricing import Pricing
     from ..perf.scorer import _load_pricing_yaml
@@ -501,7 +514,8 @@ def screen_service(ctx: PerfContext, q: dict[str, str]) -> dict[str, Any]:
         {"setting": "noise floor", "value": f"{sla.noise_p99_spread_pct:.2f}% (measured {sla.noise_measured_on})",
          "from": sla.noise_source or "slo.yaml"},
         {"setting": "cpu steal abort", "value": f"{sla.cpu_steal_abort_pct:.1f}%", "from": "slo.yaml"},
-        {"setting": "knowledge documents", "value": "not built", "from": "knowledge RAG is out of scope"},
+        {"setting": "knowledge documents", "value": _knowledge_summary(ctx),
+         "from": "uploaded in New Test Run; searched by the Live AI chat"},
     ]
     s.add(s.card("Shared configuration", [s.table(["setting", "value", "from"], rows)]))
 
@@ -1602,6 +1616,35 @@ async def perf_decision(run_id: str, experiment: int, body: DecisionBody, reques
     return {"written": path.name, "action": body.action, "reason": decision.reason}
 
 
+def _knowledge(request: Request) -> KnowledgeBase:
+    kb = getattr(request.app.state, "knowledge", None)
+    if kb is None:
+        kb = KnowledgeBase.under(_context(request).state, default_embedder())
+        request.app.state.knowledge = kb
+    return kb
+
+
+class DocumentBody(BaseModel):
+    filename: str = Field(min_length=1, max_length=200)
+    text: str = Field(min_length=1, max_length=MAX_CHARS)
+
+
+@router.post("/v1/perf/knowledge/documents", status_code=202, dependencies=[Depends(require_control)])
+async def perf_knowledge_upload(body: DocumentBody, request: Request):
+    """Queue one document for indexing; poll the GET route for its status."""
+    try:
+        upload = _knowledge(request).submit(body.filename, body.text, author="operator:ui")
+    except UploadRefused as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return asdict(upload)
+
+
+@router.get("/v1/perf/knowledge/documents")
+async def perf_knowledge_list(request: Request):
+    kb = _knowledge(request)
+    return {"documents": await asyncio.to_thread(kb.documents), "uploads": kb.uploads()}
+
+
 class ChatBody(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     screen: str = Field(default="overview", max_length=64)
@@ -1620,42 +1663,90 @@ _SCREEN_HINTS: dict[str, str] = {
 
 _CHAT_SYSTEM = """You are the Crucible AI assistant embedded in the Crucible performance-engineering product.
 
-Crucible is an autonomous performance engineer: it runs load experiments against a Spring Boot service (PerfLab) on Oracle Cloud Box A, diagnoses bottlenecks from Actuator/Prometheus/Datadog telemetry, proposes bounded config changes, and verifies every change with a fresh measurement.
+Crucible is an autonomous performance engineer: it runs load experiments against a target service, diagnoses bottlenecks from its telemetry, proposes bounded config changes under human approval, and verifies every change with a fresh measurement.
 
-Key facts about this deployment:
-- Box A (129.213.121.108): Spring Boot 3.3 PerfLab, Postgres, Redis, Prometheus, Jaeger
-- Box B (150.136.143.227): Crucible agent + Locust load generator
-- GLC v5 (https://glc-v5-rraghu214.onrender.com): LLM gateway, Gemini keys in rotation
-- Recent campaigns: TR-001 (baseline), TR-002 (pool=2 diagnosed: saturation, 43 waiters, 2406 ms acquire), TR-003 (pool=20 applied and verified: p99 improved from 1206 ms → 58 ms, CHANGE_KEPT), CP-001 (ceiling probe: 200 users passes SLA, 225 users breaks it)
-- SLA: /api/db p99 ≤ 120 ms at 50 users
-- Sandbox branch: perftest_sandbox (only branch the agent can push to)
-- Seven memory kinds: Working, Episode, Fact, Playbook, Policy (SLA lives here — agent has no write permission), Audit, Document chunk
+The facts below are read from the operator's configuration and campaign manifests on disk. Knowledge excerpts come from documents the operator uploaded. Prefer both over general knowledge. When you use an excerpt, name its file. If neither the facts nor the excerpts cover the question, say so instead of guessing.
 
-Answer concisely. Use HTML for emphasis (<strong>, <code>) since the chat renders HTML. Stay factual — only claim things that can be measured."""
+Answer concisely. You may use only these HTML tags: <strong>, <code>, <em>, <br>, <ul>, <li>, <p>. Stay factual: only claim things that were measured or are written in the facts or excerpts."""
+
+_REPLY_TAGS = re.compile(r"&lt;(/?)(strong|code|em|ul|li|p)&gt;")
+_REPLY_BR = re.compile(r"&lt;br\s*/?&gt;")
+
+
+def _safe_reply(text: str) -> str:
+    """Escape everything, then re-allow a few attribute-free tags.
+
+    The reply goes into the page as HTML and the prompt now carries uploaded
+    document text, so a document could otherwise inject script into the
+    operator's browser, where the control token lives. Allowlist, never blocklist.
+    """
+    escaped = html.escape(text, quote=False)
+    return _REPLY_BR.sub("<br>", _REPLY_TAGS.sub(r"<\1\2>", escaped))
+
+
+def _chat_facts(ctx: PerfContext) -> str:
+    lines: list[str] = []
+    sla, sla_error = _load_sla(ctx)
+    if sla is None:
+        lines.append(f"- SLA: could not be read ({sla_error})")
+    else:
+        load = sla.at_load or {}
+        lines += [
+            f"- SLA '{sla.name}' ({ctx.sla_path}): {sla.endpoint} p99 <= {sla.p99_ms:g} ms, "
+            f"errors <= {sla.error_rate_pct:g}%, at {load.get('users', '?')} users",
+            f"- Environment: {sla.environment_name} ({sla.environment_kind}), target {sla.target_base_url}",
+            f"- Noise floor: {sla.noise_p99_spread_pct:g}% p99 spread; smaller changes are inconclusive",
+        ]
+    profile, profile_error = _load_profile(ctx)
+    if profile is None:
+        lines.append(f"- Target profile: could not be read ({profile_error})")
+    else:
+        lines += [
+            f"- Target profile '{profile.name}' ({profile.runtime}); config file {profile.config_file}",
+            f"- Cause families: {', '.join(profile.cause_families)}",
+            f"- Properties the agent may change: {', '.join(profile.allowed_properties)}",
+        ]
+    campaigns, _skipped = _campaigns(ctx)
+    for campaign in campaigns[-5:]:
+        base = ((campaign.get("baseline") or {}).get("load") or {}).get("p99_ms")
+        verdicts = ", ".join(f"#{e.get('experiment')} {e.get('verdict')}" for e in campaign.get("experiments") or [])
+        lines.append(f"- Campaign {campaign.get('run_id')}: baseline p99 {base} ms; "
+                     f"experiments {verdicts or 'none'}; stopped: {campaign.get('stopped_reason', '--')}")
+    if not campaigns:
+        lines.append("- No campaign manifests on disk yet.")
+    return "\n".join(lines)
 
 
 @router.post("/v1/perf/chat")
 async def perf_chat(body: ChatBody, request: Request):
-    """Context-aware AI chat backed by GLC v5.
-
-    Passes the current screen name as a hint so the model can give relevant answers
-    about what is visible. Falls back gracefully if the gateway is unavailable.
-    """
+    """Chat grounded in the configuration on disk and the uploaded knowledge documents."""
     from ..gateway import GatewayClient
 
+    ctx = _context(request)
     screen_hint = _SCREEN_HINTS.get(body.screen, f"The user is on the '{body.screen}' screen.")
-    prompt = f"[Context: {screen_hint}]\n\nUser: {body.message}"
-    client = GatewayClient()
+    retrieval_note = ""
     try:
-        result = await client.chat(
+        hits = await asyncio.to_thread(_knowledge(request).search, body.message, 4)
+    except Exception as exc:  # noqa: BLE001 - the chat still answers, and says what it could not read
+        hits, retrieval_note = [], f"(The knowledge base could not be searched: {type(exc).__name__}.)"
+    excerpts = "\n\n".join(f"[{h['source']}{' > ' + str(h['heading']) if h.get('heading') else ''}]\n{h['text']}"
+                           for h in hits) or "(no uploaded document matched)"
+    prompt = (f"[Context: {screen_hint}]\n\nFacts:\n{_chat_facts(ctx)}\n\n"
+              f"Knowledge excerpts:\n{excerpts}\n{retrieval_note}\n\nUser: {body.message}")
+    try:
+        result = await GatewayClient().chat(
             prompt=prompt,
             system=_CHAT_SYSTEM,
-            request={"max_tokens": 400, "temperature": 0},
+            request={"max_tokens": 500, "temperature": 0},
         )
-        reply = result.get("text") or "(no reply)"
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"gateway error: {exc}") from exc
-    return {"reply": reply}
+    sources = []
+    for h in hits:
+        entry = {"source": h["source"], "heading": h.get("heading")}
+        if entry not in sources:
+            sources.append(entry)
+    return {"reply": _safe_reply(result.get("text") or "(no reply)"), "sources": sources}
 
 
 # ---------------------------------------------------------------------------
