@@ -98,7 +98,8 @@ class AgentRuntime:
         # embedders can deliberately use a different local profile in the
         # same Python process; importing CONFIG_DIR by value would leak memory
         # between those profiles.
-        self.root = root or Path(os.getenv("CRUCIBLE_DATA_DIR", str(Path.home() / ".crucible")))
+        # The same variable the perf side reads: one state directory, not two.
+        self.root = root or Path(os.getenv("CRUCIBLE_STATE_DIR", str(Path.home() / ".crucible"))).expanduser()
         self.root.mkdir(parents=True, exist_ok=True)
         glc_url = os.getenv("GLC_BASE_URL", "").strip().rstrip("/")
         embedder = GlcEmbedder(glc_url) if glc_url else OllamaNomicEmbedder()

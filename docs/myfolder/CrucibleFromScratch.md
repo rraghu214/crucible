@@ -979,7 +979,7 @@ uv run pytest -q tests/test_perf_campaign.py -k abort    # one area
 
 Configuration in `pyproject.toml` (`asyncio_mode = "auto"`). `tests/conftest.py`:
 
-- isolates state per test (temporary `CRUCIBLE_DATA_DIR` and sandbox);
+- isolates state per test (temporary `CRUCIBLE_STATE_DIR` and sandbox);
 - sets test control tokens, so auth gates stay exercised rather than bypassed;
 - registers NiceGUI's `user` plugin.
 

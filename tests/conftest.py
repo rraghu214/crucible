@@ -11,7 +11,7 @@ COMPLETION_TOKEN = "test-completion-token"
 
 @pytest.fixture(autouse=True)
 def _isolated_state(monkeypatch, tmp_path):
-    monkeypatch.setenv("CRUCIBLE_DATA_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("CRUCIBLE_STATE_DIR", str(tmp_path / "state"))
     monkeypatch.setenv("CRUCIBLE_A2A_GRPC_ENABLED", "0")
     monkeypatch.setenv("CRUCIBLE_SANDBOX_ROOT", str(tmp_path / "sandbox"))
     # The control plane fails closed. Tests configure a token exactly as a real
