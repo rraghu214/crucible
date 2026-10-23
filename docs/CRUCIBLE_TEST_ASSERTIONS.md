@@ -971,6 +971,10 @@ refuses a `gc_pressure` proposal against it as an undeclared cause family.
 Implemented in `tests/test_fastapi_profile.py` (13 assertions), built week 3
 alongside `config/profiles/fastapi.yaml` and `skills/fastapi/SKILL.md`.
 
+**APPROVED** — operator, 24 October 2026, confirming an earlier approval of
+`tests/test_fastapi_profile.py`. No written record of that earlier approval was
+found in this doc or in the chat transcripts.
+
 **Why it exists.** This is section 9.1's guarantee exercised for real rather than
 by grepping the module source: `crucible/perf/profile.py` needed no code change to
 gain a second runtime, and a model that has seen far more Spring Boot snapshots
@@ -2251,6 +2255,48 @@ would not catch a different loop-affinity bug inside httpx itself.
 
 ---
 
+### 22.7 `--skip-missing-fixtures` runs a partial benchmark, and says what it skipped
+
+*Tests drafted 4 October 2026; written up here 24 October 2026. NOT YET REVIEWED.*
+
+**What it checks.** `find_missing_fixtures` names exactly the fixtures that tasks
+reference but that were not captured. With `--skip-missing-fixtures`, a task
+needing a missing fixture is skipped and the others still run. A fixture whose
+ground truth disagrees with its task is **still** an error, not a skip. Without
+the flag, one missing fixture still refuses the whole run, as before.
+
+**Why it exists.** The JVM-flag fixtures (`gc_pressure`, `gc_and_pool`) need
+manual setup on Box A and were often not captured when a partial benchmark was
+still useful. The CLI prints which fixtures were missing, so a partial run is
+never mistaken for a full one.
+
+**For review:**
+- Does the replay *report* also say which tasks were skipped, or only the
+  console? A results file read later should not look like the full benchmark.
+- A skip is allowed only for a fixture that is missing. A wrong one still fails.
+  Agreed?
+
+---
+
+### 22.8 T3's stakeholder pressure actually reaches the model
+
+*Tests drafted 10 October 2026; written up here 24 October 2026. NOT YET REVIEWED.*
+
+**What it checks.** `config/tasks/T3.yaml` loads with a non-empty
+`stakeholder_request`, and a replay case passes that text through to the
+diagnosis call.
+
+**Why it exists.** T3.yaml used the key `prompt:`, which `replay.py` never
+reads. The adversarial framing was silently dropped on every replay and live
+run, so "T3 — stakeholder pressure" measured the same thing as T1. The operator
+caught this on 10 October 2026 from the bench-t3 report, which mentioned no
+stakeholder request.
+
+**For review:** this pins the replay path. The live path (`crucible run
+--stakeholder-request`) is a different route; is a live test needed too?
+
+---
+
 # GROUP 23 — The watchdog
 
 *Week 4, `crucible/perf/watchdog.py`. Implemented in `tests/test_perf_watchdog.py`
@@ -3088,6 +3134,9 @@ correct: every write action requires the token, approval is bound to parked valu
 (no value field), abort triggers §19.9 redeploy, and the target confirmation dialog
 appears before Start.
 
+**APPROVED** — operator, 24 October 2026: `tests/test_ui_perf.py`, which covers the
+nineteen-screen surface (`perf_ui.py`) that predates this rewrite.
+
 *The operator's decision: the UI does everything the CLI does, for the end user
 and for the demo. The old group was drafted against the nineteen-screen A2UI
 (`perf_ui.py`, still mounted under `crucible serve`) and asked two questions: does
@@ -3217,7 +3266,7 @@ record and the process list (§19.8).
 
 # GROUP 29 — Knowledge documents from the dashboard, and a chat that reads them
 
-*Drafted 23 October 2026 by Claude Code. NOT YET REVIEWED. Implemented in
+*Drafted 23 October 2026 by Claude Code. REVIEWED AND APPROVED by the operator, 23 October 2026. Implemented in
 `tests/test_ui_knowledge.py` (19). Code: `crucible/ui/knowledge.py`, the
 `/v1/perf/knowledge/documents` and `/v1/perf/chat` routes in
 `crucible/ui/perf_ui.py`, and the wizard's Knowledge Docs card in
@@ -3350,6 +3399,255 @@ emitting script, and the operator's browser holds the control token in
 **For review:** the allowed tags are `strong`, `code`, `em`, `br`, `ul`, `li` and
 `p`, and none may carry attributes. Is any of them unnecessary? Should links be
 allowed? (They are not, deliberately: an `href` is an attribute.)
+
+---
+
+# GROUP 30 — AI suggestions for the SLA and scenarios
+
+*Drafted 23 October 2026 by Claude Code. REVIEWED AND APPROVED by the operator, 24 October 2026. Implemented in
+`tests/test_ui_suggest.py` (25). Code: `crucible/ui/suggest.py`, the
+`/v1/perf/suggest` route in `crucible/ui/perf_ui.py`, and the wizard's Goal & SLA
+and Scenarios steps.*
+
+*Why the group exists: "Suggest SLA" and "Suggest scenarios" were canned replies
+on a timer that always said 200 ms and steady_50u/burst_100u, whatever the goal.
+A suggestion now comes from the model, grounded in the same facts and knowledge
+excerpts as the chat. In Advisory mode the scenarios are filled automatically;
+in other modes the operator presses **AI suggestion**. Either way the values only
+pre-fill fields that the operator edits and submits.*
+
+---
+
+### 30.1 The model's answer is untrusted, and an unusable answer is refused whole
+
+**What it checks.** The SLA must have a numeric `p99_ms` in 1..600000, an
+`error_rate_pct` in 0..100 and a whole-number `users`. Strings, booleans,
+fractions and missing keys are refused. Scenarios: 1 to 6, each name unique
+`lower_snake_case`, `duration_s` of at least 30, and `ramp_s` no longer than its
+duration. One bad scenario refuses the whole list, and the route answers 502
+with the reason.
+
+**Why it exists.** These values become an SLA and a load profile, the two things
+§4.4 protects most. A partly applied list would leave the form showing a mix
+nobody chose.
+
+**For review:** are the bounds right? A 30-second minimum duration is below the
+120-second warmup that §7 requires for a captured measurement. Should the
+minimum be 120 s plus the measure window?
+
+---
+
+### 30.2 A suggestion writes nothing
+
+**What it checks.** The SLA file is byte-identical before and after a
+suggestion. The route returns values; only the browser places them in fields.
+
+**Why it exists.** Principle 3. The model may *propose* a goal, but the SLA is
+still written by the operator, at Launch (A4), after they could edit it.
+
+**For review:** the browser records which values came from which model
+(`wzProvenance`), so that A4 can write "suggested by X, accepted by operator"
+into `slo.yaml`. Is that provenance worth recording?
+
+---
+
+### 30.3 It needs the control token, and fails before calling the model
+
+**What it checks.** With no token configured the route answers 503; with a wrong
+token, 401. In both cases no model call is made.
+
+**Why it exists.** `auth.py`: anything that spends money is a control-plane
+action.
+
+---
+
+### 30.4 The goal reaches the prompt, and the noise floor is never asked for
+
+**What it checks.** The operator's goal appears verbatim in the prompt. Neither
+prompt shape asks for a noise threshold.
+
+**Why it exists.** A number the operator wrote must be used exactly, not
+re-derived. The noise floor is measured on the box (§4.7, `slo.yaml` `noise`);
+a model's guess at it would be an unmeasured number presented as a measured one.
+
+**For review:** the wizard still shows an editable "Noise threshold" field with
+5.0. A4 replaces it with the measured value from `slo.yaml`, read-only. Agreed?
+
+---
+
+### 30.5 Markup in the rationale cannot reach the page
+
+**What it checks.** A rationale containing `<img onerror=…>` comes back
+escaped. Suggested values are placed with `.value`, never as HTML.
+
+**Why it exists.** The same reason as 29.7: uploaded documents reach this
+prompt too.
+
+---
+
+# GROUP 31 — The load generator drives the SLA's endpoint and nothing else
+
+*Drafted 23 October 2026 by Claude Code. REVIEWED AND APPROVED by the operator, 24 October 2026. Implemented in
+`tests/test_loadprofile.py` (14). Code: `crucible/perf/loadprofile.py`, used by
+`build_campaign`, `cmd_ceiling` and the capture's K1 re-validation in
+`crucible/perf/commands.py`.*
+
+*Why the group exists: the Locust tag was chosen by
+`"db" if endpoint.endswith("/db") else ()`. An SLA on any endpoint except
+`/api/db` therefore ran all ten tasks at once and judged their blend against the
+SLA, and the ceiling probe was never tagged at all. The wizard is about to let an
+operator choose the endpoint, which would make that the common case.*
+
+*Scope (clarified 24 October 2026): this group covers **single-endpoint**
+scenarios, which are all that exist today. A traffic-mix scenario (Group B)
+drives several endpoints on purpose, at operator-set weights. It gets its own
+assertions: weights total 100%, every endpoint in the mix is one Locust drives,
+and each endpoint is judged on its **own** p99 against its own target, never on
+a blended one. A blended p99 is the very failure this group closes.*
+
+---
+
+### 31.1 A single-endpoint scenario drives exactly that endpoint's task
+
+**What it checks.** `/api/db` → `db`, `/api/orders` → `orders`, and so on, read
+from the locustfile with `ast` (never imported). Every task in the real
+locustfile has a distinct tag and endpoint. A campaign whose SLA names
+`/api/orders` is built with `tags == ("orders",)`.
+
+**Why it exists.** A p99 is only evidence about the endpoint whose requests
+produced it.
+
+---
+
+### 31.2 An endpoint no task drives is refused, naming what is driven
+
+**What it checks.** `/transfer`, `/api/dbx`, `api/db` and `""` are refused, and
+the message lists the endpoints that the locustfile does drive. A trailing slash
+is ignored, so `/api/db/` matches `/api/db`; nothing else is loosened. Two tasks
+with different tags on one endpoint are also refused. An undriven endpoint
+fails preflight with a **blocking** check ("load profile drives the SLA
+endpoint"), and `crucible run` against it exits `REFUSED` before any load starts.
+
+**Why it exists.** Before this change an undriven endpoint silently produced a
+blend. Measuring something other than the goal is worse than not measuring
+(principle 1).
+
+**For review:**
+- DECIDED, operator, 24 October 2026: a trailing slash is ignored, and an
+  endpoint the load profile cannot drive fails preflight and aborts the run.
+- A capture with an explicit `--tag` still overrides the mapping, as before.
+  Should it be checked against the SLA's endpoint as well?
+
+---
+
+# GROUP 32 — Launch writes the operator's SLA and deploy settings, then runs
+
+*Drafted 23 October 2026 by Claude Code. REVIEWED AND APPROVED by the operator, 24 October 2026. Implemented in
+`tests/test_ui_wizard.py` (23). Code: `crucible/ui/wizard.py`, the
+`/v1/perf/wizard*` routes in `crucible/ui/perf_ui.py`, and the wizard steps of
+`crucible-ui.html`.*
+
+*Why the group exists: Launch sent only a run id, so every value typed into the
+wizard was thrown away and the campaign ran on whatever `slo.yaml` said. Operator
+decisions, 23 October 2026: Launch overwrites `config/slo.yaml`, and the deploy
+fields of the Target & Repo step (config file, base branch, restart command,
+readiness URL) are written to the target profile. Both stay editable by hand,
+and the wizard opens with whatever the files say now.*
+
+---
+
+### 32.1 Edits are targeted, and every comment survives
+
+**What it checks.** Only the named keys change, and a trailing comment on the
+edited line is kept. A same-named key in another block, or deeper in the same
+block, is never the one replaced. Every comment line in the real `slo.yaml` and
+`spring-boot.yaml` is still there, in order, after an edit. One `# wizard:` line
+records when, who and the provenance. A second Launch replaces that line rather
+than adding another.
+
+**Why it exists.** Most comments in these files record *why* a value is what it
+is (the 2.08% noise floor, the 10% steal threshold). A YAML re-dump would delete
+the reasons and keep the numbers.
+
+**For review:** the provenance line says, for example, "SLA values suggested by
+gemini-x and accepted unchanged by the operator". Is that what you want recorded?
+
+---
+
+### 32.2 The result is re-validated before it replaces anything
+
+**What it checks.** The edited text is loaded by `Sla.load` and
+`TargetProfile.load`, the same loaders a campaign uses, and every written value
+is read back. A base branch equal to the sandbox branch is refused by the
+profile's own branch rule (§19.1a). Values not shown in the wizard, such as the
+noise floor, are unchanged. Rendering writes nothing.
+
+**Why it exists.** A file that would not load, or would load as something else,
+must fail at Launch, not eight minutes into a campaign.
+
+---
+
+### 32.3 Nothing is written while a campaign runs, or when the run could not start
+
+**What it checks.** Launch writes nothing, and starts nothing, when:
+- a deploy-branch lock is held (and the message names the running campaign);
+- the mode is Advisory (not built yet; Group B);
+- no control token is configured;
+- the endpoint is one Locust does not drive (Group 31).
+
+The preview route returns the diff and writes nothing.
+
+**Why it exists.** A running campaign was started against the files as they
+were. Changing its goal under it would judge its verdicts against a goal it
+never ran for (§4.4). Advisory is refused *before* writing, so a refused Launch
+never leaves a changed SLA behind.
+
+**For review:** if writing succeeds but the run's arguments are refused, the
+files stay written and the error says so. Should that case roll the files back
+instead?
+
+---
+
+### 32.4 Launch runs the operator's values through the CLI path
+
+**What it checks.** The job is `crucible run --sla=<the written file>`, with
+`--users` taken from the first scenario. Semi-Automated gives `--approve=file`
+and Fully Automated gives `--approve=preapproved`. A Ceiling Probe starts
+`crucible ceiling` with the operator's `--max-users` (§20.2). When more than one
+scenario is given, the response says that only the first one runs.
+
+**Why it exists.** §15: no easier path. The wizard starts the same command a
+person would type.
+
+**For review:**
+- Ramp is not applied yet. Locust spawns at its fixed 10 users per second, and
+  the response says so. Should ramp map to `spawn_rate` now (a small change), or
+  wait for Group B?
+- The goal text is passed as `--stakeholder-request` (context only; the SLA stays
+  the authority). Right, or should the goal not reach the model at all?
+
+---
+
+### 32.5 The Budget step is arithmetic on real inputs, and says what it cannot know
+
+**What it checks.**
+- **Wall clock:** baseline = warmup + measure. Each experiment adds deploy (0 up
+  to the profile's `verify_timeout_s`) plus a re-measure. The total is a range,
+  from "SLA met after the first experiment" to "every experiment used".
+- **Model cost:** calls × the mean cost of priced diagnoses in past manifests.
+  With none on record, cost is `None` ("not measured"), never 0.
+- **Ceiling probe:** no model calls; steps × (warmup + hold).
+- **The route** reads the deploy timeout from the profile.
+
+**Why it exists.** The old table was hardcoded (~3.5 h, $0.016) whatever was
+entered. §7: wall clock is the real budget. Principle 1: an unmeasured cost
+shown as a number would be a claim nobody measured.
+
+**For review:**
+- Model latency is not added to the wall clock, because it was never measured
+  here. Should it use a measured gateway latency once one exists?
+- The cost-cap and wall-clock-cap inputs were removed and replaced with a note
+  that run caps are not built (operator decision: not chosen for Group B).
 
 ---
 

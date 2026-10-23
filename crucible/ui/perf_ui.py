@@ -39,7 +39,6 @@ the scope line that matters -- one implementation of each capability -- holds.
 
 from __future__ import annotations
 
-import ast
 import asyncio
 import contextlib
 import html
@@ -372,44 +371,10 @@ def _env(name: str) -> str:
 
 
 def _locust_tasks(ctx: PerfContext) -> list[dict[str, Any]]:
-    """The load profile's tasks, read from the locustfile's source, never run.
+    """The load profile's tasks, read from the locustfile's source, never run."""
+    from ..perf.loadprofile import locust_tasks
 
-    ``ast`` rather than importing it: importing a locustfile starts Locust's
-    event machinery, and the load profile is a protected path this module must
-    only read.
-    """
-    try:
-        tree = ast.parse(ctx.path(ctx.locustfile).read_text(encoding="utf-8"))
-    except (OSError, SyntaxError):
-        return []
-    tasks = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.FunctionDef):
-            continue
-        tag, weight, is_task = "", 1, False
-        for deco in node.decorator_list:
-            if isinstance(deco, ast.Call) and getattr(deco.func, "id", "") == "tag" and deco.args:
-                tag = str(getattr(deco.args[0], "value", ""))
-            if getattr(deco, "id", "") == "task":
-                is_task = True
-            if isinstance(deco, ast.Call) and getattr(deco.func, "id", "") == "task":
-                is_task = True
-                if deco.args and isinstance(deco.args[0], ast.Constant):
-                    weight = int(deco.args[0].value)
-        if not is_task:
-            continue
-        endpoint = ""
-        for call in ast.walk(node):
-            if isinstance(call, ast.Call) and getattr(call.func, "attr", "") == "_get":
-                named = next((k.value for k in call.keywords if k.arg == "name"), None)
-                if isinstance(named, ast.Constant):
-                    endpoint = str(named.value)
-                elif call.args and isinstance(call.args[0], ast.Constant):
-                    endpoint = str(call.args[0].value)
-                break
-        family = (ast.get_docstring(node) or "").split(".")[0].strip()
-        tasks.append({"tag": tag, "endpoint": endpoint, "weight": weight, "family": family})
-    return tasks
+    return locust_tasks(ctx.path(ctx.locustfile))
 
 
 def _claim(ctx: PerfContext, relative: str) -> str:
@@ -1724,15 +1689,9 @@ async def perf_chat(body: ChatBody, request: Request):
 
     ctx = _context(request)
     screen_hint = _SCREEN_HINTS.get(body.screen, f"The user is on the '{body.screen}' screen.")
-    retrieval_note = ""
-    try:
-        hits = await asyncio.to_thread(_knowledge(request).search, body.message, 4)
-    except Exception as exc:  # noqa: BLE001 - the chat still answers, and says what it could not read
-        hits, retrieval_note = [], f"(The knowledge base could not be searched: {type(exc).__name__}.)"
-    excerpts = "\n\n".join(f"[{h['source']}{' > ' + str(h['heading']) if h.get('heading') else ''}]\n{h['text']}"
-                           for h in hits) or "(no uploaded document matched)"
+    hits, excerpts = await _retrieve(request, body.message)
     prompt = (f"[Context: {screen_hint}]\n\nFacts:\n{_chat_facts(ctx)}\n\n"
-              f"Knowledge excerpts:\n{excerpts}\n{retrieval_note}\n\nUser: {body.message}")
+              f"Knowledge excerpts:\n{excerpts}\n\nUser: {body.message}")
     try:
         result = await GatewayClient().chat(
             prompt=prompt,
@@ -1741,12 +1700,237 @@ async def perf_chat(body: ChatBody, request: Request):
         )
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"gateway error: {exc}") from exc
-    sources = []
+    return {"reply": _safe_reply(result.get("text") or "(no reply)"), "sources": _sources(hits)}
+
+
+async def _retrieve(request: Request, query: str) -> tuple[list[dict[str, Any]], str]:
+    """Knowledge hits and their prompt text. A search failure is said, not hidden."""
+    try:
+        hits = await asyncio.to_thread(_knowledge(request).search, query, 4)
+    except Exception as exc:  # noqa: BLE001 - the caller still answers, and says what it could not read
+        return [], f"(The knowledge base could not be searched: {type(exc).__name__}.)"
+    excerpts = "\n\n".join(f"[{h['source']}{' > ' + str(h['heading']) if h.get('heading') else ''}]\n{h['text']}"
+                           for h in hits)
+    return hits, excerpts or "(no uploaded document matched)"
+
+
+def _sources(hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    sources: list[dict[str, Any]] = []
     for h in hits:
         entry = {"source": h["source"], "heading": h.get("heading")}
         if entry not in sources:
             sources.append(entry)
-    return {"reply": _safe_reply(result.get("text") or "(no reply)"), "sources": sources}
+    return sources
+
+
+class ScenarioRow(BaseModel):
+    name: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,39}$")
+    users: int = Field(ge=1, le=100_000)
+    duration_s: int = Field(ge=30, le=86_400)
+    ramp_s: int = Field(ge=0, le=86_400)
+
+
+class CeilingBounds(BaseModel):
+    start_users: int = Field(ge=1, le=100_000)
+    step: int = Field(ge=1, le=100_000)
+    max_users: int = Field(ge=1, le=100_000)
+    hold_s: int = Field(ge=30, le=86_400)
+
+
+class WizardBody(BaseModel):
+    endpoint: str = Field(min_length=1, max_length=200)
+    p99_ms: float = Field(gt=0, le=600_000)
+    error_rate_pct: float = Field(ge=0, le=100)
+    users: int = Field(ge=1, le=100_000)
+    config_file: str = Field(min_length=1, max_length=300)
+    base_branch: str = Field(min_length=1, max_length=200)
+    restart_command: str = Field(min_length=1, max_length=500)
+    health_url: str = Field(min_length=1, max_length=500)
+    provenance: str = Field(default="", max_length=300)
+    mode: str = Field(default="Semi-Automated", pattern="^(Advisory|Semi-Automated|Fully Automated|Ceiling Probe)$")
+    scenarios: list[ScenarioRow] = Field(default_factory=list, max_length=6)
+    experiments: int = Field(default=5, ge=1, le=50)
+    goal: str = Field(default="", max_length=1000)
+    run_id: str = Field(default="", max_length=80)
+    ceiling: CeilingBounds | None = None
+
+
+def _wizard_paths(ctx: PerfContext) -> tuple[Path, Path, Path]:
+    return (ctx.path(ctx.sla_path), ctx.path(ctx.profiles_dir) / f"{ctx.profile_name}.yaml",
+            ctx.path(ctx.locustfile))
+
+
+def _wizard_form(body: WizardBody, operator: str) -> Any:
+    import shlex
+
+    from .wizard import WizardForm, WizardRefused
+
+    try:
+        command = shlex.split(body.restart_command)
+    except ValueError as exc:
+        raise WizardRefused(f"restart command: {exc}") from exc
+    return WizardForm(endpoint=body.endpoint, p99_ms=float(body.p99_ms), error_rate_pct=float(body.error_rate_pct),
+                      users=body.users, config_file=body.config_file, base_branch=body.base_branch,
+                      restart_command=command, health_url=body.health_url, operator=operator,
+                      provenance=body.provenance)
+
+
+@router.get("/v1/perf/wizard")
+async def perf_wizard_current(request: Request):
+    """The values the wizard opens with: whatever slo.yaml and the profile say now."""
+    from .wizard import current
+
+    try:
+        return current(*_wizard_paths(_context(request)))
+    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/v1/perf/wizard/preview")
+async def perf_wizard_preview(body: WizardBody, request: Request):
+    """The diffs Launch would write. Writes nothing."""
+    from .wizard import WizardRefused, render
+
+    try:
+        rendered = render(_wizard_form(body, "operator"), *_wizard_paths(_context(request)))
+    except WizardRefused as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"sla_diff": rendered["sla_diff"], "profile_diff": rendered["profile_diff"],
+            "notes": _launch_notes(body)}
+
+
+@router.post("/v1/perf/wizard/check")
+async def perf_wizard_check(request: Request):
+    """Test connection: preflight's read-only checks, the same list the CLI prints."""
+    from ..perf.campaign import Sla
+    from ..perf.commands import preflight_checks
+    from ..perf.profile import TargetProfile
+
+    ctx = _context(request)
+    sla_path, profile_path, _ = _wizard_paths(ctx)
+    try:
+        sla, profile = Sla.load(sla_path), TargetProfile.load(profile_path)
+    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        return {"checks": [{"name": "configuration loads", "ok": False, "blocking": True, "detail": str(exc)}]}
+    checks = await asyncio.to_thread(preflight_checks, profile, sla, str(sla_path),
+                                     workspace=os.getenv("CRUCIBLE_WORKSPACE", "."), apply_probe=False)
+    return {"checks": [{"name": c.name, "ok": c.ok, "blocking": c.blocking, "detail": c.detail} for c in checks]}
+
+
+@router.post("/v1/perf/wizard/budget")
+async def perf_wizard_budget(body: WizardBody, request: Request):
+    """The Budget step's arithmetic, from the operator's inputs and past manifests."""
+    import math
+
+    from ..perf.fixtures import DEFAULT_WARMUP_S
+    from ..perf.scorer import score_cost
+    from .wizard import estimate
+
+    ctx = _context(request)
+    profile, error = _load_profile(ctx)
+    if profile is None:
+        raise HTTPException(422, error)
+    pricing = _pricing()
+    campaigns, _ = _campaigns(ctx)
+    per_call = [c for campaign in campaigns for c in score_cost(campaign, pricing).per_experiment if c]
+    if body.mode == "Ceiling Probe":
+        if body.ceiling is None:
+            raise HTTPException(422, "a ceiling probe needs its bounds")
+        c = body.ceiling
+        steps = max(1, math.floor((c.max_users - c.start_users) / c.step) + 1)
+        result = estimate(mode=body.mode, warmup_s=DEFAULT_WARMUP_S, measure_s=c.hold_s, experiments=0,
+                          verify_timeout_s=0, per_call_costs=per_call, ceiling_steps=steps)
+    else:
+        if not body.scenarios:
+            raise HTTPException(422, "at least one scenario is required")
+        result = estimate(mode=body.mode, warmup_s=DEFAULT_WARMUP_S, measure_s=body.scenarios[0].duration_s,
+                          experiments=body.experiments, verify_timeout_s=float(profile.deploy.verify_timeout_s or 0),
+                          per_call_costs=per_call)
+    result["currency"] = pricing.currency
+    return result
+
+
+def _launch_notes(body: WizardBody) -> list[str]:
+    notes = []
+    if body.mode == "Advisory":
+        notes.append("Advisory mode is not built yet (Group B); Launch will refuse it.")
+    if body.mode != "Ceiling Probe" and len(body.scenarios) > 1:
+        notes.append(f"Only the first scenario ({body.scenarios[0].name}) runs; "
+                     "multi-scenario campaigns come in Group B.")
+    if body.mode != "Ceiling Probe" and body.scenarios:
+        notes.append("Ramp is not applied yet: Locust spawns at its fixed 10 users/s. "
+                     "A 120 s warmup is discarded before the scenario's measured duration.")
+    return notes
+
+
+@router.post("/v1/perf/wizard/launch", dependencies=[Depends(require_control)])
+async def perf_wizard_launch(body: WizardBody, request: Request):
+    """Write the operator's SLA and deploy settings, then start the run as a CLI job."""
+    from .wizard import WizardRefused, render, write
+
+    ctx = _context(request)
+    if body.mode == "Advisory":
+        raise HTTPException(409, "Advisory mode is not built yet (Group B). Nothing was written.")
+    if body.mode == "Ceiling Probe" and body.ceiling is None:
+        raise HTTPException(422, "a ceiling probe needs its bounds (DESIGN.md 20.2)")
+    if body.mode != "Ceiling Probe" and not body.scenarios:
+        raise HTTPException(422, "at least one scenario is required")
+    sla_path, profile_path, locustfile = _wizard_paths(ctx)
+    try:
+        rendered = render(_wizard_form(body, "operator:ui"), sla_path, profile_path, locustfile)
+        write(rendered, sla_path, profile_path, _active_runs(ctx))
+    except WizardRefused as exc:
+        raise HTTPException(409, str(exc)) from exc
+    try:
+        if body.mode == "Ceiling Probe":
+            c = body.ceiling
+            args = _actions.ceiling_args(profile=ctx.profile_name, sla=str(sla_path), users=c.start_users,
+                                         measure=float(c.hold_s), step=c.step, max_users=c.max_users,
+                                         run_id=body.run_id, state_dir=str(ctx.state))
+        else:
+            first = body.scenarios[0]
+            args = _actions.run_args(
+                profile=ctx.profile_name, sla=str(sla_path), scenario=first.name, users=first.users,
+                measure=float(first.duration_s), experiments=body.experiments, run_id=body.run_id,
+                state_dir=str(ctx.state), workspace=os.getenv("CRUCIBLE_WORKSPACE", ""),
+                approve="preapproved" if body.mode == "Fully Automated" else "file",
+                stakeholder_request=body.goal,
+            )
+    except ActionError as exc:
+        raise HTTPException(422, f"the files were written, but the run could not start: {exc}") from exc
+    job = start_job(ctx.state, ctx.root, args, label=f"{body.mode.lower()} {body.run_id or ''}".strip())
+    return {"job": _job_dict(job), "sla_diff": rendered["sla_diff"], "profile_diff": rendered["profile_diff"],
+            "notes": _launch_notes(body)}
+
+
+class SuggestBody(BaseModel):
+    kind: str = Field(pattern="^(sla|scenarios)$")
+    goal: str = Field(default="", max_length=1000)
+    endpoint: str = Field(default="", max_length=200)
+    mode: str = Field(default="", max_length=40)
+
+
+@router.post("/v1/perf/suggest", dependencies=[Depends(require_control)])
+async def perf_suggest(body: SuggestBody, request: Request):
+    """Pre-fill values for the wizard. The operator edits and submits them; nothing is written here."""
+    from ..gateway import GatewayClient
+    from .suggest import SYSTEM, SuggestionRefused, build_prompt, parse
+
+    hits, excerpts = await _retrieve(request, f"{body.goal} {body.endpoint}".strip() or body.kind)
+    prompt = build_prompt(body.kind, goal=body.goal, endpoint=body.endpoint, mode=body.mode,
+                          facts=_chat_facts(_context(request)), excerpts=excerpts)
+    try:
+        result = await GatewayClient().chat(prompt=prompt, system=SYSTEM,
+                                            request={"max_tokens": 600, "temperature": 0})
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"gateway error: {exc}") from exc
+    try:
+        suggestion = parse(body.kind, result.get("text") or "")
+    except SuggestionRefused as exc:
+        raise HTTPException(502, f"unusable suggestion: {exc}") from exc
+    suggestion["rationale"] = html.escape(suggestion["rationale"], quote=False)
+    return {"kind": body.kind, "suggestion": suggestion, "sources": _sources(hits),
+            "model": result.get("model"), "provider": result.get("provider")}
 
 
 # ---------------------------------------------------------------------------

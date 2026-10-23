@@ -689,48 +689,43 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
     <div class="card">
       <div class="card-h"><div class="card-title">Service &amp; Collection</div></div>
       <div class="form-grid2">
-        <div class="form-row"><label class="form-label">Service</label><select class="form-select"><option>PerfLab (existing)</option><option>+ Add new service…</option></select></div>
-        <div class="form-row"><label class="form-label">Collection (folder)</label><select class="form-select"><option>Connection Pool Investigation</option><option>Cache Endpoint Tests</option><option>+ Create new collection…</option></select></div>
-        <div class="form-row"><label class="form-label">Endpoint under test</label><input class="form-input" value="/transfer" placeholder="/api/endpoint"><div class="form-hint">The primary endpoint Crucible will load-test</div></div>
-        <div class="form-row"><label class="form-label">Environment</label><select class="form-select"><option>staging (pre-prod)</option><option>local-dev</option></select></div>
+        <div class="form-row"><label class="form-label">Target profile</label><input class="form-input" id="wz-profile" disabled><div class="form-hint">config/profiles/&lt;name&gt;.yaml — the runtime adapter</div></div>
+        <div class="form-row"><label class="form-label">Target</label><input class="form-input" id="wz-target" disabled><div class="form-hint">From slo.yaml <code>environment</code>; production is refused</div></div>
+        <div class="form-row"><label class="form-label">Endpoint under test</label><select class="form-select" id="wz-endpoint"></select><div class="form-hint">Only endpoints a Locust task drives can be measured — anything else would measure a blend</div></div>
+        <div class="form-row"><label class="form-label">Environment</label><input class="form-input" id="wz-env" disabled></div>
       </div>
     </div>
 
     <div class="card">
       <div class="card-h">
-        <div><div class="card-title">GitHub Repository Connection</div><div class="card-sub">Required for Semi-Auto and Fully Automated · <strong style="color:var(--ok);">Optional for Advisory</strong> — Advisory mode only reports findings; it never pushes a change</div></div>
-        <span class="pill idle" id="ghConnBadge">Not connected</span>
+        <div><div class="card-title">Repository &amp; deploy</div><div class="card-sub">Editable fields are written to the target profile at Launch (you can also edit it by hand). Required for Semi-Auto and Fully Automated.</div></div>
+        <span class="pill idle" id="ghConnBadge">Not checked</span>
       </div>
       <div class="form-grid2">
         <div class="form-row">
-          <label class="form-label">Repository URL</label>
-          <input class="form-input" id="gh-repo" placeholder="https://github.com/org/perf-lab" value="https://github.com/rraghu214/perf-lab">
-          <div class="form-hint">The target repo — not this repo</div>
+          <label class="form-label">Deploy remote → sandbox branch</label>
+          <input class="form-input" id="gh-repo" disabled>
+          <div class="form-hint">The remote's URL and its SSH deploy key live in the workspace's git config (DESIGN.md §19.8), not in the profile</div>
         </div>
         <div class="form-row">
           <label class="form-label">Base branch</label>
-          <input class="form-input" id="gh-base" value="main" placeholder="main">
-          <div class="form-hint">Crucible reads this once to create the sandbox branch</div>
-        </div>
-        <div class="form-row">
-          <label class="form-label">SSH deploy key path</label>
-          <input class="form-input" id="gh-key" placeholder="~/.ssh/perf-lab-deploy-key">
-          <div class="form-hint">Write-only key for perftest_sandbox only; path is safe to log</div>
+          <input class="form-input" id="gh-base" placeholder="main">
+          <div class="form-hint">Read once to create the sandbox branch; never written to</div>
         </div>
         <div class="form-row">
           <label class="form-label">Config file path <span style="color:var(--lo);font-weight:400;">(in repo)</span></label>
-          <input class="form-input" id="gh-cfg" value="src/main/resources/application.properties" placeholder="path/to/application.properties">
+          <input class="form-input" id="gh-cfg" placeholder="path/to/application.properties">
           <div class="form-hint">Relative to repo root — this is the file Crucible edits</div>
         </div>
         <div class="form-row">
           <label class="form-label">Restart command</label>
-          <input class="form-input" id="gh-restart" value="./mvnw spring-boot:run -Dspring-boot.run.profiles=perf" placeholder="./mvnw spring-boot:run">
-          <div class="form-hint">Run on the target box after deploy; must block until ready</div>
+          <input class="form-input" id="gh-restart" placeholder="./mvnw spring-boot:run">
+          <div class="form-hint">Arguments separated by spaces; quote one that contains a space. Never run through a shell.</div>
         </div>
         <div class="form-row">
           <label class="form-label">Readiness probe URL</label>
-          <input class="form-input" id="gh-probe" value="http://localhost:8080/actuator/health" placeholder="http://localhost:8080/actuator/health">
-          <div class="form-hint">Crucible polls this after restart — 200 = ready</div>
+          <input class="form-input" id="gh-probe" placeholder="http://localhost:8080/actuator/health">
+          <div class="form-hint">Polled after restart — 200 = ready</div>
         </div>
       </div>
       <button class="btn btn-ghost btn-sm" onclick="testGithubConn()" style="margin-top:4px;">🔗 Test connection</button>
@@ -764,13 +759,15 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
       <div class="form-row">
         <label class="form-label">Goal (plain English)</label>
         <input class="form-input" id="goal-text" value="Reduce p99 latency of /transfer below 200 ms at 50 concurrent users">
-        <div class="form-hint">Crucible turns this into a measurable SLA — ask AI in the panel if unsure what to write</div>
+        <div class="form-hint">Crucible turns this into a measurable SLA. Any number you write here is used exactly.</div>
+        <button class="btn btn-ghost btn-sm" id="sla-suggest-btn" onclick="suggestSLA()" style="margin-top:6px;align-self:flex-start;">✨ AI suggestion</button>
       </div>
       <div class="form-grid2" style="margin-top:4px;">
         <div class="form-row"><label class="form-label">SLA — p99 ceiling</label><input class="form-input" id="sla-p99" value="200" placeholder="ms"></div>
         <div class="form-row"><label class="form-label">Error budget</label><input class="form-input" id="sla-err" value="1.0" placeholder="%"></div>
-        <div class="form-row"><label class="form-label">Percentile</label><select class="form-select"><option>p99</option><option>p95</option><option>p50</option></select></div>
-        <div class="form-row"><label class="form-label">Noise threshold</label><input class="form-input" value="5.0" placeholder="%"><div class="form-hint">Changes smaller than this are too small to act on</div></div>
+        <div class="form-row"><label class="form-label">At load (users)</label><input class="form-input" id="sla-users" value="50" type="number" min="1"><div class="form-hint">The SLA must hold at this many concurrent users</div></div>
+        <div class="form-row"><label class="form-label">Percentile</label><input class="form-input" value="p99" disabled><div class="form-hint">Verdicts are judged on p99</div></div>
+        <div class="form-row"><label class="form-label">Noise threshold (measured)</label><input class="form-input" id="sla-noise" disabled><div class="form-hint">Measured on this box, never typed or suggested — changes smaller than this are inconclusive</div></div>
       </div>
       <div style="background:var(--warn-d);border:1px solid rgba(232,166,48,.2);border-radius:var(--rs);padding:10px 14px;font-size:12px;color:var(--warn);margin-top:4px;">
         🔒 SLA is locked once the run starts. The AI cannot move its own goalpost.
@@ -809,18 +806,21 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
       <div class="ceiling-cfg" id="ceilingCfg">
         <div style="font-size:12px;font-weight:700;color:var(--warn);margin-bottom:10px;">⚠ Ceiling Probe — intentionally drives your service past its SLA</div>
         <div class="form-grid2">
-          <div class="form-row"><label class="form-label">Start load (users)</label><input class="form-input" value="50"><div class="form-hint">Where your last passing run ended</div></div>
-          <div class="form-row"><label class="form-label">Step size (users)</label><input class="form-input" value="25"><div class="form-hint">Smaller = finer resolution, longer runtime</div></div>
-          <div class="form-row"><label class="form-label">Maximum users (hard cap)</label><input class="form-input" value="300"><div class="form-hint">Protects shared infra neighbours</div></div>
-          <div class="form-row"><label class="form-label">Hold per step</label><input class="form-input" value="180s"><div class="form-hint">Must exceed JIT warmup — 180s minimum</div></div>
+          <div class="form-row"><label class="form-label">Start load (users)</label><input class="form-input" id="ceil-start" type="number" min="1" value="50"><div class="form-hint">Where your last passing run ended</div></div>
+          <div class="form-row"><label class="form-label">Step size (users)</label><input class="form-input" id="ceil-step" type="number" min="1" value="25"><div class="form-hint">Smaller = finer resolution, longer runtime</div></div>
+          <div class="form-row"><label class="form-label">Maximum users (hard cap)</label><input class="form-input" id="ceil-max" type="number" min="1" value="300"><div class="form-hint">Protects shared infra neighbours</div></div>
+          <div class="form-row"><label class="form-label">Hold per step (seconds measured)</label><input class="form-input" id="ceil-hold" type="number" min="30" value="300"><div class="form-hint">A 120 s warmup is discarded before each hold</div></div>
         </div>
         <div style="font-size:11px;color:var(--mid);margin-top:8px;">Result is a pair: last level that met the SLA + first that didn't. Reported separately from experiment runs — §20.6.</div>
       </div>
     </div>
     <div class="card">
       <div class="card-h">
-        <div><div class="card-title">Load scenarios</div><div class="card-sub">Each scenario = one trial. At least one required.</div></div>
-        <button class="btn btn-ghost btn-sm" onclick="addScenario()">+ Add Scenario</button>
+        <div><div class="card-title">Load scenarios</div><div class="card-sub">Each scenario = one trial. At least one required. In Advisory mode Crucible suggests them for you; every row stays editable.</div></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-ghost btn-sm" id="scen-suggest-btn" onclick="suggestScenarios()">✨ AI suggestion</button>
+          <button class="btn btn-ghost btn-sm" onclick="addScenario()">+ Add Scenario</button>
+        </div>
       </div>
       <div class="scenario-hdr"><span>Name</span><span>Users</span><span>Duration</span><span>Ramp</span><span></span></div>
       <div id="scenarioList">
@@ -843,7 +843,7 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
     <!-- Hooks -->
     <div class="card" style="margin-bottom:12px;">
       <div class="card-h">
-        <div><div class="card-title">Hooks</div><div class="card-sub">Shell commands that run around each trial — database reset, OAuth refresh, log capture</div></div>
+        <div><div class="card-title">Hooks <span class="pill idle">not built</span></div><div class="card-sub">Shell commands that run around each trial — database reset, OAuth refresh, log capture. <strong style="color:var(--warn);">Not built yet: nothing here is sent at Launch or run.</strong></div></div>
         <button class="btn btn-ghost btn-sm" onclick="addHook()">+ Add Hook</button>
       </div>
       <div style="font-size:11px;color:var(--lo);margin-bottom:8px;">A failing hook blocks the trial — a reset that silently did nothing makes every later measurement wrong.</div>
@@ -866,7 +866,7 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
     <!-- Input Data -->
     <div class="card">
       <div class="card-h">
-        <div><div class="card-title">Input Data &amp; Request Templates</div><div class="card-sub">CSV data files fed to Locust; variable mappings for POST body templates</div></div>
+        <div><div class="card-title">Input Data &amp; Request Templates <span class="pill idle">Group B</span></div><div class="card-sub">CSV data files fed to Locust; variable mappings for POST body templates. <strong style="color:var(--warn);">Not built yet (Group B): nothing here is sent at Launch.</strong></div></div>
         <button class="btn btn-ghost btn-sm" onclick="document.getElementById('csvFile').click()">↑ Upload CSV</button>
         <input type="file" id="csvFile" accept=".csv,.json" style="display:none" onchange="handleCsvInput(this)">
       </div>
@@ -913,39 +913,22 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
   <!-- Step 4: Budget -->
   <div class="wz-pane" id="wp-3">
     <div class="card">
-      <div class="card-h"><div class="card-title">Cost &amp; time estimate</div><div class="card-sub">Based on 2 scenarios · Semi-Automated · max 8 trials</div></div>
+      <div class="card-h"><div class="card-title">Cost &amp; time estimate</div><div class="card-sub" id="budget-sub">Calculated from your scenario, mode and the target profile</div></div>
+      <div class="budget-cap-row" style="margin-bottom:12px;">
+        <div>
+          <div class="budget-cap-label">Maximum experiments</div>
+          <div style="font-size:11px;color:var(--lo);">The plan's experiment count (DESIGN.md §7). The campaign stops earlier once the SLA is met.</div>
+        </div>
+        <input class="budget-cap-input" id="wz-experiments" value="5" type="number" min="1" max="50" step="1" style="width:60px;" onchange="renderBudget()">
+      </div>
       <div class="tbl-wrap">
         <table class="budget-table">
-          <tr><th>Phase</th><th>What happens</th><th>Wall clock</th><th>LLM calls</th><th>Est. cost</th></tr>
-          <tr><td class="hi">Preflight</td><td>Test deploy + revert; confirms pipeline works</td><td>~5 min</td><td>0</td><td class="mono">$0.00</td></tr>
-          <tr><td class="hi">Warmup (×2 scenarios)</td><td>120 s warmup discarded per scenario</td><td>~4 min</td><td>0</td><td class="mono">$0.00</td></tr>
-          <tr><td class="hi">Baseline measurement (×2)</td><td>300 s measured window; gauge sampling</td><td>~10 min</td><td>1</td><td class="mono">$0.002</td></tr>
-          <tr><td class="hi">Diagnosis (×1)</td><td>AI reads snapshot, proposes change</td><td>~1 min</td><td>1</td><td class="mono">$0.002</td></tr>
-          <tr><td class="hi">Deploy + verify (×trials)</td><td>Git push → deploy → readiness probe</td><td>~3 min ×4</td><td>0</td><td class="mono">$0.00</td></tr>
-          <tr><td class="hi">Re-measure (×trials)</td><td>300 s measured window after each change</td><td>~5 min ×4</td><td>4</td><td class="mono">$0.008</td></tr>
-          <tr><td class="hi">Watchdog checks</td><td>7 tripwires, arithmetic; fires model only on ambiguity</td><td>—</td><td>~2</td><td class="mono">$0.004</td></tr>
-          <tr style="background:var(--s2);"><td style="font-weight:700;color:var(--hi);">Total</td><td style="color:var(--mid);">Max 8 trials</td><td style="font-weight:700;color:var(--hi);">~3.5 h</td><td style="font-weight:700;color:var(--hi);">~8 calls</td><td style="font-family:var(--f-mono);color:var(--fire);font-weight:700;">~$0.016</td></tr>
+          <thead><tr><th>Phase</th><th>What happens</th><th>Wall clock</th><th>LLM calls</th><th>Est. cost</th></tr></thead>
+          <tbody id="budget-rows"><tr><td colspan="5" style="color:var(--lo);">Open this step to calculate.</td></tr></tbody>
         </table>
       </div>
-      <div style="font-size:12px;color:var(--mid);margin-bottom:14px;">
-        💡 Wall clock dominates — not model cost. Adding a third scenario adds ~40 min, not cents. Plan accordingly.
-      </div>
-      <div class="budget-cap-row">
-        <div>
-          <div class="budget-cap-label">Stop if model cost exceeds</div>
-          <div style="font-size:11px;color:var(--lo);">Campaign pauses and asks for confirmation before continuing</div>
-        </div>
-        <span style="font-size:13px;color:var(--mid);">$</span>
-        <input class="budget-cap-input" id="budgetCap" value="0.10" type="number" min="0.01" step="0.01">
-      </div>
-      <div class="budget-cap-row" style="margin-top:8px;">
-        <div>
-          <div class="budget-cap-label">Stop if wall clock exceeds</div>
-          <div style="font-size:11px;color:var(--lo);">Gracefully completes the in-flight trial then halts</div>
-        </div>
-        <input class="budget-cap-input" id="wallCapH" value="8" type="number" min="1" step="1" style="width:60px;">
-        <span style="font-size:13px;color:var(--mid);">h</span>
-      </div>
+      <div id="budget-note" style="font-size:12px;color:var(--mid);margin-bottom:14px;"></div>
+      <div style="font-size:12px;color:var(--warn);">Run caps (stop at a cost or wall-clock limit) are not built. The only spending limit in force is <code>config/budgets.yaml</code>.</div>
     </div>
     <div class="wz-nav">
       <button class="btn btn-ghost" onclick="wzGo(2)">← Back</button>
@@ -960,69 +943,28 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
       <div class="grid2">
         <div>
           <div style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--lo);margin-bottom:8px;">Configuration</div>
-          <div style="display:flex;flex-direction:column;gap:7px;font-size:13px;">
-            <div style="display:flex;justify-content:space-between;"><span style="color:var(--mid);">Service</span><span style="font-weight:500;">PerfLab</span></div>
-            <div style="display:flex;justify-content:space-between;"><span style="color:var(--mid);">Endpoint</span><code style="font-family:var(--f-mono);font-size:12px;">/transfer</code></div>
-            <div style="display:flex;justify-content:space-between;"><span style="color:var(--mid);">SLA p99</span><span style="color:var(--ok);font-weight:600;">200 ms</span></div>
-            <div style="display:flex;justify-content:space-between;"><span style="color:var(--mid);">Mode</span><span>Semi-Automated</span></div>
-            <div style="display:flex;justify-content:space-between;"><span style="color:var(--mid);">Scenarios</span><span>2 (steady_50u, burst_100u)</span></div>
-            <div style="display:flex;justify-content:space-between;"><span style="color:var(--mid);">GitHub repo</span><code style="font-family:var(--f-mono);font-size:11px;">rraghu214/perf-lab</code></div>
-            <div style="display:flex;justify-content:space-between;"><span style="color:var(--mid);">Budget cap</span><span>$0.10 · 8h</span></div>
-            <div style="display:flex;justify-content:space-between;"><span style="color:var(--mid);">Knowledge docs</span><span id="rev-docs">0 uploaded</span></div>
-          </div>
+          <div id="rev-config" style="display:flex;flex-direction:column;gap:7px;font-size:13px;"></div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;margin-top:7px;"><span style="color:var(--mid);">Knowledge docs</span><span id="rev-docs">0 indexed</span></div>
         </div>
         <div>
-          <div style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--lo);margin-bottom:8px;">Preflight checklist</div>
-          <div style="display:flex;flex-direction:column;gap:6px;font-size:12px;">
-            <div style="display:flex;gap:8px;"><span style="color:var(--ok);">✓</span><span style="color:var(--mid);">Target reachable (200 OK)</span></div>
-            <div style="display:flex;gap:8px;"><span style="color:var(--ok);">✓</span><span style="color:var(--mid);">GitHub repo cloned</span></div>
-            <div style="display:flex;gap:8px;"><span style="color:var(--ok);">✓</span><span style="color:var(--mid);">perftest_sandbox branch ready</span></div>
-            <div style="display:flex;gap:8px;"><span style="color:var(--ok);">✓</span><span style="color:var(--mid);">Config file path exists in repo</span></div>
-            <div style="display:flex;gap:8px;"><span style="color:var(--warn);">⚠</span><span style="color:var(--mid);">Actuator /env: will verify at runtime</span></div>
-            <div style="display:flex;gap:8px;"><span style="color:var(--ok);">✓</span><span style="color:var(--mid);">glc_v5 gateway reachable</span></div>
-          </div>
+          <div style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--lo);margin-bottom:8px;">Preflight checks <span style="font-weight:400;text-transform:none;letter-spacing:0;">(read-only; same list as <code>crucible preflight</code>)</span></div>
+          <div id="rev-checks" style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--lo);">Checking…</div>
         </div>
       </div>
     </div>
     <div class="card">
       <div class="card-h">
-        <div><div class="card-title">Export as YAML</div><div class="card-sub">Save this configuration to version-control alongside your service</div></div>
+        <div><div class="card-title">What Launch will write</div><div class="card-sub">The exact changes to <code>config/slo.yaml</code> and the target profile, validated by loading them as a campaign would. Launch is refused while a campaign is running.</div></div>
         <button class="btn btn-ghost btn-sm" onclick="copyYaml()">Copy</button>
       </div>
-      <div class="yaml-box" id="yamlBox">service: perf-lab
-profile: spring-boot-hikaricp
-endpoint: /transfer
-environment: staging
-sla:
-  p99_ceiling_ms: 200
-  error_budget_pct: 1.0
-  noise_threshold_pct: 5.0
-mode: semi_automated
-deploy:
-  repo: https://github.com/rraghu214/perf-lab
-  base_branch: main
-  branch: perftest_sandbox
-  config_file: src/main/resources/application.properties
-  restart_cmd: ./mvnw spring-boot:run -Dspring-boot.run.profiles=perf
-  readiness_probe: http://localhost:8080/actuator/health
-budget:
-  max_cost_usd: 0.10
-  max_wall_clock_h: 8
-scenarios:
-  - name: steady_50u
-    users: 50
-    duration: 300s
-    ramp: 30s
-  - name: burst_100u
-    users: 100
-    duration: 180s
-    ramp: 15s</div>
+      <div id="rev-notes" style="font-size:12px;color:var(--warn);margin-bottom:8px;"></div>
+      <div class="yaml-box" id="yamlBox">Open this step to see the changes.</div>
     </div>
     <div class="wz-nav">
       <button class="btn btn-ghost" onclick="wzGo(3)">← Back</button>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
         <button class="btn btn-primary" onclick="launchRun()">🚀 Launch Test Run</button>
-        <div class="cli-twin">crucible run --profile profile.yaml</div>
+        <div class="cli-twin" id="rev-cli">crucible run --sla config/slo.yaml</div>
       </div>
     </div>
   </div>
@@ -1775,6 +1717,9 @@ function wzGo(n){
     if(i===n) s.classList.add('on');
     else if(i<n) s.classList.add('done');
   });
+  if(n===2) maybeAutoSuggestScenarios();
+  if(n===3) renderBudget();
+  if(n===4) renderReview();
   // Only fire AI tip once per step (not on every back/forward), and only when chat is open
   const chatCollapsed=document.getElementById('chatPane').classList.contains('collapsed');
   if(!chatCollapsed&&WZ_MSGS[n]&&!wzStepShown[n]){
@@ -1784,30 +1729,34 @@ function wzGo(n){
 }
 
 /* ── Mode selector ───────────────────────────────────────────────────── */
-const BUDGET_BY_MODE={
-  'Advisory':{sub:'Advisory · human applies all changes · no deploy automation',trials:2,clock:'~2.5 h',calls:3,cost:'$0.006',note:'Wall clock is shorter — no automated deploy waits. Every change is applied manually by you after reviewing the diagnosis.'},
-  'Semi-Automated':{sub:'Semi-Automated · you approve each change, AI applies · max 8 trials',trials:4,clock:'~3.5 h',calls:8,cost:'$0.016',note:'Wall clock dominates — not model cost. Adding a third scenario adds ~40 min, not cents. Plan accordingly.'},
-  'Fully Automated':{sub:'Fully Automated · AI acts within guardrail bounds · up to 12 trials',trials:6,clock:'~5 h',calls:14,cost:'$0.028',note:'More trials possible — no approval wait between experiments. Bounded by property limits in profile.yaml. Campaign pauses only if a watchdog tripwire fires or the budget cap is hit.'},
-  'Ceiling Probe':{sub:'Ceiling Probe · characterises capacity · no config changes',trials:0,clock:'~1.5 h',calls:2,cost:'$0.004',note:'No experiments — load escalates in steps until the SLA breaks. Reports the last passing level and the first failing level as a pair.'},
-};
+function _dur(s){if(s<60)return Math.round(s)+' s';const m=s/60;return m<90?Math.round(m)+' min':(m/60).toFixed(1)+' h';}
+function _span(a,b){return a===b?_dur(a):_dur(a)+' – '+_dur(b);}
+function _money(v,cur){return v===null||v===undefined?'not measured':(cur==='USD'?'$':cur+' ')+v.toFixed(4);}
+async function renderBudget(){
+  const tb=document.getElementById('budget-rows');if(!tb)return;
+  const b=wizardBody();
+  const sub=document.getElementById('budget-sub');
+  if(sub) sub.textContent=b.mode+(b.mode==='Ceiling Probe'?'':' · first scenario '+(b.scenarios[0]?.name||'(none)')+' · up to '+b.experiments+' experiments');
+  try{
+    const r=await fetch('/v1/perf/wizard/budget',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+    const d=await r.json();
+    tb.replaceChildren();
+    if(!r.ok){const tr=document.createElement('tr');const td=document.createElement('td');td.colSpan=5;td.textContent=typeof d.detail==='string'?d.detail:'These inputs cannot be estimated yet.';tr.appendChild(td);tb.appendChild(tr);return;}
+    const add=(cells,total)=>{const tr=document.createElement('tr');if(total)tr.style.background='var(--s2)';cells.forEach((c,i)=>{const td=document.createElement('td');td.textContent=c;if(i===0||total)td.style.fontWeight=total?'700':'';if(i===0)td.className='hi';tr.appendChild(td);});tb.appendChild(tr);};
+    d.rows.forEach(x=>add([x.phase,x.what,x.max_s?_span(x.min_s,x.max_s):'not measured',String(x.calls),_money(x.cost,d.currency)]));
+    add(['Total','range: SLA met early → every experiment used',_span(d.min_s,d.max_s),String(d.calls),_money(d.cost,d.currency)],true);
+    const note=document.getElementById('budget-note');
+    if(note) note.textContent=(d.per_call_cost===null?'No priced model call is on record yet, so cost is not estimated. ':'Cost per call is the mean of '+d.priced_calls_on_record+' priced diagnoses in past campaigns. ')+'Model latency is not included in the wall clock. Wall clock is the real budget, not money (DESIGN.md §7).';
+  }catch(e){tb.replaceChildren();const tr=document.createElement('tr');const td=document.createElement('td');td.colSpan=5;td.textContent='Could not estimate: '+e.message;tr.appendChild(td);tb.appendChild(tr);}
+}
 function updateBudgetForMode(name){
-  const m=BUDGET_BY_MODE[name]||BUDGET_BY_MODE['Semi-Automated'];
-  const sub=document.querySelector('#wp-3 .card-sub');
-  if(sub) sub.textContent=m.sub;
-  const rows=document.querySelectorAll('.budget-table tr');
-  if(rows.length>=2){
-    const tot=rows[rows.length-1];
-    const cells=tot.querySelectorAll('td');
-    if(cells.length>=5){cells[1].textContent='Max '+m.trials+' trials';cells[2].textContent=m.clock;cells[3].textContent='~'+m.calls+' calls';cells[4].textContent='~'+m.cost;}
-  }
-  const noteEl=document.querySelector('#wp-3 .card > div[style*="font-size:12px"]');
-  if(noteEl) noteEl.textContent='💡 '+m.note;
+  renderBudget();
   if(!document.getElementById('chatPane').classList.contains('collapsed')){
-    const tip=name==='Advisory'?'No GitHub connection needed — you apply every change manually after reviewing the diagnosis.':
-              name==='Fully Automated'?'Make sure the property bounds in <code>profile.yaml</code> are set before starting — the agent won\'t ask for approval between experiments.':
+    const tip=name==='Advisory'?'Advisory is not built yet (Group B); Launch will refuse it.':
+              name==='Fully Automated'?'Make sure the property bounds in <code>profile.yaml</code> are what you want — the agent won\'t ask for approval between experiments.':
               name==='Ceiling Probe'?'No config changes are made — the probe escalates load in steps and stops at the first level that breaks your SLA.':
               'You\'ll get an approval prompt for each proposed change before it deploys.';
-    addChatMsg('ai','Switched to <strong>'+name+'</strong>. Estimated wall clock: <strong>'+m.clock+'</strong>. '+tip);
+    addChatMsg('ai','Switched to <strong>'+escHtml(name)+'</strong>. '+tip);
   }
 }
 function selMode(el,type){
@@ -1817,22 +1766,73 @@ function selMode(el,type){
   if(cfg) cfg.classList.toggle('show', type==='ceiling');
   const name=el.querySelector('.mode-card-name')?.textContent||'';
   updateBudgetForMode(name);
+  maybeAutoSuggestScenarios();
 }
 
 /* ── Scenarios ───────────────────────────────────────────────────────── */
 let scenCount=2;
-function addScenario(){
-  scenCount++;
+let scenEdited=false;
+let scenSuggestedFor=null;
+const wzProvenance={sla:null,scenarios:null};
+function _scenarioRow(name,users,duration,ramp){
   const row=document.createElement('div');
   row.className='scenario-row';
-  row.innerHTML=`<div><input value="scenario_${scenCount}"></div><div><input value="50" type="number" min="1"></div><div><input value="300s"></div><div><input value="30s"></div><button class="scenario-rm" onclick="rmScenario(this)">✕</button>`;
-  document.getElementById('scenarioList').appendChild(row);
+  [[name,'text'],[users,'number'],[duration,'text'],[ramp,'text']].forEach(([v,type])=>{
+    const cell=document.createElement('div');const inp=document.createElement('input');
+    inp.type=type;if(type==='number')inp.min='1';inp.value=String(v);cell.appendChild(inp);row.appendChild(cell);
+  });
+  const rm=document.createElement('button');rm.className='scenario-rm';rm.textContent='✕';rm.onclick=()=>rmScenario(rm);row.appendChild(rm);
+  return row;
 }
-function rmScenario(btn){if(document.querySelectorAll('.scenario-row').length>1)btn.closest('.scenario-row').remove();}
+function addScenario(){
+  scenCount++;
+  document.getElementById('scenarioList').appendChild(_scenarioRow('scenario_'+scenCount,50,'300s','30s'));
+  scenEdited=true;
+}
+function rmScenario(btn){if(document.querySelectorAll('.scenario-row').length>1){btn.closest('.scenario-row').remove();scenEdited=true;}}
+document.getElementById('scenarioList')?.addEventListener('input',()=>{scenEdited=true;});
 
-/* ── AI suggest helpers ──────────────────────────────────────────────── */
-function suggestSLA(){addChatMsg('user','Suggest an SLA for me');setTimeout(()=>addChatMsg('ai','Based on "reduce /transfer p99 below 200ms at 50 users" I\'ve set: p99 ceiling = 200 ms, error budget = 1.0%, noise threshold = 5%. Does that match what you expect in production?'),700);}
-function suggestScenarios(){addChatMsg('user','Suggest scenarios');setTimeout(()=>addChatMsg('ai','I\'d recommend two: (1) steady_50u — 50 users, 300s, 30s ramp — your normal load; (2) burst_100u — 100 users, 180s, 15s ramp — a 2× spike. That covers normal operation and a peak without running too long.'),700);}
+/* ── AI suggestions (POST /v1/perf/suggest; values pre-fill fields, the operator submits) ── */
+function wzMode(){return (document.querySelector('.mode-card.on .mode-card-name')?.textContent||'').trim();}
+function _wzVal(id){return (document.getElementById(id)?.value||'').trim();}
+function _citeHtml(sources){
+  const cited=(sources||[]).map(s=>'<code>'+escHtml(s.source)+(s.heading?' › '+escHtml(s.heading):'')+'</code>').join(' ');
+  return cited?'<div style="margin-top:6px;font-size:11px;color:var(--lo);">Sources: '+cited+'</div>':'';
+}
+async function _suggest(kind,btnId){
+  const btn=document.getElementById(btnId);if(btn){btn.disabled=true;btn.style.opacity='.5';}
+  const t=showTyping();
+  try{
+    return await apiPost('/v1/perf/suggest',{kind,goal:_wzVal('goal-text'),endpoint:_wzVal('wz-endpoint'),mode:wzMode()});
+  }finally{t.remove();if(btn){btn.disabled=false;btn.style.opacity='1';}}
+}
+async function suggestSLA(){
+  addChatMsg('user','Suggest an SLA for me');
+  try{
+    const r=await _suggest('sla','sla-suggest-btn');const s=r.suggestion;
+    document.getElementById('sla-p99').value=s.p99_ms;
+    document.getElementById('sla-err').value=s.error_rate_pct;
+    document.getElementById('sla-users').value=s.users;
+    wzProvenance.sla={model:r.model,provider:r.provider,values:{p99_ms:s.p99_ms,error_rate_pct:s.error_rate_pct,users:s.users}};
+    addChatMsg('ai','Filled in p99 ≤ <strong>'+escHtml(s.p99_ms)+' ms</strong>, errors ≤ <strong>'+escHtml(s.error_rate_pct)+'%</strong> at <strong>'+escHtml(s.users)+' users</strong>. '+s.rationale+' Edit any of them before you continue — the SLA is yours, not mine.'+_citeHtml(r.sources));
+  }catch(e){addChatMsg('ai','⚠ No SLA suggestion: '+escHtml(e.message));}
+}
+async function suggestScenarios(auto){
+  if(!auto) addChatMsg('user','Suggest scenarios');
+  try{
+    const r=await _suggest('scenarios','scen-suggest-btn');const list=r.suggestion.scenarios;
+    const box=document.getElementById('scenarioList');box.replaceChildren();
+    list.forEach(sc=>box.appendChild(_scenarioRow(sc.name,sc.users,sc.duration_s+'s',sc.ramp_s+'s')));
+    scenCount=list.length;scenEdited=false;scenSuggestedFor=_wzVal('goal-text')+'|'+_wzVal('wz-endpoint');
+    wzProvenance.scenarios={model:r.model,provider:r.provider,values:list};
+    addChatMsg('ai',(auto?'Advisory mode: I suggested the scenarios. ':'')+'Filled in '+list.length+' scenario'+(list.length>1?'s':'')+'. '+r.suggestion.rationale+' Edit, add or remove any row.'+_citeHtml(r.sources));
+  }catch(e){addChatMsg('ai','⚠ No scenario suggestion: '+escHtml(e.message));}
+}
+function maybeAutoSuggestScenarios(){
+  if(wzMode()!=='Advisory'||scenEdited) return;
+  if(scenSuggestedFor===_wzVal('goal-text')+'|'+_wzVal('wz-endpoint')) return;
+  suggestScenarios(true);
+}
 
 /* ── Docs ────────────────────────────────────────────────────────────── */
 const DOC_EXT=['.md','.txt'];
@@ -1912,17 +1912,94 @@ async function uploadDocs(){
 refreshDocs();
 
 /* ── GitHub test ─────────────────────────────────────────────────────── */
-function testGithubConn(){
-  const r=document.getElementById('gh-conn-result');
-  const badge=document.getElementById('ghConnBadge');
-  r.style.display='block';r.textContent='Testing…';r.style.color='var(--mid)';
-  if(badge){badge.textContent='Connecting…';badge.className='pill idle';}
-  setTimeout(()=>{
-    r.textContent='✓ Connected · perf-lab · perftest_sandbox branch exists · config file found';
-    r.style.color='var(--ok)';
-    if(badge){badge.textContent='Connected';badge.className='pill ok';}
-  },1200);
+/* ── Wizard: current values in, operator's values out (GET/POST /v1/perf/wizard*) ── */
+let wzCurrent=null;
+function _setVal(id,v){const el=document.getElementById(id);if(el)el.value=(v===undefined||v===null)?'':v;}
+function _argv(list){return (list||[]).map(a=>/[\s"']/.test(a)?JSON.stringify(a):a).join(' ');}
+async function loadWizard(){
+  try{
+    const r=await fetch('/v1/perf/wizard');
+    if(!r.ok){addChatMsg('ai','⚠ Could not read slo.yaml / the profile: '+escHtml((await r.json()).detail||r.status));return;}
+    const c=wzCurrent=await r.json();
+    const sel=document.getElementById('wz-endpoint');
+    if(sel){sel.replaceChildren();c.endpoints.forEach(e=>{const o=document.createElement('option');o.value=e.endpoint;o.textContent=e.endpoint+' — '+(e.family||e.tag);sel.appendChild(o);});sel.value=c.endpoint;}
+    _setVal('wz-profile',c.profile);_setVal('wz-target',c.target);_setVal('wz-env',c.environment);
+    _setVal('gh-repo',(c.remote||'(no remote)')+' → '+(c.branch||'(no branch)')+' · deploy '+c.deploy_mode);
+    _setVal('gh-base',c.base_branch);_setVal('gh-cfg',c.config_file);_setVal('gh-restart',_argv(c.restart_command));_setVal('gh-probe',c.health_url);
+    _setVal('sla-p99',c.p99_ms);_setVal('sla-err',c.error_rate_pct);_setVal('sla-users',c.users);
+    _setVal('sla-noise',c.noise_p99_spread_pct+'% (measured '+c.noise_measured_on+')');
+    _setVal('goal-text','Keep '+c.endpoint+' p99 under '+c.p99_ms+' ms at '+c.users+' users');
+  }catch(e){addChatMsg('ai','⚠ Could not load the wizard: '+escHtml(e.message));}
 }
+function _seconds(v){const m=String(v).trim().match(/^(\d+)\s*(s|m|h)?$/i);if(!m)return NaN;return parseInt(m[1])*({s:1,m:60,h:3600}[(m[2]||'s').toLowerCase()]);}
+function _provenance(){
+  const p=wzProvenance.sla;if(!p)return '';
+  const same=Number(_wzVal('sla-p99'))===p.values.p99_ms&&Number(_wzVal('sla-err'))===p.values.error_rate_pct&&Number(_wzVal('sla-users'))===p.values.users;
+  return 'SLA values suggested by '+(p.model||'the model')+(same?' and accepted unchanged by the operator':', then edited by the operator');
+}
+function wizardBody(){
+  const scen=Array.from(document.querySelectorAll('#scenarioList .scenario-row')).map(row=>{
+    const v=Array.from(row.querySelectorAll('input')).map(i=>i.value.trim());
+    return {name:v[0],users:parseInt(v[1]),duration_s:_seconds(v[2]),ramp_s:_seconds(v[3])};
+  });
+  const mode=wzMode()||'Semi-Automated';
+  const body={endpoint:_wzVal('wz-endpoint'),p99_ms:Number(_wzVal('sla-p99')),error_rate_pct:Number(_wzVal('sla-err')),
+    users:parseInt(_wzVal('sla-users')),config_file:_wzVal('gh-cfg'),base_branch:_wzVal('gh-base'),
+    restart_command:_wzVal('gh-restart'),health_url:_wzVal('gh-probe'),provenance:_provenance(),
+    mode,scenarios:scen,goal:_wzVal('goal-text'),run_id:_wzVal('wz-run-id'),
+    experiments:parseInt(_wzVal('wz-experiments'))||5};
+  if(mode==='Ceiling Probe') body.ceiling={start_users:parseInt(_wzVal('ceil-start')),step:parseInt(_wzVal('ceil-step')),max_users:parseInt(_wzVal('ceil-max')),hold_s:parseInt(_wzVal('ceil-hold'))};
+  return body;
+}
+function _renderChecks(el,checks){
+  el.replaceChildren();
+  checks.forEach(c=>{
+    const row=document.createElement('div');row.style.cssText='display:flex;gap:8px;';
+    const mark=document.createElement('span');mark.textContent=c.ok?'✓':(c.blocking?'✗':'⚠');mark.style.color=c.ok?'var(--ok)':(c.blocking?'var(--err)':'var(--warn)');
+    const txt=document.createElement('span');txt.style.color='var(--mid)';txt.textContent=c.name+' — '+c.detail;
+    row.appendChild(mark);row.appendChild(txt);el.appendChild(row);
+  });
+  return checks.every(c=>c.ok||!c.blocking);
+}
+async function runWizardChecks(el){
+  el.textContent='Checking…';
+  try{const r=await fetch('/v1/perf/wizard/check',{method:'POST'});const d=await r.json();return _renderChecks(el,d.checks||[]);}
+  catch(e){el.textContent='Could not run checks: '+e.message;return false;}
+}
+async function testGithubConn(){
+  const r=document.getElementById('gh-conn-result');const badge=document.getElementById('ghConnBadge');
+  r.style.display='block';
+  if(badge){badge.textContent='Checking…';badge.className='pill idle';}
+  const ok=await runWizardChecks(r);
+  if(badge){badge.textContent=ok?'Checks pass':'Blocking failure';badge.className='pill '+(ok?'ok':'err');}
+}
+async function renderReview(){
+  const b=wizardBody();
+  const cfg=document.getElementById('rev-config');
+  if(cfg){
+    cfg.replaceChildren();
+    [['Profile',_wzVal('wz-profile')],['Endpoint',b.endpoint],['SLA','p99 ≤ '+b.p99_ms+' ms · errors ≤ '+b.error_rate_pct+'% · at '+b.users+' users'],
+     ['Mode',b.mode],['Scenarios',b.mode==='Ceiling Probe'?'ceiling '+b.ceiling.start_users+'→'+b.ceiling.max_users+' step '+b.ceiling.step:b.scenarios.map(s=>s.name+' ('+s.users+'u, '+s.duration_s+'s)').join(', ')],
+     ['Deploy',_wzVal('gh-repo')]].forEach(([k,v])=>{
+      const row=document.createElement('div');row.style.cssText='display:flex;justify-content:space-between;gap:12px;';
+      const a=document.createElement('span');a.style.color='var(--mid)';a.textContent=k;
+      const c=document.createElement('span');c.style.textAlign='right';c.textContent=v;row.appendChild(a);row.appendChild(c);cfg.appendChild(row);
+    });
+  }
+  const cli=document.getElementById('rev-cli');
+  if(cli) cli.textContent=b.mode==='Ceiling Probe'?'crucible ceiling --sla config/slo.yaml --max-users '+(b.ceiling?.max_users||''):'crucible run --sla config/slo.yaml --users '+(b.scenarios[0]?.users||'')+(b.mode==='Fully Automated'?' --approve preapproved':'');
+  runWizardChecks(document.getElementById('rev-checks'));
+  const box=document.getElementById('yamlBox');const notes=document.getElementById('rev-notes');
+  box.textContent='Validating…';notes.textContent='';
+  try{
+    const r=await fetch('/v1/perf/wizard/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+    const d=await r.json();
+    if(!r.ok){box.textContent='Launch would be refused: '+(typeof d.detail==='string'?d.detail:JSON.stringify(d.detail));return;}
+    box.textContent=(d.sla_diff||'(slo.yaml unchanged)\n')+'\n'+(d.profile_diff||'(profile unchanged)\n');
+    notes.textContent=(d.notes||[]).join(' ');
+  }catch(e){box.textContent='Could not validate: '+e.message;}
+}
+loadWizard();
 
 /* ── YAML ────────────────────────────────────────────────────────────── */
 function copyYaml(){const box=document.getElementById('yamlBox');if(navigator.clipboard){navigator.clipboard.writeText(box.textContent).then(()=>{addChatMsg('ai','YAML copied to clipboard!')}).catch(()=>{});}else{const sel=window.getSelection();const range=document.createRange();range.selectNodeContents(box);sel.removeAllRanges();sel.addRange(range);}}
@@ -2074,18 +2151,19 @@ async function confirmPause(){
 
 /* ── Launch ──────────────────────────────────────────────────────────── */
 async function launchRun(){
-  const runIdEl=document.getElementById('wz-run-id');
-  const runId=(runIdEl&&runIdEl.value.trim())||('run-'+Date.now());
-  addChatMsg('ai','Starting '+runId+'…');
+  const body=wizardBody();
+  if(!body.run_id) body.run_id='run-'+Date.now();
+  addChatMsg('ai','Writing slo.yaml and the profile, then starting <code>'+escHtml(body.run_id)+'</code>…');
   try{
-    const job=await apiPost('/v1/perf/jobs/run',{run_id:runId,approve:'file'});
-    _activeRunId=runId;
+    const d=await apiPost('/v1/perf/wizard/launch',body);
+    _activeRunId=body.run_id;
     go('jobs');
-    addChatMsg('ai',runId+' launched — job <code>'+job.id+'</code>. Preflight runs first. <a href="#" onclick="go(\'active\')">Watch live →</a>');
+    const notes=(d.notes||[]).map(n=>'<br>• '+escHtml(n)).join('');
+    addChatMsg('ai',escHtml(body.run_id)+' launched — job <code>'+escHtml(d.job.id)+'</code>. The SLA and profile on disk now hold your values.'+notes+' <a href="#" onclick="go(\'active\')">Watch live →</a>');
     updateJobsBadge();
+    loadWizard();
   }catch(e){
-    addChatMsg('ai','⚠ Launch failed: '+e.message);
-    go('active');
+    addChatMsg('ai','⚠ Launch refused: '+escHtml(e.message));
   }
 }
 
