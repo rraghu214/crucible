@@ -1,6 +1,6 @@
 """Watchdog assertions -- new group, week 4. DESIGN.md §6, §20.5, §4.2, §19.9.
 
-REVIEW NEEDED: not yet reviewed by the operator. See
+REVIEWED AND APPROVED by the operator, 26 September 2026. See
 `docs/CRUCIBLE_TEST_ASSERTIONS.md` GROUP 23 for what each of these is claiming
 and why, and for the four judgement calls flagged there.
 

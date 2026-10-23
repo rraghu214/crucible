@@ -1,6 +1,6 @@
 """Task and fixture definition assertions -- new group, week 4. EVALUATION.md.
 
-REVIEW NEEDED: not yet reviewed by the operator. See
+REVIEWED AND APPROVED by the operator, 26 September 2026. See
 `docs/CRUCIBLE_TEST_ASSERTIONS.md` GROUP 24.
 
 These assert on the FILES in `config/tasks/` and `config/fixtures/` as well as on

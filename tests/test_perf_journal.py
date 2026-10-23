@@ -1,6 +1,6 @@
 """Journal RAG assertions -- new group, week 3 (late). DESIGN.md §14, §4.3, §7.
 
-REVIEW NEEDED: not yet reviewed by the operator. See
+REVIEWED AND APPROVED by the operator, 16 October 2026. See
 `docs/CRUCIBLE_TEST_ASSERTIONS.md` GROUP 25.
 
 §14 gives this component one job -- past manifests, queried at diagnosis, so the

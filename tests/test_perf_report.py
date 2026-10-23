@@ -1,6 +1,6 @@
 """Report and diff assertions -- new group, week 3 (late). DESIGN.md §4.6, §8, §3.2.
 
-REVIEW NEEDED: not yet reviewed by the operator. See
+REVIEWED AND APPROVED by the operator, 11 October 2026 (with 26.5 revised). See
 `docs/CRUCIBLE_TEST_ASSERTIONS.md` GROUP 26.
 
 Screen 16 names the audience: "the teammate who asks *why did you change the
