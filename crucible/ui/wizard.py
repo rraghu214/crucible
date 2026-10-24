@@ -231,7 +231,8 @@ def estimate(*, mode: str, warmup_s: float, measure_s: float, experiments: int, 
 def write(rendered: dict[str, str], sla_path: Path, profile_path: Path, active_runs: list[dict[str, Any]]) -> None:
     if active_runs:
         held = ", ".join(str(r.get("run_id", "?")) for r in active_runs)
-        raise WizardRefused(f"a campaign is running ({held}); the SLA and profile cannot change under it")
+        raise WizardRefused(f"a campaign has not stopped ({held}); the SLA and profile can be edited only "
+                            "once it has finished or been aborted")
     staged = []
     for path, text in ((sla_path, rendered["sla"]), (profile_path, rendered["profile"])):
         fd, tmp = tempfile.mkstemp(prefix=f".{path.name}-", dir=path.parent)

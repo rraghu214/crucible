@@ -35,6 +35,7 @@ changing how results are weighed never means re-running an experiment.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import time
@@ -610,6 +611,8 @@ class CampaignResult:
     models_used: list[str] = field(default_factory=list)
     started_at_epoch_s: float = field(default_factory=time.time)
     finished_at_epoch_s: float | None = None
+    #: ``{path: sha256}`` of the SLA and profile as this campaign started.
+    guarded_files: dict[str, str] = field(default_factory=dict)
 
     @property
     def spans_multiple_models(self) -> bool:
@@ -646,6 +649,7 @@ class CampaignResult:
             ),
             "started_at_epoch_s": self.started_at_epoch_s,
             "finished_at_epoch_s": self.finished_at_epoch_s,
+            "guarded_files": self.guarded_files,
         }
 
     def write(self, directory: Path) -> Path:
@@ -654,6 +658,24 @@ class CampaignResult:
         path = directory / f"{self.run_id}.json"
         path.write_text(json.dumps(self.as_dict(), indent=2, default=str), encoding="utf-8")
         return path
+
+
+def fingerprint_files(paths: "tuple[Path, ...] | list[Path]") -> dict[str, str]:
+    """``{path: sha256}``; a missing file fingerprints as ``"missing"``."""
+    out: dict[str, str] = {}
+    for path in paths:
+        try:
+            out[str(path)] = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+        except OSError:
+            out[str(path)] = "missing"
+    return out
+
+
+def changed_files(recorded: dict[str, str]) -> list[str]:
+    if not recorded:
+        return []
+    current = fingerprint_files([Path(p) for p in recorded])
+    return [p for p, digest in recorded.items() if current.get(p) != digest]
 
 
 # ---------------------------------------------------------------------------
@@ -723,6 +745,12 @@ class Campaign:
     #: block and knows the SLA and measurements are the authority, not this.
     #: Never overrides the SLA; never survives into scored output as a fact.
     stakeholder_request: str = ""
+    #: The SLA and profile files this campaign was started from. Fingerprinted at
+    #: start and re-checked before every experiment and every verdict; a change
+    #: aborts the run, naming the file (operator decision, 24 October 2026: they
+    #: may be edited only once the campaign has stopped). Empty skips the guard,
+    #: which only a test with in-memory configuration should do.
+    guarded_files: tuple[Path, ...] = ()
     #: Per-experiment hooks (§10). before_each and after_each gate each
     #: experiment; on_abort fires when the campaign is cut short. A failing
     #: before_each or after_each raises HookFailed, which becomes a
@@ -798,6 +826,7 @@ class Campaign:
             sla=self.sla.as_dict(),
             profile=self.profile.name,
             scenario=self.scenario.name,
+            guarded_files=fingerprint_files(self.guarded_files),
         )
         lock = BranchLock(
             state_dir=self.state_dir,
@@ -849,6 +878,16 @@ class Campaign:
                 f"expected {state_file}. Has this run been paused?"
             )
         resume_state: dict[str, Any] = json.loads(state_file.read_text(encoding="utf-8"))
+        # Resume reloads the SLA and profile from disk. Edited while paused, they
+        # would judge the rest of this campaign against a goal it did not start
+        # with; a paused campaign has not stopped, so the edit was not allowed.
+        moved = changed_files(resume_state.get("guarded_files") or {})
+        if moved:
+            raise CampaignRefused(
+                f"cannot resume {self.run_id!r}: {', '.join(moved)} changed while it was paused. "
+                "Its experiments were judged against the original; start a new campaign "
+                "for the edited configuration."
+            )
         # Remove the pause marker so the loop does not immediately re-pause.
         _pm = pause_marker_path(self.state_dir, self.run_id)
         if _pm.exists():
@@ -859,6 +898,7 @@ class Campaign:
             sla=self.sla.as_dict(),
             profile=self.profile.name,
             scenario=self.scenario.name,
+            guarded_files=dict(resume_state.get("guarded_files") or fingerprint_files(self.guarded_files)),
         )
         lock = BranchLock(
             state_dir=self.state_dir,
@@ -938,6 +978,7 @@ class Campaign:
                     f"the baseline measurement was aborted before it completed: "
                     f"{baseline_load.abort_reason}"
                 )
+            self._check_guarded(result, "after the baseline")
             result.baseline = {
                 "load": baseline_load.as_load_summary(),
                 "snapshot": baseline_snapshot,
@@ -993,6 +1034,7 @@ class Campaign:
             reason = abort_requested(self.state_dir, self.run_id)
             if reason:
                 raise CampaignAborted(f"aborted by operator before experiment {number}: {reason}")
+            self._check_guarded(result, f"before experiment {number}")
             pause_reason = pause_requested(self.state_dir, self.run_id)
             if pause_reason:
                 # Undo the pre-increment so that resume re-enters the loop at
@@ -1158,7 +1200,17 @@ class Campaign:
             "models_used": list(result.models_used),
             "started_at_epoch_s": result.started_at_epoch_s,
             "pending_manifest": pending.as_dict() if pending is not None else None,
+            "guarded_files": dict(result.guarded_files),
         }
+
+    def _check_guarded(self, result: CampaignResult, where: str) -> None:
+        moved = changed_files(result.guarded_files)
+        if moved:
+            raise CampaignAborted(
+                f"{', '.join(moved)} changed during the campaign ({where}). The SLA and "
+                "profile may be edited only once a campaign has stopped; this run's "
+                "verdicts belong to the configuration it started with."
+            )
 
     async def _one_experiment(
         self,
@@ -1399,6 +1451,11 @@ class Campaign:
         manifest.after = {"load": after_load.as_load_summary(), "snapshot": after_snapshot}
         if after_load.watchdog:
             manifest.watchdog = after_load.watchdog
+        try:
+            self._check_guarded(result, f"before the verdict on experiment {manifest.experiment}")
+        except CampaignAborted as moved:
+            manifest.verdict, manifest.verdict_reason = NOT_MEASURED, str(moved)
+            raise
         manifest.sla_met_after = self.sla.met_by(after_load.p99_ms, after_load.error_rate_pct)
 
         before_p99 = manifest.before.get("load", {}).get("p99_ms")

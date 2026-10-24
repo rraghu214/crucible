@@ -131,6 +131,18 @@ kind the agent has no write permission for. A file guard can be bypassed if
 config moves; a memory permission cannot. The same protection covers the load
 profile — fewer users is not a fix, and it destroys comparability too.
 
+**The files cannot change under a campaign that has not stopped (24 October
+2026).** The two locks above stop the *agent* from moving the goal. This stops a
+*person* from moving it mid-run. A campaign fingerprints the SLA and profile at
+start and records the fingerprints on the manifest. It re-checks them after the
+baseline, before each experiment and before each verdict, and an edit aborts the
+run, naming the file.
+
+The real danger is a paused campaign, because `resume` reloads both files. A
+resume against changed files is therefore refused, and the wizard refuses to
+write while any campaign is running or paused. Edit once it has finished or been
+aborted.
+
 **4.5 The verdict uses measured values, never predictions.** The agent
 predicted 140 ms and measured 93 ms after the K3 pool-size fix — conservative
 by ~1.5×. The K1 pool=10 baseline happened to read ~150 ms; had that been

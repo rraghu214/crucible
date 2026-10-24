@@ -194,6 +194,19 @@ class TestNothingIsWritten:
         self._unchanged(root, before)
         assert started == []
 
+    def test_while_a_campaign_is_paused(self, client, root):
+        """Pausing releases the lock but has not stopped the campaign; resume
+        reloads these files, so they stay frozen until it ends (Group 33)."""
+        tc, started = client
+        pauses = root / "state" / "pauses"
+        pauses.mkdir(parents=True)
+        (pauses / "held-3.paused.json").write_text("{}", encoding="utf-8")
+        before = self._before(root)
+        response = tc.post("/v1/perf/wizard/launch", json=_body(), headers=AUTH)
+        assert response.status_code == 409 and "held-3 (paused)" in response.json()["detail"]
+        self._unchanged(root, before)
+        assert started == []
+
     def test_for_advisory_mode(self, client, root):
         tc, started = client
         before = self._before(root)

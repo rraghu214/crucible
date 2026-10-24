@@ -1878,7 +1878,9 @@ async def perf_wizard_launch(body: WizardBody, request: Request):
     sla_path, profile_path, locustfile = _wizard_paths(ctx)
     try:
         rendered = render(_wizard_form(body, "operator:ui"), sla_path, profile_path, locustfile)
-        write(rendered, sla_path, profile_path, _active_runs(ctx))
+        paused = [{"run_id": p.name.removesuffix(".paused.json") + " (paused)"}
+                  for p in sorted((ctx.state / "pauses").glob("*.paused.json"))]
+        write(rendered, sla_path, profile_path, _active_runs(ctx) + paused)
     except WizardRefused as exc:
         raise HTTPException(409, str(exc)) from exc
     try:

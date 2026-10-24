@@ -3631,6 +3631,10 @@ person would type.
 - The goal text is passed as `--stakeholder-request` (context only; the SLA stays
   the authority). Right, or should the goal not reach the model at all?
 
+**Amended 24 October 2026 (Group 33):** Launch is also refused while a campaign is
+*paused*. Pausing releases the lock, but the campaign has not stopped, and
+`resume` reloads these files. `test_while_a_campaign_is_paused`.
+
 ---
 
 ### 32.5 The Budget step is arithmetic on real inputs, and says what it cannot know
@@ -3653,6 +3657,71 @@ shown as a number would be a claim nobody measured.
   here. Should it use a measured gateway latency once one exists?
 - The cost-cap and wall-clock-cap inputs were removed and replaced with a note
   that run caps are not built (operator decision: not chosen for Group B).
+
+---
+
+# GROUP 33 — The SLA and profile cannot change under a campaign that has not stopped
+
+*Drafted 24 October 2026 by Claude Code. NOT YET REVIEWED. Implemented in
+`tests/test_perf_file_guard.py` (7), plus one test in `tests/test_ui_wizard.py`.
+Code: `fingerprint_files`, `changed_files` and `Campaign._check_guarded` in
+`crucible/perf/campaign.py`.*
+
+*Operator decision, 24 October 2026: the SLA and profile may be edited only once
+a campaign has stopped. A running campaign keeps both in memory, so an edit
+cannot change how *it* judges. What an edit can do:*
+- *make the record lie, because the manifest's goal no longer matches the file
+  beside it;*
+- *more seriously, change the goal under a **paused** campaign, because `resume`
+  reloads both files from disk.*
+
+---
+
+### 33.1 Both files are fingerprinted on the manifest at start
+
+**What it checks.** `guarded_files` on the manifest is `{path: sha256}` for the
+SLA and profile the campaign actually loaded. `build_campaign` passes exactly
+those two paths.
+
+**Why it exists.** It lets a later reader prove which configuration produced
+the verdicts, rather than assume it.
+
+---
+
+### 33.2 An edit aborts the run at the next check, names the file, and gives no verdict
+
+**What it checks.** Checks run after the baseline, before each experiment, and
+right before each verdict. Each case below aborts the campaign and names the
+file:
+- an SLA edit during an experiment's measurement: that experiment is recorded
+  `NOT_MEASURED`, and its reason names the file;
+- a profile edit during the baseline: no experiment starts;
+- a deleted file: counts as a change.
+
+Rewriting identical bytes does **not** count as a change. The abort takes the
+normal abort path, including §19.9's redeploy of the last good commit.
+
+**Why it exists.** A verdict judged under a goal that changed partway through
+belongs to neither goal.
+
+**For review:**
+- Is abort the right response, or should the campaign *pause* and ask instead?
+  Abort matches your rule ("only after stopping"); pause would let someone undo
+  an accidental edit and continue.
+- The check is a content hash, so whitespace or comment-only edits also abort.
+  Too strict?
+
+---
+
+### 33.3 A paused campaign whose files changed refuses to resume
+
+**What it checks.** The pause state carries the fingerprints. `resume` compares
+them with the files now on disk and refuses, naming each changed file and
+saying to start a new campaign. Launch from the wizard is also refused while any
+campaign is paused (32.3, amended).
+
+**Why it exists.** This is the case where an edit really would change how a
+campaign is judged: resume reloads the SLA from disk.
 
 ---
 

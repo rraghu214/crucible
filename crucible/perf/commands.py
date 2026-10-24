@@ -1129,6 +1129,7 @@ def build_campaign(
         # scripted test campaign never sets this and skips the wait entirely.
         warm_up_gateway=gateway_client.warm_up,
         stakeholder_request=stakeholder_request,
+        guarded_files=tuple(p for p in (sla.source_path, profile.source_path) if p),
     )
 
 

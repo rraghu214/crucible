@@ -843,7 +843,7 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
     <!-- Hooks -->
     <div class="card" style="margin-bottom:12px;">
       <div class="card-h">
-        <div><div class="card-title">Hooks <span class="pill idle">not built</span></div><div class="card-sub">Shell commands that run around each trial — database reset, OAuth refresh, log capture. <strong style="color:var(--warn);">Not built yet: nothing here is sent at Launch or run.</strong></div></div>
+        <div><div class="card-title">Hooks <span class="pill idle">not configurable yet</span></div><div class="card-sub">Shell commands that run around each trial — database reset, OAuth refresh, log capture. <strong style="color:var(--warn);">The campaign can run hooks (a failing one blocks the trial), but nothing configures them yet: what you enter here is not sent at Launch.</strong></div></div>
         <button class="btn btn-ghost btn-sm" onclick="addHook()">+ Add Hook</button>
       </div>
       <div style="font-size:11px;color:var(--lo);margin-bottom:8px;">A failing hook blocks the trial — a reset that silently did nothing makes every later measurement wrong.</div>
