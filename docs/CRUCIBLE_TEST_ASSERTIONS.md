@@ -3844,7 +3844,7 @@ only exposed it.
 
 # GROUP 35 — Ramp becomes the spawn rate
 
-*Drafted 24 October 2026 by Claude Code. NOT YET REVIEWED. Implemented in
+*Drafted 24 October 2026 by Claude Code. REVIEWED AND APPROVED by the operator, 24 October 2026. Implemented in
 `tests/test_perf_spawn_rate.py` (10). Code: `resolve_spawn_rate` and `--spawn-rate`
 on `crucible run` / `crucible ceiling`; the wizard's Launch.*
 
@@ -3875,8 +3875,8 @@ starts every user at once (rate = users).
 lives in `at_load`, editing it mid-run is a load change and re-measures the
 baseline (Group 33).
 
-**For review:** only the first scenario's ramp is used until multi-scenario
-campaigns (item 4) give each scenario its own. OK?
+**DECIDED, operator, 24 October 2026: agreed.** Only the first scenario's ramp was used until multi-scenario
+campaigns (item 4) gave each scenario its own spawn rate; that is now built (Group 37).
 
 ---
 

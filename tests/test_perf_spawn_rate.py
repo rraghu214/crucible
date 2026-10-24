@@ -1,6 +1,6 @@
 """Ramp becomes Locust's spawn rate. Group 35.
 
-DRAFTED by Claude Code, 24 October 2026. NOT YET REVIEWED by the operator.
+DRAFTED by Claude Code, 24 October 2026. REVIEWED AND APPROVED by the operator, 24 October 2026 (see docs/CRUCIBLE_TEST_ASSERTIONS.md).
 See `docs/CRUCIBLE_TEST_ASSERTIONS.md` GROUP 35 for the questions to check.
 
 The wizard's Ramp column was ignored: Locust always started users at its fixed
