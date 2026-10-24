@@ -13,10 +13,13 @@ import numpy as np
 
 
 class PersistentFaissIndex:
-    def __init__(self, directory: Path | None) -> None:
+    def __init__(self, directory: Path | None, name: str = "memory") -> None:
+        # Named per store: two stores in one directory (the campaign's memory.db
+        # and the agent's memory.sqlite under ~/.crucible) used to share one
+        # memory.faiss and overwrite each other's index on every open.
         self.directory = directory
-        self.index_path = directory / "memory.faiss" if directory else None
-        self.ids_path = directory / "memory.faiss.ids.json" if directory else None
+        self.index_path = directory / f"{name}.faiss" if directory else None
+        self.ids_path = directory / f"{name}.faiss.ids.json" if directory else None
         self.index: faiss.IndexFlatIP | None = None
         self.ids: list[str] = []
         if directory:

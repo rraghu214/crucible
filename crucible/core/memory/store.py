@@ -32,7 +32,8 @@ class MemoryStore:
         self.db.row_factory = sqlite3.Row
         self.embedder = embedder or DeterministicEmbedder()
         self._create_schema()
-        self.vectors = PersistentFaissIndex(self.path.parent if self.path else None)
+        self.vectors = PersistentFaissIndex(self.path.parent if self.path else None,
+                                            name=self.path.name if self.path else "memory")
         self._ensure_vector_index()
         self.last_retrieval_stats: dict[str, int] = {"index_candidates": 0, "authorized_records": 0}
 

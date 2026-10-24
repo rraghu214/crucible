@@ -77,3 +77,22 @@ class MemoryProofTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_two_stores_in_one_directory_keep_separate_vector_indexes(tmp_path):
+    """The campaign's memory.db and the agent's memory.sqlite live side by side in
+    ~/.crucible. Sharing one memory.faiss made each overwrite the other's index."""
+    from crucible.core.memory import MemoryKind, MemoryRecord, MemoryScope, MemoryStore, Principal, SourceRef
+
+    scope = MemoryScope("t")
+    for name in ("memory.sqlite", "memory.db"):
+        store = MemoryStore(tmp_path / name)
+        store.write(MemoryRecord(MemoryKind.FACT, scope, f"fact in {name}",
+                                 [SourceRef("test://", "test")], Principal("op", "operator")))
+        store.close()
+    assert (tmp_path / "memory.sqlite.faiss").exists() and (tmp_path / "memory.db.faiss").exists()
+    assert not (tmp_path / "memory.faiss").exists()
+    ids_a = (tmp_path / "memory.sqlite.faiss.ids.json").read_text()
+    reopened = MemoryStore(tmp_path / "memory.db")
+    reopened.close()
+    assert (tmp_path / "memory.sqlite.faiss.ids.json").read_text() == ids_a
