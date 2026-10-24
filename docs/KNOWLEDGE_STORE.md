@@ -47,12 +47,12 @@ records for `CRUCIBLE_TEST_ASSERTIONS.md`.
 | `knowledge/` | Every original document, exactly as received. Uploads keep their file name; API documents are named `<hash>-<name>` from their URI. | both doors |
 | `knowledge-index/knowledge.sqlite` | Document versions and their chunks, each with a 768-dimension vector | the one worker |
 | `knowledge-index/knowledge.sqlite.faiss` | The vector index for fast search | the one worker |
-| `memory.sqlite` (+ `memory.sqlite.faiss`) | The S17 agent's **own** memory: facts it was told, episodes, playbooks, audit. **No documents.** | agent runtime |
-| `memory.db` (+ `memory.db.faiss`) | One record per campaign: the SLA as a Policy record, the second lock that stops the agent changing its own goal (§4.4). **Not a document store.** | campaigns |
+| `memory.sqlite` (+ `memory.sqlite.faiss`) | The S17 agent's **own** memory: facts it was told, episodes, playbooks, audit. Also each campaign's SLA as a Policy record, the second lock that stops the agent changing its own goal (§4.4). Policy and audit records are never embedded or indexed. **No documents.** | agent runtime, campaigns |
 
-Each store has its **own** `.faiss` file, named after its database. Before
-24 October all of them shared one `memory.faiss` and overwrote each other's
-index every time one was opened.
+So there are two vector indexes: one for documents, one for the agent's facts
+and episodes. Each is named after its database. Before 24 October every store
+shared one `memory.faiss` and overwrote the others' index every time one was
+opened, and campaigns kept the SLA in a separate `memory.db`, now retired.
 
 ## The two doors
 

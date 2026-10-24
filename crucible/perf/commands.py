@@ -1174,6 +1174,7 @@ def build_campaign(
     gateway_client = GatewayClient()
 
     from ..core.memory.store import MemoryStore  # noqa: PLC0415
+    from ..knowledge import default_embedder  # noqa: PLC0415
 
     return Campaign(
         profile=profile,
@@ -1190,7 +1191,11 @@ def build_campaign(
         run_id=run_id,
         state_dir=state_dir,
         # Policy memory enforces the SLA can't be overwritten by the agent (DESIGN.md 4.4).
-        memory_store=MemoryStore(state_dir / "memory.db"),
+        # The agent runtime's own store (memory.sqlite), opened with the same
+        # embedder: a different one would mark the agent's vectors stale and
+        # rebuild its index without them. Only an unembedded Policy record and
+        # audit entries are written here, so starting a campaign makes no model call.
+        memory_store=MemoryStore(Path(state_dir) / "memory.sqlite", embedder=default_embedder()),
         # Real campaigns hit a hosted, free-tier gateway that can be cold; a
         # scripted test campaign never sets this and skips the wait entirely.
         warm_up_gateway=gateway_client.warm_up,

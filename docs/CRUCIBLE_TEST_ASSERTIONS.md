@@ -4325,6 +4325,64 @@ hooks someone added by hand.
 
 ---
 
+# GROUP 42 — The SLA lock lives in memory.sqlite; memory.db is retired
+
+*Drafted 24 October 2026 by Claude Code. NOT YET REVIEWED. Implemented in
+`tests/test_perf_shared_memory.py` (4). Code: `build_campaign` in
+`commands.py`; `MemoryStore._write` and `recall` in `crucible/core/memory/store.py`.*
+
+*Operator decision, 24 October 2026: drop `memory.db` and reuse the agent's
+`memory.sqlite`. A campaign's only records there were the SLA as a Policy record
+(the second lock, §4.4) and audit entries.*
+
+*Two traps found while doing it, and closed:*
+- *The campaign opened its store with the **test embedder**. Opening the agent's
+  store that way would mark every agent vector stale and rewrite the agent's
+  index without them, on every campaign start. It now opens with the agent's
+  embedder.*
+- *Every write was embedded, including the SLA record, so with the real embedder
+  each campaign start would make a gateway call, which could fail. Policy and
+  audit records are now stored **unembedded**. They are never searched by
+  meaning and were never in the index.*
+
+---
+
+### 42.1 The campaign opens the agent's store, with the agent's embedder
+
+**What it checks.** `build_campaign`'s memory store is `<state>/memory.sqlite`,
+its embedder has the same fingerprint as the agent's, and no `memory.db` is
+created.
+
+---
+
+### 42.2 Writing and reading the SLA makes no embedding call and leaves the agent's index alone
+
+**What it checks.** The test uses an embedder that **fails if called**. Into a
+store that already holds an agent fact, `publish_sla` and `recall_sla` both
+succeed, and the agent's `memory.sqlite.faiss.ids.json` is byte-identical
+afterwards. A Policy- or audit-only lookup skips embedding the query.
+
+---
+
+### 42.3 The SLA never appears as evidence in the agent's search
+
+**What it checks.** A search for "what is the p99 SLA objective" returns the
+agent's fact and never the Policy or audit record. Default searches exclude
+those kinds, as they always did.
+
+---
+
+### 42.4 An agent still cannot write the SLA into the shared store
+
+**What it checks.** `publish_sla` with an `agent` principal is refused. The second
+lock holds whichever file it lives in.
+
+**For review:** old `memory.db` files on Box B are simply no longer used. Nothing
+reads past campaigns' SLA records from them, and each manifest carries its own
+SLA. Delete them, or keep them?
+
+---
+
 # Review decisions — week 1
 
 Raised by Claude Code while implementing, decided by the operator on 10 September 2026.

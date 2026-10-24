@@ -85,9 +85,9 @@ curl -s -X POST http://127.0.0.1:8113/documents \
 ### 0.6 Confirm RAG index exists on Box B
 
 ```bash
-ls -la ~/.crucible/memory/
-# Should show: memory.db  memory.faiss  memory.faiss.ids.json
-# memory.faiss is the FAISS vector index (gemini-embedding-001 at 768d via GLC v5)
+ls -la ~/.crucible/knowledge-index/
+# Should show: knowledge.sqlite  knowledge.sqlite.faiss  knowledge.sqlite.faiss.ids.json
+# The ONE document index (gemini-embedding-001 at 768d via GLC v5), see docs/KNOWLEDGE_STORE.md
 ```
 
 ### 0.7 Confirm SPA endpoints
@@ -562,15 +562,15 @@ promotes them globally. One app's quirk never becomes everyone's false positive.
 
 **Show on Box B:**
 ```bash
-# The SQLite memory store (all seven kinds except document chunks)
-ls ~/.crucible/memory/
-# memory.db — SQLite for Working/Episode/Fact/Playbook/Policy/Audit
-# memory.faiss — FAISS index for Document chunk vectors (gemini-embedding-001, 768d)
-# memory.faiss.ids.json — FAISS id → memory record mapping
+# The memory store: the agent's facts/episodes AND each campaign's SLA Policy record
+ls ~/.crucible/
+# memory.sqlite         -- Working/Episode/Fact/Playbook/Policy/Audit (one store since 24 Oct 2026)
+# memory.sqlite.faiss   -- vectors for the agent's facts/episodes (Policy and Audit are never embedded)
+# knowledge-index/      -- the document store (see docs/KNOWLEDGE_STORE.md)
 
-# Read the audit log — every guard refusal and approval on record
-sqlite3 ~/.crucible/memory/memory.db \
-  "SELECT created_at, text FROM records WHERE kind='Audit' ORDER BY created_at DESC LIMIT 5;"
+# Read the audit log and the SLA lock records
+sqlite3 ~/.crucible/memory.sqlite \
+  "SELECT created_at, kind, substr(text,1,80) FROM records WHERE kind IN ('policy','audit') ORDER BY created_at DESC LIMIT 5;"
 ```
 
 **Say:**

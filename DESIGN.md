@@ -129,7 +129,10 @@ in the product — an agent that can move its own goalpost passes every time.
 Enforced twice: as a protected path in the guard, and as a `Policy` memory
 kind the agent has no write permission for. A file guard can be bypassed if
 config moves; a memory permission cannot. The same protection covers the load
-profile — fewer users is not a fix, and it destroys comparability too.
+profile — fewer users is not a fix, and it destroys comparability too. (Since
+24 October 2026 the Policy record lives in the agent's `memory.sqlite`, stored
+unembedded, and campaigns open that store with the agent's own embedder;
+`memory.db` is retired.)
 
 **The operator may change the goal or the load mid-run, and every change is
 recorded (operator decisions, 24 October 2026).** The two locks above stop the

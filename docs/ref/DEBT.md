@@ -95,7 +95,7 @@ work. Fix only when touching the file for another reason.
   **FIXED 4 Oct 2026.** `build_measure` now takes an optional `state_dir`; when present it calls `watchdog.for_scenario()` and sets `runner.watchdog` before each measured window. `build_campaign` passes its own `state_dir`, so live campaigns now supervise all seven tripwires and record observed CPU steal on every manifest. Fixture capture (`build_multi_measure`) is deliberately left without a watchdog — captures are single-shot reads, not supervised runs.
 
 - ~~**Policy-memory SLA enforcement was not wired in `build_campaign`.**~~ **FIXED 4 Oct 2026.**
-  `build_campaign` now constructs a `MemoryStore(state_dir / "memory.db")` and passes it to `Campaign.memory_store`. The existing `publish_sla()` call in `_run_locked` therefore runs unconditionally for every live campaign, satisfying the "enforced twice" requirement in AGENTS.md non-negotiable 4.
+  `build_campaign` now constructs a `MemoryStore(state_dir / "memory.db")` and passes it to `Campaign.memory_store` (since 24 Oct 2026: the agent's `memory.sqlite`, opened with the agent's embedder; see assertions group 42). The existing `publish_sla()` call in `_run_locked` therefore runs unconditionally for every live campaign, satisfying the "enforced twice" requirement in AGENTS.md non-negotiable 4.
 
 - ~~**Neither PromQL nor Datadog can be captured on Box A today.**~~ **FIXED 4 Oct 2026.**
   Prometheus is confirmed running on Box A at `10.0.0.79:9090`, reporting

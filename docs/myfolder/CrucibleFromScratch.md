@@ -330,7 +330,7 @@ assembles the real collaborators:
 | restarter | `None` for pipeline (the hook restarts on Box A); else command or manual |
 | applicator | `Applicator(profile, workspace, restarter)` |
 | diagnoser | `Diagnoser(profile, GatewayClient(), provider, model)` |
-| memory store | `MemoryStore(<state>/memory.db)` for the SLA policy lock |
+| memory store | `MemoryStore(<state>/memory.sqlite)` (the agent's store, since 24 Oct 2026) for the SLA policy lock |
 
 `Campaign` ([campaign.py:653](../../crucible/perf/campaign.py#L653)) takes all of
 these injected. That is what makes the loop testable without a cloud box: the
@@ -661,7 +661,7 @@ Each `ExperimentManifest`
 | `aborts/<run>.abort` | abort requested |
 | `pauses/<run>.pause`, `<run>.paused.json` | pause requested; saved loop state |
 | `audit.jsonl` | append-only audit log |
-| `memory.db` | memory store holding the SLA Policy record |
+| `memory.sqlite` | memory store: the agent's facts and episodes, plus each campaign's SLA Policy record (memory.db until 24 Oct 2026) |
 | `ui-jobs/<id>/job.json`, `output.log`, `exit_code` | every action started from the UI |
 
 ---

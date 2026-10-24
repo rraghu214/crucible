@@ -19,6 +19,9 @@ class PermissionDenied(PermissionError):
     pass
 
 
+_UNEMBEDDED = {MemoryKind.POLICY, MemoryKind.AUDIT}
+
+
 class MemoryStore:
     """Local SQLite memory with explicit scope, provenance and lifecycle rules.
 
@@ -93,7 +96,11 @@ class MemoryStore:
             record.id, record.kind.value, record.text, record.scope.tenant_id, record.scope.project_id,
             record.scope.user_id, record.scope.agent_id, record.scope.run_id,
             json.dumps([s.__dict__ for s in record.sources]), json.dumps(record.metadata),
-            json.dumps(self._pack_embedding(self._embed_document(record.text))), record.created_at, record.valid_from,
+            # Policy and audit are control-plane records: never searched by
+            # meaning, never in the vector index. Embedding them would only cost
+            # a model call (and a failure point) on every campaign start.
+            None if record.kind in _UNEMBEDDED else json.dumps(self._pack_embedding(self._embed_document(record.text))),
+            record.created_at, record.valid_from,
             record.valid_to, record.confidence, record.status, record.supersedes_id,
             record.principal.id, record.principal.role,
         ))
@@ -239,12 +246,15 @@ class MemoryStore:
         rows = self.db.execute(f"SELECT * FROM records WHERE {where}", values).fetchall()
         if not rows:
             return []
-        query_embedding = self._embed_query(query)
+        # A Policy/audit-only lookup has nothing to compare vectors with, so it
+        # costs no embedding call.
+        needs_vectors = any(row["embedding_json"] is not None for row in rows)
+        query_embedding = self._embed_query(query) if needs_vectors else []
         self._ensure_vector_index()
         # FAISS is global and contains ids only. Scope authorization still
         # happens before a record is returned; a wider search merely avoids a
         # foreign tenant consuming the first few approximate candidates.
-        vector_hits = self.vectors.search(query_embedding, max(128, limit * 16))
+        vector_hits = self.vectors.search(query_embedding, max(128, limit * 16)) if needs_vectors else []
         vector_scores = {record_id: score for record_id, score in vector_hits}
         self.last_retrieval_stats = {"index_candidates": len(vector_hits), "authorized_records": len(rows)}
         terms = [term for term in query.lower().replace("'", " ").split() if term.isalnum()]
@@ -260,6 +270,11 @@ class MemoryStore:
         scored = []
         changed = False
         for row in rows:
+            if row["embedding_json"] is None:
+                # Policy/audit: found by kind and scope, ranked by words only.
+                score = (0.20 if row["id"] in lexical else 0.0) + self._content_quality(row["text"])
+                scored.append((score, self._to_record(row)))
+                continue
             vector, stale = self._unpack_embedding(row["embedding_json"])
             # A new embedding model must not make old memory unsearchable.
             # Re-embed lazily from the retained source text and persist the
