@@ -552,6 +552,37 @@ class Applicator:
             text = set_property(text, change.prop, change.value)
         path.write_text(text, encoding="utf-8")
 
+    def preview(self, proposal: Proposal) -> dict[str, Any]:
+        """What ``apply`` would write, as an exact diff. Writes nothing (Advisory mode).
+
+        Same guard, same property edit as ``apply``. Without the config file in
+        the workspace (Advisory needs no repository) the changes are listed with
+        an unknown previous value and the diff is declared unavailable, not
+        invented.
+        """
+        refusal = guard_proposal(self.profile, proposal)
+        if refusal:
+            return {"refused": refusal}
+        path = self.config_path
+        try:
+            original = path.read_text(encoding="utf-8")
+        except OSError:
+            return {"config_file": self.profile.config_file,
+                    "changes": [{"prop": c.prop, "from": None, "to": c.value} for c in proposal.changes],
+                    "diff": "", "note": f"{self.profile.config_file} is not in the workspace, so the exact "
+                                        "diff could not be computed; the property and value above are exact"}
+        edited = original
+        for change in proposal.changes:
+            edited = set_property(edited, change.prop, change.value)
+        import difflib  # noqa: PLC0415
+
+        diff = "".join(difflib.unified_diff(original.splitlines(keepends=True), edited.splitlines(keepends=True),
+                                            f"a/{self.profile.config_file}", f"b/{self.profile.config_file}", n=1))
+        return {"config_file": self.profile.config_file,
+                "changes": [{"prop": c.prop, "from": read_property(original, c.prop), "to": c.value}
+                            for c in proposal.changes],
+                "diff": diff}
+
     # -- the operation ----------------------------------------------------
 
     def apply(self, proposal: Proposal, *, commit_message: str = "") -> ApplyResult:

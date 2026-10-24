@@ -229,12 +229,13 @@ class TestNothingIsWritten:
         self._unchanged(root, before)
         assert started == []
 
-    def test_for_advisory_mode(self, client, root):
+    def test_advisory_mode_now_launches_as_advisory(self, client, root):
+        """Group 38: Advisory is built. It launches with --advisory and never applies."""
         tc, started = client
-        before = self._before(root)
-        assert tc.post("/v1/perf/wizard/launch", json=_body(mode="Advisory"), headers=AUTH).status_code == 409
-        self._unchanged(root, before)
-        assert started == []
+        response = tc.post("/v1/perf/wizard/launch", json=_body(mode="Advisory"), headers=AUTH)
+        assert response.status_code == 200
+        assert "--advisory" in started[0]
+        assert any("Nothing is applied" in n for n in response.json()["notes"])
 
     def test_without_the_token(self, client, root, monkeypatch):
         tc, started = client

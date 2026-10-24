@@ -622,6 +622,8 @@ class ExperimentManifest:
     #: explained by this field more often than by anything else.
     prior_findings: list[dict[str, Any]] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    #: Advisory mode only: the proposal's exact diff, never applied.
+    advisory: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -822,6 +824,9 @@ class Campaign:
     #: belongs to, recorded on the manifest: {"id", "index", "of", "scenario"}.
     declared_scenario: str = ""
     series: dict[str, Any] = field(default_factory=dict)
+    #: Advisory mode: diagnose and propose with the exact diff, never apply,
+    #: deploy or measure a change. Needs no repository or deploy pipeline.
+    advisory: bool = False
     #: ``(result) -> spent so far``; ``None`` prices the manifest the way the
     #: scorer does (config/pricing.yaml). Injectable so a test need not price.
     cost_so_far: Any = None
@@ -1539,6 +1544,19 @@ class Campaign:
         # apply time -- this value could be stale by then, and the revert must use
         # the one that was actually in force.
         proposal = self._with_current_values(proposal)
+
+        if self.advisory:
+            # Advisory: the agent proposes, the operator applies. Nothing is
+            # written, deployed or measured, so the verdict is NOT_MEASURED --
+            # an unapplied proposal must never look like a verified one (principle 1).
+            manifest.advisory = self.applicator.preview(proposal)
+            manifest.verdict = NOT_MEASURED
+            manifest.verdict_reason = ("advisory: proposed with the exact diff on this manifest; nothing was "
+                                       "applied, deployed or measured")
+            result.stopped_reason = ("advisory run: one proposal recorded with its exact diff and nothing "
+                                     "applied. Apply it yourself, then run again to measure its effect.")
+            self._emit("advisory", experiment=manifest.experiment, diff=manifest.advisory.get("diff", ""))
+            return False
 
         request = ApprovalRequest.from_proposal(proposal, self.run_id, manifest.experiment)
         try:

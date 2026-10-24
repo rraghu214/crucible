@@ -1770,7 +1770,7 @@ async function renderBudget(){
 function updateBudgetForMode(name){
   renderBudget();
   if(!document.getElementById('chatPane').classList.contains('collapsed')){
-    const tip=name==='Advisory'?'Advisory is not built yet (Group B); Launch will refuse it.':
+    const tip=name==='Advisory'?'I will measure and diagnose, then record my proposal with its exact diff. Nothing is applied or deployed: you apply it yourself.':
               name==='Fully Automated'?'Make sure the property bounds in <code>profile.yaml</code> are what you want — the agent won\'t ask for approval between experiments.':
               name==='Ceiling Probe'?'No config changes are made — the probe escalates load in steps and stops at the first level that breaks your SLA.':
               'You\'ll get an approval prompt for each proposed change before it deploys.';

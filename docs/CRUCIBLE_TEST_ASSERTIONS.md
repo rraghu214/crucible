@@ -4011,6 +4011,70 @@ endpoint, with the bounds it was started with.
 
 ---
 
+# GROUP 38 — Advisory mode
+
+*Drafted 24 October 2026 by Claude Code. NOT YET REVIEWED. Implemented in
+`tests/test_perf_advisory.py` (7), plus `tests/test_ui_wizard.py`. Code:
+`Applicator.preview`, `Campaign.advisory`, `crucible run --advisory`.*
+
+*"AI diagnoses and suggests. You apply every change manually." The wizard
+offered it and Launch refused it. An Advisory run measures a baseline and
+diagnoses once. If the diagnosis proposes a change, the proposal is recorded
+with its exact diff and the run stops. It needs no repository and no deploy
+pipeline.*
+
+---
+
+### 38.1 It records the exact diff and applies nothing
+
+**What it checks.**
+- **What happens:** one baseline measurement and one diagnosis.
+- **What doesn't:** no deploy, no approval request, no apply, no re-measure. The
+  workspace's config file is byte-identical afterwards.
+- **What's recorded:** `advisory.diff` is the unified diff `apply` would write
+  (`-…=10` / `+…=20`), and `advisory.changes` lists each property with the value
+  read from the file and the proposed one.
+- **The outcome:** the verdict is `NOT_MEASURED`, and the reason says nothing
+  was applied.
+
+**Why it exists.** Principle 1: an unapplied proposal is not a result, so it must
+never look like one. Principle 4: the human applies.
+
+**For review:**
+- Advisory stops after one proposal. Without applying, a second diagnosis would
+  see the same evidence and propose the same thing. Should it instead ask for
+  *alternatives* (two or three ranked proposals)?
+- With `--all-scenarios`, each scenario gets its own baseline and proposal.
+
+---
+
+### 38.2 The proposal still has to pass the guard
+
+**What it checks.** A value outside the profile's bounds is refused as in any
+other mode, and no diff is recorded for it.
+
+**Why it exists.** A suggestion the profile would never allow is worthless to
+the operator, and suggesting it anyway would teach them to bypass the bounds.
+
+---
+
+### 38.3 Without the config file, the diff is declared unavailable, not invented
+
+**What it checks.** With no config file in the workspace, the preview lists the
+property with an unknown previous value, an empty diff, and a note saying why.
+
+---
+
+### 38.4 It needs no deploy pipeline, and every path carries it
+
+**What it checks.** `build_campaign(advisory=True)` has no deployer, skips the
+workspace sync check and doesn't pause on edits. `--advisory` reaches
+`cmd_run`. The action builder adds it as a flag. The wizard launches Advisory
+(no longer refused) with notes saying nothing is applied. The Budget step counts
+one baseline and one diagnosis.
+
+---
+
 # Review decisions — week 1
 
 Raised by Claude Code while implementing, decided by the operator on 10 September 2026.

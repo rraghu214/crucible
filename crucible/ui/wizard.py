@@ -227,6 +227,13 @@ def estimate(*, mode: str, warmup_s: float, measure_s: float, experiments: int, 
         rows.append({"phase": f"Load steps (x{ceiling_steps})", "what": f"{warmup_s:.0f} s warmup discarded + "
                      f"{measure_s:.0f} s held, per step; stops at the first step that misses the SLA",
                      "min_s": window, "max_s": window * ceiling_steps, "calls": 0})
+    elif mode == "Advisory":
+        rows += [
+            {"phase": "Baseline", "what": f"{warmup_s:.0f} s warmup discarded + {measure_s:.0f} s measured",
+             "min_s": window, "max_s": window, "calls": 0},
+            {"phase": "Diagnosis (x1)", "what": "one proposal with its exact diff; nothing applied or re-measured",
+             "min_s": 0.0, "max_s": 0.0, "calls": 1},
+        ]
     else:
         rows += [
             {"phase": "Baseline", "what": f"{warmup_s:.0f} s warmup discarded + {measure_s:.0f} s measured",

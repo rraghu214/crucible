@@ -87,6 +87,9 @@ def build_parser() -> argparse.ArgumentParser:
              "recorded as such on the manifest",
     )
     run.add_argument("--approval-timeout", type=float, default=3600.0)
+    run.add_argument("--advisory", action="store_true",
+                     help="diagnose and propose with the exact diff; never apply, deploy or measure a change "
+                          "(needs no repository or deploy pipeline)")
     # Pinned per campaign (DESIGN.md 3.2). What actually served each call is read
     # back off the gateway response and recorded per experiment.
     run.add_argument("--provider", default=os.getenv("CRUCIBLE_GATEWAY_PROVIDER", "gemini"))
@@ -407,6 +410,7 @@ def main() -> int:
             measure_s=args.measure,
             spawn_rate=args.spawn_rate,
             all_scenarios=args.all_scenarios,
+            advisory=args.advisory,
             cost_cap_usd=args.cost_cap_usd,
             wall_clock_cap_h=args.wall_clock_cap_h,
             max_experiments=args.experiments,

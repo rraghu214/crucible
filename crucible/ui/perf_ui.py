@@ -1882,7 +1882,8 @@ async def perf_wizard_budget(body: WizardBody, request: Request):
 def _launch_notes(body: WizardBody) -> list[str]:
     notes = []
     if body.mode == "Advisory":
-        notes.append("Advisory mode is not built yet (Group B); Launch will refuse it.")
+        notes.append("Advisory: each scenario is measured and diagnosed once, and the proposal is recorded with "
+                     "its exact diff. Nothing is applied, deployed or re-measured; you apply it yourself.")
     if body.mode != "Ceiling Probe" and body.scenarios:
         names = ", ".join(sc.name for sc in body.scenarios)
         notes.append(f"Runs {len(body.scenarios)} scenario(s) in order ({names}), each as its own campaign "
@@ -1923,8 +1924,6 @@ async def perf_wizard_launch(body: WizardBody, request: Request):
     from .wizard import WizardRefused, render, write
 
     ctx = _context(request)
-    if body.mode == "Advisory":
-        raise HTTPException(409, "Advisory mode is not built yet (Group B). Nothing was written.")
     if body.mode == "Ceiling Probe" and body.ceiling is None:
         raise HTTPException(422, "a ceiling probe needs its bounds (DESIGN.md 20.2)")
     if body.mode != "Ceiling Probe" and not body.scenarios:
@@ -1953,6 +1952,7 @@ async def perf_wizard_launch(body: WizardBody, request: Request):
                 approve="preapproved" if body.mode == "Fully Automated" else "file",
                 stakeholder_request=body.goal,
                 cost_cap=body.cost_cap_usd, wall_clock_cap=body.wall_clock_cap_h,
+                advisory=body.mode == "Advisory",
             )
     except ActionError as exc:
         raise HTTPException(422, f"the files were written, but the run could not start: {exc}") from exc

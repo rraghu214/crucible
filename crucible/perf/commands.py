@@ -1085,6 +1085,7 @@ def build_campaign(
     spawn_rate: float | None = None,
     cost_cap_usd: float | None = None,
     wall_clock_cap_h: float | None = None,
+    advisory: bool = False,
 ) -> Any:
     """Assemble a real campaign from configuration. Kept apart from ``cmd_run``
     so a test can build one without going through argparse."""
@@ -1100,7 +1101,9 @@ def build_campaign(
     profile = TargetProfile.named(profile_name)
     sla = Sla.load(sla_path)
 
-    if profile.deploy.automated and workspace:
+    # Advisory never pushes, so a workspace out of step with the deploy branch
+    # does not matter to it, and it needs no deploy pipeline at all.
+    if profile.deploy.automated and workspace and not advisory:
         _check_workspace_sync(Path(workspace), profile)
 
     scenario = Scenario(
@@ -1129,7 +1132,9 @@ def build_campaign(
     )
 
     deployer = (
-        GitPushDeployer(target=profile.deploy, workspace=workspace)
+        None
+        if advisory
+        else GitPushDeployer(target=profile.deploy, workspace=workspace)
         if profile.deploy.automated
         else ManualDeployer(target=profile.deploy)
     )
@@ -1172,7 +1177,8 @@ def build_campaign(
         warm_up_gateway=gateway_client.warm_up,
         stakeholder_request=stakeholder_request,
         guarded_files=tuple(p for p in (sla.source_path, profile.source_path) if p),
-        confirm_config_changes=approve_mode == "file",
+        confirm_config_changes=approve_mode == "file" and not advisory,
+        advisory=advisory,
         cost_cap_usd=_positive("cost cap", cost_cap_usd),
         wall_clock_cap_s=None if wall_clock_cap_h is None else _positive("wall-clock cap", wall_clock_cap_h) * 3600,
     )
