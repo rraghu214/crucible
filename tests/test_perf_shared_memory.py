@@ -1,6 +1,6 @@
 """Campaigns keep the SLA lock in the agent's memory.sqlite, not a separate memory.db. Group 42.
 
-DRAFTED by Claude Code, 24 October 2026. NOT YET REVIEWED by the operator.
+DRAFTED by Claude Code, 24 October 2026. REVIEWED AND APPROVED by the operator, 24 October 2026 (see docs/CRUCIBLE_TEST_ASSERTIONS.md).
 See `docs/CRUCIBLE_TEST_ASSERTIONS.md` GROUP 42 for the questions to check.
 
 Operator decision, 24 October 2026: drop memory.db and reuse memory.sqlite. The

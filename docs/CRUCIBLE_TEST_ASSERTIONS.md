@@ -4327,7 +4327,7 @@ hooks someone added by hand.
 
 # GROUP 42 — The SLA lock lives in memory.sqlite; memory.db is retired
 
-*Drafted 24 October 2026 by Claude Code. NOT YET REVIEWED. Implemented in
+*Drafted 24 October 2026 by Claude Code. REVIEWED AND APPROVED by the operator, 24 October 2026. Implemented in
 `tests/test_perf_shared_memory.py` (4). Code: `build_campaign` in
 `commands.py`; `MemoryStore._write` and `recall` in `crucible/core/memory/store.py`.*
 
@@ -4377,7 +4377,7 @@ those kinds, as they always did.
 **What it checks.** `publish_sla` with an `agent` principal is refused. The second
 lock holds whichever file it lives in.
 
-**For review:** old `memory.db` files on Box B are simply no longer used. Nothing
+**DECIDED, operator, 24 October 2026: old `memory.db` files are removed.** They are no longer used. Nothing
 reads past campaigns' SLA records from them, and each manifest carries its own
 SLA. Delete them, or keep them?
 

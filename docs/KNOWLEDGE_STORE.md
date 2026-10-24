@@ -118,5 +118,8 @@ opened, and campaigns kept the SLA in a separate `memory.db`, now retired.
   longer read by anything. Each store rebuilds its own index from the vectors
   saved in its database, so nothing is re-embedded. You can delete the old
   files.
+- **The old `~/.crucible/memory.db`** (and any `memory.db.faiss*`) is retired:
+  campaigns keep the SLA lock in `memory.sqlite` now. Delete them
+  (operator decision, 24 October 2026).
 - **Any script that calls `/v1/agent/documents`** must now send the control
   token and poll for the result.
