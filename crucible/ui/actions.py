@@ -105,7 +105,7 @@ def run_args(
     run_id: str = "", state_dir: str = "", workspace: str = "", approve: str = "file",
     approval_timeout: float | None = None, provider: str = "", model: str = "",
     jaeger_url: str = "", jaeger_service: str = "", trace_sampling_rate: float | None = None,
-    stakeholder_request: str = "",
+    stakeholder_request: str = "", spawn_rate: float | None = None,
 ) -> list[str]:
     if approve not in ("file", "preapproved"):
         raise ActionError(f"approve mode must be 'file' or 'preapproved', got {approve!r}")
@@ -116,6 +116,7 @@ def run_args(
     _num(args, "users", users)
     _num(args, "warmup", warmup, float)
     _num(args, "measure", measure, float)
+    _num(args, "spawn-rate", spawn_rate, float)
     _num(args, "experiments", experiments)
     if _text(run_id):
         args.append(f"--run-id={_name(run_id, 'run id')}")
@@ -191,6 +192,7 @@ def ceiling_args(
     *, profile: str = "", sla: str = "", scenario: str = "", users: int | None = None,
     warmup: float | None = None, measure: float | None = None, min_users: int | None = None,
     max_users: int | None = None, step: int | None = None, run_id: str = "", state_dir: str = "",
+    spawn_rate: float | None = None,
 ) -> list[str]:
     """DESIGN.md §20.2: the operator sets the bounds, so the maximum is required."""
     if max_users in (None, ""):
@@ -205,6 +207,7 @@ def ceiling_args(
     _num(args, "min-users", min_users)
     _num(args, "max-users", max_users)
     _num(args, "step", step)
+    _num(args, "spawn-rate", spawn_rate, float)
     if _text(run_id):
         args.append(f"--run-id={_name(run_id, 'run id')}")
     _opt(args, "state-dir", state_dir)

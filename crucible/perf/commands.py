@@ -1024,6 +1024,21 @@ def _check_workspace_sync(workspace: Path, profile: "TargetProfile") -> None:
         )
 
 
+def resolve_spawn_rate(given: float | None, sla: Sla) -> float:
+    """Users started per second: the flag, else the SLA's at_load, else Locust's 10.
+
+    The wizard derives it from a scenario's Ramp (users / ramp seconds).
+    """
+    rate = given if given is not None else (sla.at_load or {}).get("spawn_rate", 10.0)
+    try:
+        rate = float(rate)
+    except (TypeError, ValueError):
+        raise ValueError(f"spawn rate must be a number, got {rate!r}") from None
+    if rate <= 0:
+        raise ValueError(f"spawn rate must be greater than 0, got {rate}")
+    return rate
+
+
 def build_campaign(
     *,
     profile_name: str,
@@ -1044,6 +1059,7 @@ def build_campaign(
     jaeger_service: str = "",
     trace_sampling_rate_pct: float | None = None,
     stakeholder_request: str = "",
+    spawn_rate: float | None = None,
 ) -> Any:
     """Assemble a real campaign from configuration. Kept apart from ``cmd_run``
     so a test can build one without going through argparse."""
@@ -1068,6 +1084,7 @@ def build_campaign(
         users=users,
         warmup_s=warmup_s,
         measure_s=measure_s,
+        spawn_rate=resolve_spawn_rate(spawn_rate, sla),
         tags=(tag_for_endpoint(sla.endpoint),),
     )
 
@@ -1193,6 +1210,7 @@ def cmd_ceiling(
     state_dir: str | None = None,
     jaeger_url: str = "",
     jaeger_service: str = "",
+    spawn_rate: float | None = None,
 ) -> int:
     """Characterise a service's capacity ceiling with a stepped load ramp.
 
@@ -1216,6 +1234,7 @@ def cmd_ceiling(
         profile = TargetProfile.named(profile_name)
         sla = Sla.load(sla_path)
         tag = tag_for_endpoint(sla.endpoint)
+        rate = resolve_spawn_rate(spawn_rate, sla)
     except (CampaignRefused, FileNotFoundError, ValueError) as exc:
         print(f"configuration error: {exc}")
         return REFUSED
@@ -1226,6 +1245,7 @@ def cmd_ceiling(
         users=users,
         warmup_s=warmup_s,
         measure_s=measure_s,
+        spawn_rate=rate,
         tags=(tag,),
     )
     measure = build_measure(profile, sla, jaeger_url=jaeger_url, jaeger_service=jaeger_service)

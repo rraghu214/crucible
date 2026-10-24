@@ -65,6 +65,9 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--users", type=int, default=50)
     run.add_argument("--warmup", type=float, default=120.0, help="seconds, discarded")
     run.add_argument("--measure", type=float, default=300.0, help="seconds, measured")
+    run.add_argument("--spawn-rate", type=float, default=None, dest="spawn_rate",
+                     help="users started per second until --users are running (Locust -r); "
+                          "default: the SLA's at_load.spawn_rate, else 10")
     run.add_argument("--experiments", type=int, default=5)
     run.add_argument("--run-id", default="")
     run.add_argument("--state-dir", default=None)
@@ -161,6 +164,8 @@ def build_parser() -> argparse.ArgumentParser:
     ceiling.add_argument("--users", type=int, default=50, help="users at the first step")
     ceiling.add_argument("--warmup", type=float, default=120.0, dest="warmup_s")
     ceiling.add_argument("--measure", type=float, default=300.0, dest="measure_s")
+    ceiling.add_argument("--spawn-rate", type=float, default=None, dest="spawn_rate",
+                         help="users started per second at each step (Locust -r)")
     ceiling.add_argument("--min-users", type=int, default=0)
     ceiling.add_argument("--max-users", type=int, default=500)
     ceiling.add_argument("--step", type=int, default=50, dest="step_size")
@@ -381,6 +386,7 @@ def main() -> int:
             min_users=args.min_users,
             max_users=args.max_users,
             step_size=args.step_size,
+            spawn_rate=args.spawn_rate,
             run_id=args.run_id,
             state_dir=args.state_dir,
         )
@@ -392,6 +398,7 @@ def main() -> int:
             users=args.users,
             warmup_s=args.warmup,
             measure_s=args.measure,
+            spawn_rate=args.spawn_rate,
             max_experiments=args.experiments,
             run_id=args.run_id,
             state_dir=args.state_dir,

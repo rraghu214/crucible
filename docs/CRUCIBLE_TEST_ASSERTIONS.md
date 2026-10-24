@@ -3842,6 +3842,44 @@ only exposed it.
 
 ---
 
+# GROUP 35 — Ramp becomes the spawn rate
+
+*Drafted 24 October 2026 by Claude Code. NOT YET REVIEWED. Implemented in
+`tests/test_perf_spawn_rate.py` (10). Code: `resolve_spawn_rate` and `--spawn-rate`
+on `crucible run` / `crucible ceiling`; the wizard's Launch.*
+
+*The wizard's Ramp column was ignored: Locust started users at its fixed 10 per
+second. That figure is the **spawn rate**, users started per second, not
+requests per second (operator, 24 October 2026).*
+
+---
+
+### 35.1 The rate comes from the flag, then the SLA, then 10
+
+**What it checks.** `--spawn-rate` sets the scenario's rate. Without it,
+`at_load.spawn_rate` in the SLA is used, and with neither, Locust's 10. A rate of
+0 or less, or one that isn't a number, is refused before any load starts. The
+action builders pass it as a single `--spawn-rate=` token, so it cannot become a
+flag (28.4).
+
+---
+
+### 35.2 The wizard turns Ramp into users / ramp seconds and records it
+
+**What it checks.** For 80 users over a 30 s ramp, Launch runs
+`--spawn-rate=2.67` (the exact value), writes `at_load.spawn_rate: 2.667` to
+`slo.yaml`, and its notes say "80 users over 30 s = 2.67 users/s". A ramp of 0
+starts every user at once (rate = users).
+
+**Why it exists.** The value in force must be the value on record. Because it
+lives in `at_load`, editing it mid-run is a load change and re-measures the
+baseline (Group 33).
+
+**For review:** only the first scenario's ramp is used until multi-scenario
+campaigns (item 4) give each scenario its own. OK?
+
+---
+
 # Review decisions — week 1
 
 Raised by Claude Code while implementing, decided by the operator on 10 September 2026.

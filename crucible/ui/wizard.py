@@ -56,6 +56,9 @@ class WizardForm:
     health_url: str
     operator: str = "operator"
     provenance: str = ""
+    #: Users started per second, from the first scenario's Ramp (users / ramp
+    #: seconds). None leaves at_load.spawn_rate as it is.
+    spawn_rate: float | None = None
 
 
 def _scalar(value: Any) -> str:
@@ -150,6 +153,8 @@ def render(form: WizardForm, sla_path: Path, profile_path: Path, locustfile: Pat
                         (["objective", "error_rate_pct"], form.error_rate_pct),
                         (["objective", "at_load", "users"], form.users)):
         new_sla = set_value(new_sla, keys, value)
+    if form.spawn_rate is not None:
+        new_sla = set_value(new_sla, ["objective", "at_load", "spawn_rate"], round(form.spawn_rate, 3))
     new_sla = _stamp(new_sla, "objective:", note)
 
     old_profile = profile_path.read_text(encoding="utf-8")
@@ -186,9 +191,14 @@ def _validate(form: WizardForm, sla_text: str, profile_text: str, sla_path: Path
         "base_branch": profile.deploy.base_branch, "restart_command": list(profile.restart.command),
         "health_url": profile.restart.health_url,
     }
+    if form.spawn_rate is not None:
+        read_back["spawn_rate"] = (sla.at_load or {}).get("spawn_rate")
     for key, got in read_back.items():
-        if got != getattr(form, key):
-            raise WizardRefused(f"{key} would read back as {got!r}, not {getattr(form, key)!r}")
+        want = getattr(form, key)
+        if key == "spawn_rate":
+            want = round(want, 3)
+        if got != want:
+            raise WizardRefused(f"{key} would read back as {got!r}, not {want!r}")
 
 
 def estimate(*, mode: str, warmup_s: float, measure_s: float, experiments: int, verify_timeout_s: float,

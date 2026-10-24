@@ -1775,7 +1775,15 @@ def _wizard_form(body: WizardBody, operator: str) -> Any:
     return WizardForm(endpoint=body.endpoint, p99_ms=float(body.p99_ms), error_rate_pct=float(body.error_rate_pct),
                       users=body.users, config_file=body.config_file, base_branch=body.base_branch,
                       restart_command=command, health_url=body.health_url, operator=operator,
-                      provenance=body.provenance)
+                      provenance=body.provenance, spawn_rate=_spawn_rate(body))
+
+
+def _spawn_rate(body: WizardBody) -> float | None:
+    """Ramp -> Locust spawn rate: users / ramp seconds; no ramp starts them all at once."""
+    if not body.scenarios:
+        return None
+    first = body.scenarios[0]
+    return first.users / first.ramp_s if first.ramp_s > 0 else float(first.users)
 
 
 @router.get("/v1/perf/wizard")
@@ -1861,8 +1869,9 @@ def _launch_notes(body: WizardBody) -> list[str]:
         notes.append(f"Only the first scenario ({body.scenarios[0].name}) runs; "
                      "multi-scenario campaigns come in Group B.")
     if body.mode != "Ceiling Probe" and body.scenarios:
-        notes.append("Ramp is not applied yet: Locust spawns at its fixed 10 users/s. "
-                     "A 120 s warmup is discarded before the scenario's measured duration.")
+        rate = _spawn_rate(body)
+        notes.append(f"Ramp: {body.scenarios[0].users} users over {body.scenarios[0].ramp_s} s = "
+                     f"{rate:.2f} users/s. A 120 s warmup is discarded before the measured duration.")
     return notes
 
 
@@ -1919,7 +1928,8 @@ async def perf_wizard_launch(body: WizardBody, request: Request):
             first = body.scenarios[0]
             args = _actions.run_args(
                 profile=ctx.profile_name, sla=str(sla_path), scenario=first.name, users=first.users,
-                measure=float(first.duration_s), experiments=body.experiments, run_id=body.run_id,
+                measure=float(first.duration_s), spawn_rate=_spawn_rate(body),
+                experiments=body.experiments, run_id=body.run_id,
                 state_dir=str(ctx.state), workspace=os.getenv("CRUCIBLE_WORKSPACE", ""),
                 approve="preapproved" if body.mode == "Fully Automated" else "file",
                 stakeholder_request=body.goal,
