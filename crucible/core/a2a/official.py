@@ -79,9 +79,17 @@ class OfficialA2AServicer(pb_grpc.A2AServiceServicer):
         await self._auth(context)
         task=self.core.tasks.get(request.id)
         if not task: await context.abort(grpc.StatusCode.NOT_FOUND,"task not found")
-        yield p.StreamResponse(task=_task(task))
-        while task.state not in {TaskState.COMPLETED,TaskState.FAILED,TaskState.CANCELED}:
-            await asyncio.sleep(.02); yield p.StreamResponse(task=_task(task))
+        # Decide "was it terminal?" BEFORE taking the snapshot, then send it. A task
+        # that finishes while this generator is suspended at a yield is therefore
+        # still sent once more in its final state. The old loop checked the state
+        # after the yield and exited without sending it, so a subscriber's last
+        # message could read WORKING for a task that had completed.
+        while True:
+            terminal = task.state in {TaskState.COMPLETED, TaskState.FAILED, TaskState.CANCELED}
+            yield p.StreamResponse(task=_task(task))
+            if terminal:
+                return
+            await asyncio.sleep(.02)
     async def CreateTaskPushNotificationConfig(self, request, context): await self._auth(context); return self.pushes.put(request)
     async def GetTaskPushNotificationConfig(self, request, context):
         await self._auth(context)

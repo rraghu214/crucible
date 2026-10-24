@@ -154,10 +154,15 @@ async def test_official_subscription_resumes_waiting_graph_and_maps_cancel(tmp_p
         done = await runner.run("remote-run", resume=True)
         assert done.finished and store.snapshot("remote-run").nodes["remote"]["result"]["remote_task_id"] == final.id
 
+        # The cancel must reach the remote task while it is still WORKING. With
+        # the demo's 80 ms timer that was a race a loaded test runner sometimes
+        # lost (the task completed first); a long delay makes the order certain.
+        core.slow_delay_s = 60.0
         parked = await runner.run("cancel-run")
         dispatch = asyncio.create_task(bridge.dispatch_waiting(store, "cancel-run", "remote", request))
-        for _ in range(30):
-            if ("cancel-run", "remote") in bridge.remote_ids: break
+        deadline = asyncio.get_running_loop().time() + 10
+        while ("cancel-run", "remote") not in bridge.remote_ids:
+            assert asyncio.get_running_loop().time() < deadline, "remote task never registered"
             await asyncio.sleep(.005)
         decision = store.record_external_event("cancel-run", "graph_cancel_requested", "remote", {})
         store.apply_patch("cancel-run", GraphPatch(cancel=("remote",), finish=True, reason="caller cancelled"),
@@ -168,3 +173,24 @@ async def test_official_subscription_resumes_waiting_graph_and_maps_cancel(tmp_p
         assert store.node_state("cancel-run", "remote") == "cancelled"
     finally:
         store.close(); await channel.close(); await server.stop(); await core.close()
+
+
+@pytest.mark.asyncio
+async def test_a_subscription_always_ends_with_the_tasks_final_state():
+    """Regression, 24 October 2026. SubscribeToTask checked "is it finished?" after
+    a yield, so a task that completed while the stream was suspended was never sent
+    in its final state: the subscriber's last message read WORKING. Observed in 9
+    of 12 probes before the fix."""
+    core = A2ADemoServer(card(), slow_delay_s=0.03)
+    server = OfficialA2AServer(core, ":memory:")
+    channel = grpc.aio.insecure_channel(await server.start())
+    stub = pb_grpc.A2AServiceStub(channel)
+    request = p.SendMessageRequest(message=p.Message(message_id="m", role=p.ROLE_USER,
+                                                       parts=[p.Part(text="slow remote report")]))
+    try:
+        for _ in range(20):
+            task = (await stub.SendMessage(request)).task
+            states = [e.task.status.state async for e in stub.SubscribeToTask(p.SubscribeToTaskRequest(id=task.id))]
+            assert states[-1] == p.TASK_STATE_COMPLETED, states
+    finally:
+        await channel.close(); await server.stop(); await core.close()

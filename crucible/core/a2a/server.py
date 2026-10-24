@@ -102,8 +102,11 @@ class A2ADemoServer:
                  task_handler: TaskHandler | None = None, task_db: str | Path = ":memory:",
                  bearer_tokens: set[str] | None = None, api_keys: set[str] | None = None,
                  push_signing_secret: str | None = None, push_http: httpx.AsyncClient | None = None,
-                 push_attempts: int = 4, push_backoff: float = .05) -> None:
+                 push_attempts: int = 4, push_backoff: float = .05, slow_delay_s: float = .08) -> None:
         validate_agent_card(card)
+        # How long a demo "async"/"slow" task stays WORKING. A setting so a test
+        # that must cancel mid-flight is not racing an 80 ms timer under load.
+        self.slow_delay_s = slow_delay_s
         self.card, self.push_callback, self.task_handler = card, push_callback, task_handler
         self.store = DurableTaskStore(task_db)
         self.tasks = self.store.load_all()
@@ -168,7 +171,7 @@ class A2ADemoServer:
             task.updated_at = datetime.now(UTC).isoformat()
             self.store.save(task)
             await self._notify(task)
-            self._jobs[task.id] = asyncio.create_task(self._complete_later(task, 0.08))
+            self._jobs[task.id] = asyncio.create_task(self._complete_later(task, self.slow_delay_s))
             return task.wire()
         await self._complete(task)
         return task.wire()
