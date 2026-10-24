@@ -1,6 +1,6 @@
 """Input data and request templates. Group 40.
 
-DRAFTED by Claude Code, 24 October 2026. NOT YET REVIEWED by the operator.
+DRAFTED by Claude Code, 24 October 2026. REVIEWED AND APPROVED by the operator, 25 October 2026 (see docs/CRUCIBLE_TEST_ASSERTIONS.md).
 See `docs/CRUCIBLE_TEST_ASSERTIONS.md` GROUP 40 for the questions to check.
 
 The wizard's "Input Data & Request Templates" card was a mock: an upload that

@@ -1,6 +1,6 @@
 """Python hooks: isolated, allowlisted, configured from the SLA and the wizard. Group 41.
 
-DRAFTED by Claude Code, 24 October 2026. NOT YET REVIEWED by the operator.
+DRAFTED by Claude Code, 24 October 2026. REVIEWED AND APPROVED by the operator, 25 October 2026 (see docs/CRUCIBLE_TEST_ASSERTIONS.md).
 See `docs/CRUCIBLE_TEST_ASSERTIONS.md` GROUP 41 for the questions to check.
 
 Operator decisions, 24 October 2026: a hook is a Python file, and it must not be

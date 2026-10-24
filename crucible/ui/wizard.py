@@ -242,8 +242,8 @@ def estimate(*, mode: str, warmup_s: float, measure_s: float, experiments: int, 
         rows += [
             {"phase": "Baseline", "what": f"{warmup_s:.0f} s warmup discarded + {measure_s:.0f} s measured",
              "min_s": window, "max_s": window, "calls": 0},
-            {"phase": "Diagnosis (x1)", "what": "one proposal with its exact diff; nothing applied or re-measured",
-             "min_s": 0.0, "max_s": 0.0, "calls": 1},
+            {"phase": "Diagnosis (up to 3)", "what": "up to three ranked proposals, each with its exact diff; "
+             "nothing applied or re-measured", "min_s": 0.0, "max_s": 0.0, "calls": 3},
         ]
     else:
         rows += [

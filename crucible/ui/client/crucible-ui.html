@@ -827,6 +827,10 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
           <button class="btn btn-ghost btn-sm" onclick="addScenario()">+ Add Scenario</button>
         </div>
       </div>
+      <label style="display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--mid);margin:0 0 8px;">
+        <input type="checkbox" id="wz-tradeoffs" style="width:auto;margin-top:2px;">
+        <span><strong>Accept trade-offs</strong> (scenarios with a mix or request templates): a change may make one endpoint slower and still be kept, as long as that endpoint stays within its own p99 target. Off: any endpoint getting slower makes the change WORSE.</span>
+      </label>
       <div class="scenario-hdr"><span>Name</span><span>Users</span><span>Duration</span><span>Ramp</span><span title="Optional. endpoint=weight, optionally @ its own p99 in ms; weights total 100. Each endpoint is judged on its own p99.">Mix (optional)</span><span></span></div>
       <div id="scenarioList">
         <div class="scenario-row">
@@ -1743,13 +1747,15 @@ async function renderBudget(){
     d.rows.forEach(x=>add([x.phase,x.what,x.max_s?_span(x.min_s,x.max_s):'not measured',String(x.calls),_money(x.cost,d.currency)]));
     add(['Total','range: SLA met early → every experiment used',_span(d.min_s,d.max_s),String(d.calls),_money(d.cost,d.currency)],true);
     const note=document.getElementById('budget-note');
+    if(note&&d.cap_warning){note.style.color='var(--warn)';note.textContent='⚠ '+d.cap_warning;return;}
+    if(note) note.style.color='';
     if(note) note.textContent=(d.per_call_cost===null?'No priced model call is on record yet, so cost is not estimated. ':'Cost per call is the mean of '+d.priced_calls_on_record+' priced diagnoses in past campaigns. ')+'Model latency is not included in the wall clock. Wall clock is the real budget, not money (DESIGN.md §7).';
   }catch(e){tb.replaceChildren();const tr=document.createElement('tr');const td=document.createElement('td');td.colSpan=5;td.textContent='Could not estimate: '+e.message;tr.appendChild(td);tb.appendChild(tr);}
 }
 function updateBudgetForMode(name){
   renderBudget();
   if(!document.getElementById('chatPane').classList.contains('collapsed')){
-    const tip=name==='Advisory'?'I will measure and diagnose, then record my proposal with its exact diff. Nothing is applied or deployed: you apply it yourself.':
+    const tip=name==='Advisory'?'I will measure, then record up to three ranked proposals, each with its exact diff. Nothing is applied or deployed: you apply one yourself.':
               name==='Fully Automated'?'Make sure the property bounds in <code>profile.yaml</code> are what you want — the agent won\'t ask for approval between experiments.':
               name==='Ceiling Probe'?'No config changes are made — the probe escalates load in steps and stops at the first level that breaks your SLA.':
               'You\'ll get an approval prompt for each proposed change before it deploys.';
@@ -1956,6 +1962,7 @@ function wizardBody(){
     experiments:parseInt(_wzVal('wz-experiments'))||5,
     ..._requestsAndData(),
     hooks:_hooksBody(),
+    accept_tradeoffs:!!document.getElementById('wz-tradeoffs')?.checked,
     cost_cap_usd:_wzVal('wz-cost-cap')?Number(_wzVal('wz-cost-cap')):null,
     wall_clock_cap_h:_wzVal('wz-wall-cap')?Number(_wzVal('wz-wall-cap')):null};
   if(mode==='Ceiling Probe') body.ceiling={start_users:parseInt(_wzVal('ceil-start')),step:parseInt(_wzVal('ceil-step')),max_users:parseInt(_wzVal('ceil-max')),hold_s:parseInt(_wzVal('ceil-hold'))};
@@ -2167,8 +2174,10 @@ async function saveWizard(){
     renderReview();loadWizard();
   }catch(e){addChatMsg('ai','⚠ Save refused: '+escHtml(e.message));}
 }
+let capOverrunAccepted=false;
 async function launchRun(){
   const body=wizardBody();
+  body.accept_cap_overrun=capOverrunAccepted;
   if(!body.run_id) body.run_id='run-'+Date.now();
   addChatMsg('ai','Writing slo.yaml and the profile, then starting <code>'+escHtml(body.run_id)+'</code>…');
   try{
@@ -2179,7 +2188,13 @@ async function launchRun(){
     addChatMsg('ai',escHtml(body.run_id)+' launched — job <code>'+escHtml(d.job.id)+'</code>. The SLA and profile on disk now hold your values.'+notes+' <a href="#" onclick="go(\'active\')">Watch live →</a>');
     updateJobsBadge();
     loadWizard();
+    capOverrunAccepted=false;
   }catch(e){
+    if(e.message.includes('cap_overrun')){
+      capOverrunAccepted=true;
+      addChatMsg('ai','⚠ '+escHtml(e.message.replace(/^HTTP 409: cap_overrun: /,''))+' <strong>Launch again to start anyway</strong>, or raise the cap in the Budget step.');
+      return;
+    }
     addChatMsg('ai','⚠ Launch refused: '+escHtml(e.message));
   }
 }

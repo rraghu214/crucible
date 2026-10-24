@@ -1813,6 +1813,20 @@ class WizardBody(BaseModel):
     data: dict[str, DataMapping] = Field(default_factory=dict)
     #: The collection's hooks (Group 41). None leaves slo.yaml's hooks as they are.
     hooks: HooksConfig | None = None
+    #: The operator saw "this wall-clock cap cannot fit the scenarios" and chose
+    #: to start anyway (operator decision 36.2, 24 October 2026).
+    accept_cap_overrun: bool = False
+    #: 39.3 opt-in, written onto every scenario that is judged per endpoint.
+    accept_tradeoffs: bool = False
+
+
+def _cap_warning(body: WizardBody) -> str:
+    from ..perf.commands import wall_clock_warning
+    from ..perf.fixtures import DEFAULT_WARMUP_S
+
+    if body.mode == "Ceiling Probe":
+        return ""
+    return wall_clock_warning(body.wall_clock_cap_h, [(DEFAULT_WARMUP_S, sc.duration_s) for sc in body.scenarios])
 
 
 def _wizard_paths(ctx: PerfContext) -> tuple[Path, Path, Path]:
@@ -1854,6 +1868,8 @@ def _declared_scenarios(body: WizardBody) -> list[dict[str, Any]] | None:
         if requests:
             entry["requests"] = requests
             entry["data"] = {var: m.model_dump() for var, m in body.data.items()}
+        if body.accept_tradeoffs and ("mix" in entry or "requests" in entry):
+            entry["accept_tradeoffs"] = True
         declared.append(entry)
     return declared
 
@@ -1963,14 +1979,15 @@ async def perf_wizard_budget(body: WizardBody, request: Request):
                 result[key] = sum(est[key] for _, est in parts)
             result["cost"] = None if parts[0][1]["cost"] is None else sum(est["cost"] for _, est in parts)
     result["currency"] = pricing.currency
+    result["cap_warning"] = _cap_warning(body)
     return result
 
 
 def _launch_notes(body: WizardBody) -> list[str]:
     notes = []
     if body.mode == "Advisory":
-        notes.append("Advisory: each scenario is measured and diagnosed once, and the proposal is recorded with "
-                     "its exact diff. Nothing is applied, deployed or re-measured; you apply it yourself.")
+        notes.append("Advisory: each scenario is measured, then up to three ranked proposals are recorded, each "
+                     "with its exact diff. Nothing is applied, deployed or re-measured; you apply one yourself.")
     if body.mode != "Ceiling Probe" and body.scenarios:
         names = ", ".join(sc.name for sc in body.scenarios)
         notes.append(f"Runs {len(body.scenarios)} scenario(s) in order ({names}), each as its own campaign "
@@ -2016,6 +2033,9 @@ async def perf_wizard_launch(body: WizardBody, request: Request):
         raise HTTPException(422, "a ceiling probe needs its bounds (DESIGN.md 20.2)")
     if body.mode != "Ceiling Probe" and not body.scenarios:
         raise HTTPException(422, "at least one scenario is required")
+    warning = _cap_warning(body)
+    if warning and not body.accept_cap_overrun:
+        raise HTTPException(409, f"cap_overrun: {warning} Click Launch again to start anyway.")
     _check_load_data(body, ctx)
     sla_path, profile_path, locustfile = _wizard_paths(ctx)
     try:

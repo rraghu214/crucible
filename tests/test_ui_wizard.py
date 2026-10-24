@@ -178,6 +178,17 @@ class TestLaunch:
         assert response.status_code == 409 and "not 100" in response.json()["detail"]
         assert (_paths(root)[0].read_bytes(), _paths(root)[1].read_bytes()) == before
 
+    def test_a_wall_clock_cap_that_cannot_fit_asks_before_starting(self, client):
+        """Group 36.2 (operator option a): warn in Budget, confirm at Launch."""
+        tc, started = client
+        tight = _body(wall_clock_cap_h=0.1)  # two scenarios need (120+300)+(120+180) s = 0.2 h
+        assert "cannot fit" in tc.post("/v1/perf/wizard/budget", json=tight).json()["cap_warning"]
+        refused = tc.post("/v1/perf/wizard/launch", json=tight, headers=AUTH)
+        assert refused.status_code == 409 and refused.json()["detail"].startswith("cap_overrun:")
+        assert started == []
+        accepted = tc.post("/v1/perf/wizard/launch", json={**tight, "accept_cap_overrun": True}, headers=AUTH)
+        assert accepted.status_code == 200 and started
+
     def test_the_budget_steps_caps_reach_the_run(self, client):
         tc, started = client
         tc.post("/v1/perf/wizard/launch", json=_body(cost_cap_usd=0.1, wall_clock_cap_h=8), headers=AUTH)

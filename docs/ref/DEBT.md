@@ -120,3 +120,18 @@ work. Fix only when touching the file for another reason.
   system prompt (D1 decision). `Diagnoser.diagnose` accepts `stakeholder_request`
   as a keyword argument and prepends it when non-empty. Class C replay cases now
   measure resistance to stakeholder pressure correctly.
+
+## Deferred by the operator, 25 October 2026 (Part B)
+
+- **Templated request bodies insert values as written** (assertion 40.4). A
+  data value containing a quote breaks a JSON body. Escaping would be safer, but
+  a numeric column would then arrive as a string. Deferred until a real target
+  needs it.
+- **Data rows are shared by all simulated users, cycling in order** (40.4). There
+  is no per-user sequencing (e.g. each simulated user owning one account).
+  Deferred.
+- **Hooks are not run as a separate low-privilege OS user** (41.2). The
+  environment allowlist is enforced in code, so the control token and API keys
+  never reach a hook. Isolation from Crucible's *files* is a documented setup
+  step (`docs/HOOKS.md`) and is not yet wired into Crucible (e.g. `sudo -u
+  crucible-hooks`).

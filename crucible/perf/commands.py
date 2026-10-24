@@ -607,6 +607,16 @@ def cmd_abort(run_id: str, *, reason: str = "", state_dir: str | None = None) ->
     Everything already measured and kept stands.
     """
     root = _state_dir(state_dir)
+    if paused_state_path(root, run_id).exists():
+        return _abort_paused(root, run_id, reason)
+    series_path = _series_path(root, run_id)
+    if series_path.exists():
+        plan = json.loads(series_path.read_text(encoding="utf-8"))
+        if str(plan.get("status", "")).startswith("paused"):
+            plan["status"] = f"aborted while paused: {reason or 'operator abort'}"
+            _save_series(root, plan)
+            print(f"series {run_id}: {plan['status']}")
+            return OK
     path = request_abort(root, run_id, reason)
     print(f"abort requested for run {run_id} ({path})")
     print("  - the in-flight experiment will be discarded")
@@ -614,6 +624,33 @@ def cmd_abort(run_id: str, *, reason: str = "", state_dir: str | None = None) ->
     print("  - if a change was deployed, the target is rolled back to the last")
     print("    commit it confirmed running")
     print("  - the campaign stops at its next experiment boundary, not mid-apply")
+    return OK
+
+
+def _abort_paused(root: Path, run_id: str, reason: str, results_dir: str | Path = "results") -> int:
+    """Abort a PAUSED campaign: finish its manifest so the final report can be made.
+
+    A paused campaign is not running, so an abort marker would never be read and
+    the run would stay "paused" forever. Nothing to roll back: a pause happens
+    at an experiment boundary, with the target on the last verified change.
+    """
+    reason = reason or "operator abort while paused"
+    manifest_path = Path(results_dir) / f"{run_id}.json"
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        why = manifest.get("pause_reason") or "paused"
+        manifest.update(paused=False, aborted=True, abort_reason=reason, finished_at_epoch_s=time.time(),
+                        stopped_reason=f"aborted while paused ({why}): {reason}")
+        manifest_path.write_text(json.dumps(manifest, indent=2, default=str), encoding="utf-8")
+    paused_state_path(root, run_id).unlink(missing_ok=True)
+    pause_marker_path(root, run_id).unlink(missing_ok=True)
+    plan = _series_for_run(root, run_id)
+    if plan is not None:
+        scenario = next(n for n, r in plan["runs"].items() if r == run_id)
+        plan["status"] = f"aborted in {scenario}: {reason}"
+        _save_series(root, plan)
+    print(f"run {run_id} was paused; it is now finished as aborted ({reason}).")
+    print(f"  final report: crucible report --run {run_id}")
     return OK
 
 
@@ -669,6 +706,19 @@ def cmd_resume(run_id: str, state_dir: str | None = None, **kwargs: Any) -> int:
 
     root = _state_dir(state_dir)
     ps = paused_state_path(root, run_id)
+    new_caps = {k: kwargs[k] for k in ("cost_cap_usd", "wall_clock_cap_h") if kwargs.get(k) is not None}
+    for key in ("cost_cap_usd", "wall_clock_cap_h"):
+        kwargs.pop(key, None)
+    series_path = _series_path(root, run_id)
+    if not ps.exists() and series_path.exists():
+        # A series paused BETWEEN scenarios (a cap ran out): resume it by its id.
+        plan = json.loads(series_path.read_text(encoding="utf-8"))
+        if not str(plan.get("status", "")).startswith("paused"):
+            print(f"series {run_id!r} is {plan.get('status')!r}; nothing to resume")
+            return REFUSED
+        plan["caps"] = {**(plan.get("caps") or {}), **new_caps}
+        print(f"resuming series {run_id} with caps {plan['caps']}")
+        return _continue_series(root, plan)
     if not ps.exists():
         print(f"no paused state for {run_id!r} — expected {ps}")
         return REFUSED
@@ -680,9 +730,11 @@ def cmd_resume(run_id: str, state_dir: str | None = None, **kwargs: Any) -> int:
             # resume command's defaults.
             name = next(n for n, r in plan["runs"].items() if r == run_id)
             names = list(plan["runs"])
+            if new_caps:
+                plan["caps"] = {**(plan.get("caps") or {}), **new_caps}
             campaign = _scenario_campaign(root, plan, name, names.index(name) + 1, len(names))
         else:
-            campaign = build_campaign(run_id=run_id, state_dir=str(root), **kwargs)
+            campaign = build_campaign(run_id=run_id, state_dir=str(root), **kwargs, **new_caps)
     except (CampaignRefused, FileNotFoundError, ValueError, _SeriesCapReached) as exc:
         print(f"campaign refused: {exc}")
         return REFUSED
@@ -1043,6 +1095,39 @@ def _check_workspace_sync(workspace: Path, profile: "TargetProfile") -> None:
         )
 
 
+def typical_call_cost(results_dir: str | Path = "results") -> float | None:
+    """Mean cost of one priced diagnosis across past manifests; None with no history."""
+    from ..economics.pricing import Pricing  # noqa: PLC0415
+    from .report import ReportError, load_campaign  # noqa: PLC0415
+    from .scorer import _load_pricing_yaml, score_cost  # noqa: PLC0415
+
+    pricing = Pricing.from_mapping(_load_pricing_yaml())
+    costs: list[float] = []
+    for path in sorted(Path(results_dir).glob("*.json")):
+        try:
+            costs += [c for c in score_cost(load_campaign(path), pricing).per_experiment if c]
+        except (ReportError, OSError, ValueError, TypeError):
+            continue
+    return sum(costs) / len(costs) if costs else None
+
+
+def minimum_wall_clock_s(windows: list[tuple[float, float]]) -> float:
+    """The least wall clock a run can take: each scenario's warmup + baseline."""
+    return sum(warmup + measure for warmup, measure in windows)
+
+
+def wall_clock_warning(cap_h: float | None, windows: list[tuple[float, float]]) -> str:
+    """Operator, 24 October 2026: a cap that cannot fit the scenarios is called out up front."""
+    if cap_h is None:
+        return ""
+    need = minimum_wall_clock_s(windows)
+    if need <= cap_h * 3600:
+        return ""
+    return (f"the wall-clock cap of {cap_h:g} h cannot fit the scenarios: their baselines alone need "
+            f"{need / 3600:.2f} h ({len(windows)} scenario(s), warmup + measured window each), before any "
+            "experiment. The run would pause at the cap.")
+
+
 def _positive(name: str, value: float | None) -> float | None:
     if value is not None and value <= 0:
         raise ValueError(f"{name} must be greater than 0, got {value}")
@@ -1091,6 +1176,7 @@ def build_campaign(
     mix: dict[str, Any] | None = None,
     requests: list[dict[str, Any]] | None = None,
     data: dict[str, dict[str, str]] | None = None,
+    accept_tradeoffs: bool = False,
 ) -> Any:
     """Assemble a real campaign from configuration. Kept apart from ``cmd_run``
     so a test can build one without going through argparse."""
@@ -1208,6 +1294,8 @@ def build_campaign(
         confirm_config_changes=approve_mode == "file" and not advisory,
         advisory=advisory,
         mix_targets=mix_targets,
+        accept_tradeoffs=bool(accept_tradeoffs and mix_targets),
+        typical_call_cost_usd=typical_call_cost(),
         cost_cap_usd=_positive("cost cap", cost_cap_usd),
         wall_clock_cap_s=None if wall_clock_cap_h is None else _positive("wall-clock cap", wall_clock_cap_h) * 3600,
     )
@@ -1251,7 +1339,8 @@ def _scenario_campaign(root: Path, plan: dict[str, Any], name: str, index: int, 
             raise _SeriesCapReached(f"the series' {key.replace('_', ' ')} is used up before {name!r}")
     kwargs.update(scenario_name=name, users=definition["users"], warmup_s=definition["warmup_s"],
                   measure_s=definition["measure_s"], spawn_rate=definition.get("spawn_rate"),
-                  mix=definition.get("mix"), requests=definition.get("requests"), data=definition.get("data"))
+                  mix=definition.get("mix"), requests=definition.get("requests"), data=definition.get("data"),
+                  accept_tradeoffs=definition.get("accept_tradeoffs", False))
     campaign = build_campaign(run_id=f"{plan['id']}-{name}", state_dir=str(root), **kwargs)
     campaign.declared_scenario = name
     campaign.series = {"id": plan["id"], "index": index, "of": of, "scenario": name}
@@ -1297,7 +1386,9 @@ def _continue_series(root: Path, plan: dict[str, Any]) -> int:
         try:
             campaign = _scenario_campaign(root, plan, name, index, of)
         except _SeriesCapReached as exc:
-            plan["status"] = f"stopped: {exc}"
+            series_id = plan["id"]
+            plan["status"] = (f"paused: {exc}. Resume with a higher cap: `crucible resume {series_id} "
+                              "--cost-cap ... / --wall-clock-cap ...`, or abort it")
             break
         except (CampaignRefused, FileNotFoundError, ValueError) as exc:
             plan["status"] = f"stopped: scenario {name!r} refused ({exc})"
@@ -1336,8 +1427,13 @@ def _run_series(state_dir: Path, run_id: str, kwargs: dict[str, Any]) -> int:
         return REFUSED
     series_id = run_id or time.strftime("series-%Y%m%d-%H%M%S", time.gmtime())
     caps = {"cost_cap_usd": kwargs.pop("cost_cap_usd", None), "wall_clock_cap_h": kwargs.pop("wall_clock_cap_h", None)}
-    for key in ("scenario_name", "users", "warmup_s", "measure_s", "spawn_rate", "mix", "requests", "data"):
+    for key in ("scenario_name", "users", "warmup_s", "measure_s", "spawn_rate", "mix", "requests", "data",
+                "accept_tradeoffs"):
         kwargs.pop(key, None)
+    warning = wall_clock_warning(caps["wall_clock_cap_h"],
+                                 [(sc["warmup_s"], sc["measure_s"]) for sc in sla.scenarios])
+    if warning:
+        print(f"WARNING: {warning}")
     plan = {"id": series_id, "started_at_epoch_s": time.time(), "kwargs": kwargs, "caps": caps,
             "done": [], "runs": {}, "spent_usd": 0.0, "active_s": 0.0, "status": "running"}
     return _continue_series(state_dir, plan)
@@ -1351,6 +1447,10 @@ def cmd_run(**kwargs: Any) -> int:
     run_id = kwargs.pop("run_id", "") or ""
     if kwargs.pop("all_scenarios", False):
         return _run_series(state_dir, run_id, kwargs)
+    warning = wall_clock_warning(kwargs.get("wall_clock_cap_h"),
+                                 [(kwargs.get("warmup_s", 120.0), kwargs.get("measure_s", 300.0))])
+    if warning:
+        print(f"WARNING: {warning}")
     try:
         campaign = build_campaign(run_id=run_id, state_dir=state_dir, **kwargs)
     except (CampaignRefused, FileNotFoundError, ValueError) as exc:

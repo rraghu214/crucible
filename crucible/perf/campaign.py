@@ -90,6 +90,25 @@ RUNNABLE_ENVIRONMENT_KINDS = ("pre-prod", "preprod", "staging", "dev", "test", "
 #: proposing forbidden properties -- and stopping with the real reason is more
 #: useful than letting it exhaust a budget it never spent.
 MAX_CONSECUTIVE_REFUSALS = 3
+#: Stop after this many applied-and-measured experiments in a row that were not
+#: kept (operator guardrail, 25 October 2026). Guard refusals are not counted.
+MAX_CONSECUTIVE_FAILURES = 3
+
+
+def measured_failure_streak(experiments: list[Any]) -> int:
+    """Trailing run of measured experiments that were WORSE or INCONCLUSIVE and
+    not kept. Refusals were never measured, so they neither count nor break it."""
+    streak = 0
+    for manifest in reversed(experiments):
+        if manifest.refused_by_guard:
+            continue
+        if manifest.verdict in (WORSE, INCONCLUSIVE) and not manifest.kept:
+            streak += 1
+        else:
+            break
+    return streak
+#: Advisory mode records up to this many ranked proposals (operator, 24 October 2026).
+ADVISORY_ALTERNATIVES = 3
 
 
 class CampaignRefused(RuntimeError):
@@ -252,6 +271,10 @@ def _parse_scenarios(raw: Any, source: Path) -> list[dict[str, Any]]:
             raise CampaignRefused(f"{source}: scenario {name!r} has an out-of-range value: {entry}")
         if "mix" in item:
             entry["mix"] = _parse_mix(item["mix"], name, source)
+        if "accept_tradeoffs" in item:
+            if not isinstance(item["accept_tradeoffs"], bool):
+                raise CampaignRefused(f"{source}: scenario {name!r} accept_tradeoffs must be true or false")
+            entry["accept_tradeoffs"] = item["accept_tradeoffs"]
         if "requests" in item:
             if "mix" in entry:
                 raise CampaignRefused(f"{source}: scenario {name!r} declares both mix and requests; a "
@@ -377,13 +400,18 @@ def mix_from(declared: dict[str, dict[str, Any]], sla: Sla) -> tuple[dict[str, i
     return tags, targets
 
 
-def combine_endpoint_verdicts(verdicts: dict[str, str]) -> str:
+def combine_endpoint_verdicts(verdicts: dict[str, str], tolerated: set[str] | None = None) -> str:
     """One verdict for a mix, never hiding an endpoint that got worse.
 
     Any WORSE is WORSE; any endpoint unmeasured is NOT_MEASURED; IMPROVED needs
     at least one IMPROVED and none WORSE; otherwise INCONCLUSIVE.
+
+    ``tolerated``: endpoints whose WORSE is an accepted trade-off -- the
+    operator opted in, and each is still within its own target (39.3). They
+    count as INCONCLUSIVE, never as a win.
     """
-    values = set(verdicts.values())
+    tolerated = tolerated or set()
+    values = {INCONCLUSIVE if (v == WORSE and e in tolerated) else v for e, v in verdicts.items()}
     if WORSE in values:
         return WORSE
     if NOT_MEASURED in values or not values:
@@ -973,6 +1001,9 @@ class Campaign:
     #: Traffic mix: endpoint -> its own p99 target. Non-empty means every SLA
     #: check and verdict is per endpoint, never on the blended p99.
     mix_targets: dict[str, float] = field(default_factory=dict)
+    #: Operator opt-in (39.3): an endpoint that got slower but is still within
+    #: its own target does not make the experiment WORSE. Off by default.
+    accept_tradeoffs: bool = False
 
     def _met(self, load: dict[str, Any]) -> bool | None:
         """Is the SLA met by this measurement (a load summary)? Per endpoint for a mix."""
@@ -991,6 +1022,9 @@ class Campaign:
     #: ``(result) -> spent so far``; ``None`` prices the manifest the way the
     #: scorer does (config/pricing.yaml). Injectable so a test need not price.
     cost_so_far: Any = None
+    #: Mean cost of one diagnosis in past runs; the next-experiment estimate when
+    #: this run has priced none yet. ``None`` means no history: no estimate.
+    typical_call_cost_usd: float | None = None
     #: Per-experiment hooks (§10). before_each and after_each gate each
     #: experiment; on_abort fires when the campaign is cut short. A failing
     #: before_each or after_each raises HookFailed, which becomes a
@@ -1125,6 +1159,13 @@ class Campaign:
         # other (re-baselined if the load moved), against the configuration the
         # campaign had when it paused -- not the one this process just loaded.
         self._edits_confirmed = True
+        # A resume without new limits keeps the old ones; `--cost-cap` /
+        # `--wall-clock-cap` on resume raise them (operator, 24 October 2026).
+        saved_caps = resume_state.get("caps") or {}
+        if self.cost_cap_usd is None:
+            self.cost_cap_usd = saved_caps.get("cost_usd")
+        if self.wall_clock_cap_s is None:
+            self.wall_clock_cap_s = saved_caps.get("wall_clock_s")
         if resume_state.get("sla_object"):
             self.sla = Sla(**{**resume_state["sla_object"],
                               "source_path": Path(resume_state["sla_object"]["source_path"])
@@ -1291,8 +1332,17 @@ class Campaign:
                 return
             capped = self._cap_reached(result, number)
             if capped:
-                result.stopped_reason = capped
-                return
+                # Pause, never stop (operator, 24 October 2026): resume with a
+                # higher cap, or abort to finish the run as it stands.
+                raise CampaignPaused(
+                    f"paused: {capped} Resume with a higher cap (`crucible resume {self.run_id} "
+                    "--cost-cap ... / --wall-clock-cap ...`), or abort to finish the run.",
+                    self._pause_state(
+                        result, reason="cap reached", number_prev=number - 1, charged_prev=charged - 1,
+                        consecutive_refusals=consecutive_refusals, current_snapshot=current_snapshot,
+                        current_load=current_load, pending=pending,
+                    ),
+                )
             pause_reason = pause_requested(self.state_dir, self.run_id)
             if pause_reason:
                 # Undo the pre-increment so that resume re-enters the loop at
@@ -1426,6 +1476,17 @@ class Campaign:
                 return
             if not keep_going:
                 return
+            streak = measured_failure_streak(result.experiments)
+            if streak >= MAX_CONSECUTIVE_FAILURES:
+                # Operator guardrail, 25 October 2026: three changes in a row that
+                # were applied, measured and not kept means the agent is not
+                # finding the problem; continuing only spends wall clock.
+                result.stopped_reason = (
+                    f"{streak} measured experiments in a row were not kept (worse or inconclusive), "
+                    "so the campaign stopped rather than keep trying. Every one was reverted; the "
+                    "target is on the last verified configuration."
+                )
+                return
 
         result.stopped_reason = f"reached the experiment ceiling of {self.max_experiments}"
 
@@ -1461,6 +1522,7 @@ class Campaign:
             "guarded_files": dict(result.guarded_files),
             "sla_object": self.sla.as_dict(),
             "paused_seconds": result.paused_seconds,
+            "caps": {"cost_usd": self.cost_cap_usd, "wall_clock_s": self.wall_clock_cap_s},
         }
 
     def _spent(self, result: CampaignResult) -> float:
@@ -1486,7 +1548,25 @@ class Campaign:
                                   "spent_usd": round(spent, 6), "before_experiment": number}
                 return (f"cost cap reached before experiment {number}: ${spent:.4f} of "
                         f"${self.cost_cap_usd:.4f} spent on model calls. Kept changes stand.")
+            # Refuse an experiment that would cross the cap (operator, 24 October
+            # 2026), estimated from this run's own calls, else past runs'.
+            estimate = self._next_experiment_cost(result)
+            if estimate is not None and spent + estimate > self.cost_cap_usd:
+                result.cap_hit = {"cap": "cost", "limit_usd": self.cost_cap_usd, "spent_usd": round(spent, 6),
+                                  "next_estimate_usd": round(estimate, 6), "before_experiment": number}
+                return (f"cost cap would be crossed by experiment {number}: ${spent:.4f} spent plus about "
+                        f"${estimate:.4f} for the next diagnosis exceeds ${self.cost_cap_usd:.4f}. "
+                        "Kept changes stand.")
         return ""
+
+    def _next_experiment_cost(self, result: CampaignResult) -> float | None:
+        if self.cost_so_far is not None:
+            return self.typical_call_cost_usd
+        from ..economics.pricing import Pricing  # noqa: PLC0415
+        from .scorer import _load_pricing_yaml, score_cost  # noqa: PLC0415
+
+        own = [c for c in score_cost(result.as_dict(), Pricing.from_mapping(_load_pricing_yaml())).per_experiment if c]
+        return sum(own) / len(own) if own else self.typical_call_cost_usd
 
     def _absorb_operator_edits(
         self, result: CampaignResult, number: int, current_load: LoadResult,
@@ -1589,6 +1669,8 @@ class Campaign:
                 tags=(tag_for_endpoint(new_sla.endpoint),) if "endpoint" in changes else self.scenario.tags,
             )
             new_def = changes["scenario"]["to"] if "scenario" in changes else None
+            if new_def is not None:
+                self.accept_tradeoffs = bool(new_def.get("accept_tradeoffs"))
             if new_def and new_def.get("mix"):
                 tag_mix, self.mix_targets = mix_from(new_def["mix"], new_sla)
                 self.scenario = replace(self.scenario, mix=tag_mix, tags=())
@@ -1690,7 +1772,69 @@ class Campaign:
             )
             return False
 
+        if self.advisory:
+            return await self._advise(result, manifest, snapshot, proposal, prior)
         return await self._approve_apply_verify(result, manifest, proposal)
+
+    async def _advise(self, result: CampaignResult, manifest: ExperimentManifest, snapshot: dict[str, Any],
+                      first: Proposal, prior: Any) -> bool:
+        """Advisory: up to ADVISORY_ALTERNATIVES ranked proposals, each guard-checked
+        with its exact diff. Nothing is written, deployed or measured, so the
+        verdict is NOT_MEASURED -- an unapplied proposal never looks verified.
+
+        Alternatives are asked for by telling the model which proposals it has
+        already made (operator, 24 October 2026). It stops early when the model
+        abstains or repeats itself; every extra call is recorded and priced.
+        """
+        proposals: list[tuple[Proposal, dict[str, Any] | None]] = [(first, None)]
+        seen = {first.summary()}
+        for _ in range(ADVISORY_ALTERNATIVES - 1):
+            already = tuple(f"{s} (already proposed in this advisory run; propose a DIFFERENT alternative)"
+                            for s in seen)
+            extra = await self.diagnoser.diagnose(
+                snapshot, self.sla.as_dict(), ruled_out=tuple(result.ruled_out) + already,
+                prior_findings=render_for_prompt(prior), stakeholder_request=self.stakeholder_request,
+            )
+            if extra.model:
+                result.models_used.append(extra.model)
+            if extra.proposal.abstained or extra.proposal.summary() in seen:
+                break
+            proposals.append((extra.proposal, extra.as_dict()))
+            seen.add(extra.proposal.summary())
+
+        alternatives: list[dict[str, Any]] = []
+        for rank, (proposal, diagnosis) in enumerate(proposals, 1):
+            entry: dict[str, Any] = {"rank": rank, "cause_family": proposal.cause_family,
+                                     "reasoning": proposal.reasoning, "confidence": proposal.confidence,
+                                     "predicted_p99_ms": proposal.predicted_p99_ms}
+            if diagnosis is not None:
+                entry["diagnosis"] = diagnosis
+            refusal = guard_proposal(self.profile, proposal)
+            if refusal:
+                entry["refused"] = refusal
+            else:
+                entry.update(self.applicator.preview(self._with_current_values(proposal)))
+            alternatives.append(entry)
+
+        usable = [a for a in alternatives if "refused" not in a]
+        if not usable:
+            reasons = "; ".join(a["refused"] for a in alternatives)
+            manifest.refused_by_guard = True
+            manifest.advisory = {"alternatives": alternatives}
+            manifest.verdict_reason = f"guard refused every advisory proposal: {reasons}"
+            result.ruled_out.extend(f"{p.summary()} (refused by guard)" for p, _ in proposals)
+            self.audit_log.guard_refusal(manifest.experiment, reason=reasons)  # type: ignore[union-attr]
+            return True
+
+        manifest.advisory = {**{k: v for k, v in usable[0].items() if k != "diagnosis"}, "alternatives": alternatives}
+        manifest.verdict = NOT_MEASURED
+        manifest.verdict_reason = (f"advisory: {len(usable)} proposal(s) recorded, ranked, each with its exact diff; "
+                                   "nothing was applied, deployed or measured")
+        result.stopped_reason = (f"advisory run: {len(usable)} ranked proposal(s) recorded with exact diffs and "
+                                 "nothing applied. Apply one yourself, then run again to measure its effect.")
+        self._emit("advisory", experiment=manifest.experiment, diff=usable[0].get("diff", ""),
+                   alternatives=len(usable))
+        return False
 
     def _restore_pending(self, manifest: ExperimentManifest, pending: ExperimentManifest) -> Proposal:
         """Carry a parked proposal, and what produced it, onto this experiment."""
@@ -1735,19 +1879,6 @@ class Campaign:
         # apply time -- this value could be stale by then, and the revert must use
         # the one that was actually in force.
         proposal = self._with_current_values(proposal)
-
-        if self.advisory:
-            # Advisory: the agent proposes, the operator applies. Nothing is
-            # written, deployed or measured, so the verdict is NOT_MEASURED --
-            # an unapplied proposal must never look like a verified one (principle 1).
-            manifest.advisory = self.applicator.preview(proposal)
-            manifest.verdict = NOT_MEASURED
-            manifest.verdict_reason = ("advisory: proposed with the exact diff on this manifest; nothing was "
-                                       "applied, deployed or measured")
-            result.stopped_reason = ("advisory run: one proposal recorded with its exact diff and nothing "
-                                     "applied. Apply it yourself, then run again to measure its effect.")
-            self._emit("advisory", experiment=manifest.experiment, diff=manifest.advisory.get("diff", ""))
-            return False
 
         request = ApprovalRequest.from_proposal(proposal, self.run_id, manifest.experiment)
         try:
@@ -1891,8 +2022,14 @@ class Campaign:
                 verdict, reason = verdict_for(b, a, self.sla.noise_p99_spread_pct)
                 per[endpoint] = {"verdict": verdict, "reason": reason, "before_p99_ms": b, "after_p99_ms": a,
                                  "target_p99_ms": target}
+            tolerated: set[str] = set()
+            if self.accept_tradeoffs:
+                tolerated = {e for e, v in per.items() if v["verdict"] == WORSE
+                             and v["after_p99_ms"] is not None and v["after_p99_ms"] <= v["target_p99_ms"]}
+                for e in tolerated:
+                    per[e]["tradeoff_accepted"] = True
             manifest.per_endpoint = per
-            manifest.verdict = combine_endpoint_verdicts({e: v["verdict"] for e, v in per.items()})
+            manifest.verdict = combine_endpoint_verdicts({e: v["verdict"] for e, v in per.items()}, tolerated)
             manifest.verdict_reason = "traffic mix, judged per endpoint: " + "; ".join(
                 f"{e} {v['verdict']} ({v['before_p99_ms']} -> {v['after_p99_ms']} ms, target {v['target_p99_ms']:g})"
                 for e, v in per.items())

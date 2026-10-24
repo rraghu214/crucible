@@ -1,6 +1,6 @@
 """Multi-scenario campaigns: `crucible run --all-scenarios`. Group 37.
 
-DRAFTED by Claude Code, 24 October 2026. NOT YET REVIEWED by the operator.
+DRAFTED by Claude Code, 24 October 2026. REVIEWED AND APPROVED by the operator, 25 October 2026 (see docs/CRUCIBLE_TEST_ASSERTIONS.md).
 See `docs/CRUCIBLE_TEST_ASSERTIONS.md` GROUP 37 for the questions to check.
 
 Until now only the wizard's first scenario ran. The SLA now declares a
@@ -118,15 +118,16 @@ class TestCapsCoverTheSeries:
     def test_each_scenario_gets_what_is_left_and_the_series_stops_when_used_up(self, setup, monkeypatch):
         _, state, builds, _, base = setup
         monkeypatch.setattr("crucible.perf.scorer.score_cost",
-                            lambda campaign, pricing: type("C", (), {"total": 0.06})())
+                            lambda campaign, pricing: type("C", (), {"total": 0.06, "per_experiment": ()})())
         commands.cmd_run(**base, state_dir=str(state), run_id="s4", all_scenarios=True, cost_cap_usd=0.1)
         assert builds[0]["cost_cap_usd"] == pytest.approx(0.1)
         assert builds[1]["cost_cap_usd"] == pytest.approx(0.04)
 
         builds.clear()
         commands.cmd_run(**base, state_dir=str(state), run_id="s5", all_scenarios=True, cost_cap_usd=0.05)
+        # A cap reached inside a scenario pauses that scenario (Group 36).
         assert [b["run_id"] for b in builds] == ["s5-steady"]
-        assert "cost cap reached" in _plan(state, "s5")["status"]
+        assert _plan(state, "s5")["status"].startswith("paused in steady")
 
     def test_a_cap_used_up_between_scenarios_stops_before_the_next(self, setup, monkeypatch):
         _, state, builds, _, base = setup
@@ -135,7 +136,13 @@ class TestCapsCoverTheSeries:
                             lambda plan, name, result: plan.update(spent_usd=next(spent) + 0.06))
         commands.cmd_run(**base, state_dir=str(state), run_id="s6", all_scenarios=True, cost_cap_usd=0.05)
         assert [b["run_id"] for b in builds] == ["s6-steady"]
-        assert "used up before 'burst'" in _plan(state, "s6")["status"]
+        status = _plan(state, "s6")["status"]
+        assert status.startswith("paused:") and "used up before 'burst'" in status
+
+        # Group 36: a series paused between scenarios resumes by its id, with a higher cap.
+        assert commands.cmd_resume("s6", state_dir=str(state), cost_cap_usd=1.0) == commands.OK
+        assert [b["run_id"] for b in builds] == ["s6-steady", "s6-burst"]
+        assert _plan(state, "s6")["status"] == "complete"
 
 
 class TestRefusals:

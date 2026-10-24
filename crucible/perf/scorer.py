@@ -396,6 +396,13 @@ def score_cost(campaign: dict[str, Any], pricing: Pricing) -> CostScore:
             input_tokens=int(diagnosis.get("input_tokens") or 0),
             output_tokens=int(diagnosis.get("output_tokens") or 0),
         )
+        # Advisory alternatives are extra model calls on the same experiment.
+        for alternative in (e.get("advisory") or {}).get("alternatives") or []:
+            extra = alternative.get("diagnosis") or {}
+            if extra:
+                cost += pricing.cost(extra.get("served_by_model"),
+                                     input_tokens=int(extra.get("input_tokens") or 0),
+                                     output_tokens=int(extra.get("output_tokens") or 0))
         per_experiment.append(cost)
     return CostScore(total=sum(per_experiment), currency=pricing.currency, per_experiment=tuple(per_experiment))
 

@@ -3771,7 +3771,7 @@ points to Save.
 
 # GROUP 34 — One knowledge store, separate vector indexes, and a subscription that ends
 
-*Drafted 24 October 2026 by Claude Code. NOT YET REVIEWED. Fixes the three items
+*Drafted 24 October 2026 by Claude Code. REVIEWED AND APPROVED by the operator, 24 October 2026 (34.1 acceptable; 34.3 clarified: one document index, plus the agent's own -- see Group 42). Fixes the three items
 of debt the operator asked for on 24 October 2026. Details:
 `docs/KNOWLEDGE_STORE.md`.*
 
@@ -3882,58 +3882,64 @@ campaigns (item 4) gave each scenario its own spawn rate; that is now built (Gro
 
 # GROUP 36 — Run caps: cost and wall clock
 
-*Drafted 24 October 2026 by Claude Code. NOT YET REVIEWED. Implemented in
-`tests/test_perf_run_caps.py` (8), plus one test in `tests/test_ui_wizard.py`.
-Code: `Campaign._cap_reached`, `crucible run --cost-cap / --wall-clock-cap`, and
-the wizard's Budget step.*
+*Drafted 24 October 2026 by Claude Code. REVIEWED AND APPROVED by the operator,
+24 October 2026, with the decisions below built in. Implemented in
+`tests/test_perf_run_caps.py` (16), plus tests in `tests/test_perf_series.py` and
+`tests/test_ui_wizard.py`. Code: `Campaign._cap_reached` /
+`_next_experiment_cost`, `crucible run|resume --cost-cap/--wall-clock-cap`,
+`_abort_paused` and `wall_clock_warning` in `commands.py`, and the wizard's
+Budget step.*
 
-*Operator, 24 October 2026: "Caps should be built." Both are checked at each
-experiment boundary, never mid-experiment. Reaching one stops the campaign
-cleanly: it is not an abort, so nothing is rolled back, because every kept
-change was measured and verified.*
-
----
-
-### 36.1 The cost cap stops the run once spend reaches it
-
-**What it checks.** With a cap of $0.002 and $0.001 spent per experiment, the run
-stops before experiment 3 with "cost cap reached". `cap_hit` names the cap,
-limit, amount spent and experiment, and the run is not marked aborted. Spend is
-priced from the manifest's own token counts, exactly as the scorer prices it
-(`config/pricing.yaml`).
-
-**For review:**
-- The check happens *before* an experiment, so the last experiment can take spend
-  past the cap by one diagnosis call (about $0.002). Acceptable, or should it
-  refuse an experiment whose estimated cost would cross the cap?
-- Hitting a cap stops in every mode, including Semi-Automated, rather than
-  pausing to ask for more budget. Right?
+*Operator decisions, 24 October 2026:*
+- *36.1.1 An experiment whose estimated cost would cross the cost cap is not
+  started.*
+- *36.1.2 Reaching a cap **pauses** the campaign in every mode. The operator
+  resumes with a higher cap, or aborts, which finishes the run so the final
+  report can be made.*
+- *36.2 Paused time never counts toward the wall clock. A cap that cannot fit
+  the scenarios is called out before anything runs (option a): a warning, plus
+  a "start anyway" confirmation at Launch.*
 
 ---
 
-### 36.2 The wall-clock cap counts running time, not time paused
+### 36.1 The cost cap pauses the run, and an experiment that would cross it does not start
 
-**What it checks.** A cap already exceeded stops the run before experiment 1.
-Started 2 h ago with 1 h 57 min paused, a 1 h cap is *not* reached; never paused,
-it is. Paused time accumulates across resumes (`paused_seconds` on the manifest).
-
-**Why it exists.** A campaign paused overnight must not trip its cap the moment
-it resumes. Wall clock is the real budget (§7), so this cap matters most.
+**What it checks.** With a cap of $0.002 and $0.001 per experiment, the run
+pauses before experiment 3 ("cost cap reached"), with `cap_hit` recorded, and is
+not aborted. With a cap of $0.0025 and a $0.001 estimate per diagnosis,
+experiment 3 is not started, because $0.002 spent plus $0.001 would pass the
+cap. The estimate is this run's own mean priced diagnosis, else past runs' mean;
+with no history there is no estimate. Resuming with a higher cap continues the
+run. Resuming without one keeps the old cap, and so pauses again.
 
 ---
 
-### 36.3 The caps are on the manifest, and every path carries them
+### 36.2 The wall clock counts running time only, and a cap that can't fit is called out
 
-**What it checks.** `caps` holds the limits in force (`cost_usd`,
-`wall_clock_s`), and `cap_hit` is empty unless one fired. `build_campaign`
-converts hours to seconds and refuses a cap of 0 or less. The CLI, the action
-builder (one token each, 28.4) and the wizard's Launch all pass both caps.
+**What it checks.** A cap already exceeded pauses the run before experiment 1.
+Started 2 h ago with 1 h 57 min paused, a 1 h cap is *not* reached. Four
+30-minute scenarios against a 1.5 h cap produce "cannot fit … 2.00 h". The
+command line prints a WARNING and continues. The wizard's Budget step shows the
+warning, and Launch is refused with `cap_overrun` until it is sent again as
+"start anyway".
+
+---
+
+### 36.3 Abort finishes a paused run; the caps are on the manifest and every path carries them
+
+**What it checks.** `crucible abort` on a paused run marks its manifest aborted
+("aborted while paused"), sets its finish time, and clears the pause state, so
+`crucible report` works. Before this, an abort marker on a paused run was never
+read, and the run stayed "paused" forever. A series paused between scenarios
+resumes by its own id (`crucible resume <series> --cost-cap …`). `caps` and
+`cap_hit` are on the manifest. A cap of 0 or less is refused. The CLI (on `run`
+and `resume`), the action builder and the wizard all carry both caps.
 
 ---
 
 # GROUP 37 — Multi-scenario campaigns, and ceiling-probe goal edits
 
-*Drafted 24 October 2026 by Claude Code. NOT YET REVIEWED. Implemented in
+*Drafted 24 October 2026 by Claude Code. REVIEWED AND APPROVED by the operator, 25 October 2026. Implemented in
 `tests/test_perf_series.py` (13), plus updated tests in `tests/test_ui_wizard.py`.
 Code: `Sla.scenarios` / `_parse_scenarios` in `campaign.py`; `_run_series`,
 `_continue_series`, `--all-scenarios` and series-aware `cmd_resume` in
@@ -3956,12 +3962,13 @@ them. Every scenario is judged against the one objective.*
 (`<state>/series/<id>.json`) ends `complete`. The wizard writes every scenario,
 with its Ramp as a spawn rate, and runs `--all-scenarios`.
 
-**For review:**
-- Is one shared objective right for every scenario? A burst at 2× load is judged
-  against the same p99 as steady load. Per-scenario targets arrive with
-  traffic-mix scenarios (item 6); should plain scenarios get an optional target
-  too?
-- `--experiments` is per scenario, not shared across the series. OK?
+**DECIDED, operator, 25 October 2026:**
+- The goal is set once, for the campaign. There are no per-scenario targets: a
+  goal that shouldn't hold at burst load belongs to a separate investigation, not
+  a quiet per-scenario exception. (A traffic mix's per-endpoint targets are a
+  different thing: they say which *endpoint* has which goal.)
+- `--experiments` stays per scenario, as built. A shared pool across the series
+  is not needed and will not be built.
 
 ---
 
@@ -4011,9 +4018,29 @@ endpoint, with the bounds it was started with.
 
 ---
 
+### 37.7 Three measured failures in a row stop the campaign
+
+*Added 25 October 2026 on the operator's instruction ("yes have this
+guardrail"). REVIEWED AND APPROVED by the operator, 25 October 2026. `tests/test_perf_failure_streak.py` (7).*
+
+**What it checks.** Three applied-and-measured experiments in a row that were
+not kept (WORSE or INCONCLUSIVE, each reverted) stop the campaign, with a reason
+saying so. The run is not aborted or paused, and the target is on the last
+verified configuration. A kept experiment resets the count. Guard refusals in
+between were never measured, so they neither count nor reset it; three
+refusals in a row is the existing, separate stop. The streak is read from the
+recorded experiments, so it carries across a pause and resume.
+
+**Why it exists.** Before this, a measured failure was reverted and the agent
+simply tried again, up to the experiment limit. Three misses in a row mean it
+isn't finding the problem, and every further try costs a full measurement
+window of wall clock.
+
+---
+
 # GROUP 38 — Advisory mode
 
-*Drafted 24 October 2026 by Claude Code. NOT YET REVIEWED. Implemented in
+*Drafted 24 October 2026 by Claude Code. REVIEWED AND APPROVED by the operator, 25 October 2026. Implemented in
 `tests/test_perf_advisory.py` (7), plus `tests/test_ui_wizard.py`. Code:
 `Applicator.preview`, `Campaign.advisory`, `crucible run --advisory`.*
 
@@ -4040,11 +4067,17 @@ pipeline.*
 **Why it exists.** Principle 1: an unapplied proposal is not a result, so it must
 never look like one. Principle 4: the human applies.
 
-**For review:**
-- Advisory stops after one proposal. Without applying, a second diagnosis would
-  see the same evidence and propose the same thing. Should it instead ask for
-  *alternatives* (two or three ranked proposals)?
-- With `--all-scenarios`, each scenario gets its own baseline and proposal.
+**DECIDED, operator, 24–25 October 2026: yes, ask for alternatives.** An
+Advisory experiment now records up to three **ranked** proposals in
+`advisory.alternatives`. Each is guard-checked and has its own exact diff; the
+first is also kept at the top level of `advisory`. Alternatives are requested
+by telling the model which proposals it has already made, and the search stops
+early when it abstains or repeats itself. A refused alternative is kept, with
+its reason and no diff. Every extra model call is recorded on its alternative,
+and the scorer prices it, so cost and the cost cap never undercount. The Budget
+step counts up to three calls. With `--all-scenarios`, each scenario is first
+measured as it stands (its baseline), and its proposals come from that
+measurement. Tests: `TestAlternatives` (4).
 
 ---
 
@@ -4077,7 +4110,7 @@ one baseline and one diagnosis.
 
 # GROUP 39 — Traffic-mix scenarios, judged per endpoint
 
-*Drafted 24 October 2026 by Claude Code. NOT YET REVIEWED. Implemented in
+*Drafted 24 October 2026 by Claude Code. REVIEWED AND APPROVED by the operator, 25 October 2026. Implemented in
 `tests/test_perf_traffic_mix.py` (17), plus one test in `tests/test_ui_wizard.py`.
 Code: `_parse_mix`, `mix_from`, `combine_endpoint_verdicts`, `Campaign._met` and
 the per-endpoint verdict in `campaign.py`; `mix_env` and
@@ -4115,8 +4148,8 @@ mix. Each endpoint's own p50, p99, error rate and request count are read from
 Locust's per-endpoint rows into `per_endpoint`. That happens on every
 measurement, so diagnosis sees the breakdown too.
 
-**For review:** weights are whole numbers, because Locust's task weights are
-integers. Is 1% resolution enough?
+**DECIDED, operator, 25 October 2026:** whole-number weights (1% resolution) are
+fine.
 
 ---
 
@@ -4132,10 +4165,15 @@ manifest (`per_endpoint`).
 **Why it exists.** A change that speeds the busiest endpoint while slowing
 another must not be kept as a win.
 
-**For review:** WORSE on any endpoint reverts the change, which is the
-conservative choice. Should a mix be able to *accept* a trade-off (one endpoint
-slower but still inside its target)? That would be an operator-set option, never
-the default.
+**DECIDED, operator, 25 October 2026: yes, as an operator opt-in** ("tuning needs
+to be focused per endpoint too"). A scenario may declare `accept_tradeoffs:
+true`, set from the wizard's **Accept trade-offs** checkbox. With it, an endpoint
+that got slower **but is still within its own target** counts as INCONCLUSIVE
+rather than WORSE, so the change can be kept on the strength of the endpoints it
+improved. The endpoint is flagged `tradeoff_accepted` on the manifest. An
+endpoint that goes over its target is still WORSE, and the default (off) is
+unchanged. A mid-run edit of the flag is taken at the next boundary. Tests:
+`TestAcceptedTradeoffs` (6) in `tests/test_perf_traffic_mix.py`.
 
 ---
 
@@ -4159,7 +4197,7 @@ byte-identical.
 
 # GROUP 40 — Input data and request templates
 
-*Drafted 24 October 2026 by Claude Code. NOT YET REVIEWED. Implemented in
+*Drafted 24 October 2026 by Claude Code. REVIEWED AND APPROVED by the operator, 25 October 2026. Implemented in
 `tests/test_perf_templates.py` (20). Code: `_parse_requests` / `_parse_data` in
 `campaign.py`, `crucible/perf/loaddata.py`, `load_env` in `runner.py`,
 `_apply_templated_requests` in `locust/locustfile.py`, the `/v1/perf/load-data`
@@ -4215,12 +4253,10 @@ query is URL-encoded (`size=25%20x`), rows cycle 10 → 25 → 10, a POST body i
 filled in and sent as JSON, and the 3:1 weights are applied. Any non-2xx
 response counts as a failure, reported under the endpoint path.
 
-**For review:**
-- Body values are inserted as written. A value containing a quote would break a
-  JSON body. Should JSON bodies escape inserted values instead (safer, but then
-  a numeric column arrives as a string)?
-- Rows are shared by all simulated users, cycling in order. Is per-user
-  sequencing needed (e.g. each user owning one account)?
+**DECIDED, operator, 25 October 2026: both deferred.** Body values stay inserted
+as written, and rows stay shared by all simulated users, cycling in order. JSON
+escaping and per-user sequencing are recorded in `docs/ref/DEBT.md`, to revisit
+when a real target needs them.
 
 ---
 
@@ -4243,7 +4279,7 @@ anything is written or started.
 
 # GROUP 41 — Python hooks: isolated, allowlisted, configurable
 
-*Drafted 24 October 2026 by Claude Code. NOT YET REVIEWED. Implemented in
+*Drafted 24 October 2026 by Claude Code. REVIEWED AND APPROVED by the operator, 25 October 2026 (including the three changed hook tests). Implemented in
 `tests/test_perf_python_hooks.py` (19). Three tests in `tests/test_perf_hooks.py`
 (Group 10 hooks, previously approved) were **changed** from shell strings to
 `.py` names, as the operator's Python-only decision requires; please re-confirm
@@ -4278,10 +4314,9 @@ the operator listed it in `pass_env`, plus `CRUCIBLE_HOOK_STAGE`, `RUN_ID` and
 **Why it exists.** DESIGN.md §12: allowlist, never blocklist. The control token
 is the key to the whole control plane.
 
-**For review:** isolation from Crucible's *files* is a deployment step (a
-low-privilege user, `docs/HOOKS.md`), not enforced in code. Running hooks as
-that user (`sudo -u`) is not wired in yet. OK as a documented step for now (your
-"use it as is")?
+**DECIDED, operator, 24 October 2026:** isolation from Crucible's *files* stays a
+documented setup step for now (a low-privilege user, `docs/HOOKS.md`). Running
+hooks as that user from inside Crucible is recorded in `docs/ref/DEBT.md`.
 
 ---
 

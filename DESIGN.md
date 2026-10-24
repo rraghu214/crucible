@@ -369,6 +369,28 @@ steal).
   one are live for the next, which re-measures them as its baseline. The SLA is
   re-read between scenarios, the run caps cover the whole series, and a pause
   stops the series where it is: resuming that scenario carries the rest on.
+- **The campaign loop stops after three misses in a row (operator guardrail,
+  25 October 2026).** Three experiments in a row that were applied, measured and
+  not kept (worse or inconclusive, each reverted) end the run. Three guard
+  refusals in a row was already a separate stop. Either way the agent is not
+  finding the problem, and every further try costs a full measurement window.
+- **Ramp sets the spawn rate (24 October 2026).** Locust starts users at
+  users ÷ ramp seconds (`--spawn-rate`, else the SLA's `at_load.spawn_rate`,
+  else 10). The value in force is written into `slo.yaml`, so editing it mid-run
+  is a load change and re-measures the baseline.
+- **Advisory mode proposes, the operator applies (24–25 October 2026).** Each
+  scenario is measured, then up to three ranked proposals are recorded, each
+  guard-checked and with the exact diff `apply` would write. Nothing is applied,
+  deployed or re-measured, so the verdict is NOT_MEASURED: an unapplied proposal
+  never looks like a verified one. It needs no repository or deploy pipeline.
+  Every extra model call is recorded and priced.
+- **Run caps pause, never stop (operator decisions, 24 October 2026).** A cost
+  cap and a wall-clock cap are checked at each experiment boundary. An
+  experiment whose estimated cost would cross the cost cap is not started.
+  Reaching either cap pauses the campaign in every mode: resume with a higher
+  cap, or abort, which finishes the run so its report can be made. Paused time
+  never counts toward the wall clock, and a cap that cannot fit the scenarios'
+  baselines is called out before anything runs.
 - **A traffic mix is judged per endpoint, never on the blend (24 October 2026).**
   A scenario may declare `mix`: several endpoints at whole-number weights
   totalling 100, each with an optional p99 target of its own (default: the
@@ -377,7 +399,10 @@ steal).
   endpoint got worse, even when the blended p99 improved, because a change that
   speeds the busiest endpoint while slowing another is not a win. This is
   Group 31's lesson (a blended p99 describes no endpoint) applied on purpose
-  rather than by accident.
+  rather than by accident. **Trade-offs are an operator opt-in** (25 October
+  2026): with `accept_tradeoffs`, an endpoint that got slower but is still
+  within its own target no longer vetoes the change. Over its target, it still
+  does.
 - **Templated requests with input data (24 October 2026).** A scenario may
   declare `requests:`, each a path on the target (never another host), a method,
   a query and/or body with `${var}` placeholders, a weight, and an optional p99.

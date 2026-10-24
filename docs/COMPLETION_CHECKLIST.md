@@ -390,6 +390,44 @@ All items must be ✅ before recording starts.
 
 → **All checked = READY TO RECORD**
 
+### 9g — Part B on Box B (24–25 October 2026 changes) ⬜
+
+Do this once after pulling Part B. Each line says what to check.
+
+**Pull safely.** Launch rewrites `config/slo.yaml` on Box B, and Part B added new
+lines (`scenarios:`, `hooks:`) to that file, so stash first:
+```bash
+cd ~/crucible && git status --short
+git stash push config/slo.yaml config/profiles/spring-boot.yaml   # only if they are listed as modified
+git pull origin capstone/perf-agent && uv sync --group load
+rm -f ~/.crucible/memory.faiss ~/.crucible/memory.faiss.ids.json                         # old shared index
+rm -f ~/.crucible/memory.db ~/.crucible/memory.db.faiss ~/.crucible/memory.db.faiss.ids.json   # retired (Group 42)
+pkill -f "crucible serve"; nohup uv run crucible serve > ~/crucible-serve.log 2>&1 &
+```
+- [ ] `curl -s 127.0.0.1:8113/healthz` returns `{"ok":true…}`.
+
+**Knowledge (Groups 29, 34).** Repeat 9c and 9d.
+- [ ] The ✨ AI-suggestion buttons stay disabled while a document is indexing.
+- [ ] `~/.crucible/knowledge/` holds the original file, and `~/.crucible/knowledge-index/` holds `knowledge.sqlite` and `knowledge.sqlite.faiss`.
+
+**Wizard.**
+- [ ] It opens with `slo.yaml`'s values: `/api/db`, 120 ms, 50 users, noise 2.08% (read-only).
+- [ ] ✨ AI suggestion fills the SLA. Choosing **Advisory** fills the scenarios automatically.
+- [ ] A mix such as `/api/db=60, /api/orders=40` is accepted; `/api/db=60, /transfer=40` is refused at Review. **Accept trade-offs** is a checkbox above the scenario rows.
+- [ ] Uploading a CSV shows its rows and columns. Uploading a `.py` hook says "syntax checked, not run".
+- [ ] **Budget:** the table follows the experiments and scenarios. A wall-clock cap below the scenarios' baselines shows a ⚠ warning.
+- [ ] **Review:** the preflight list includes "load profile drives the SLA endpoint ✓", and the diff box shows exactly what Launch will write.
+
+**Runs.**
+- [ ] **Advisory first:** the job runs `crucible run --advisory --all-scenarios`. The manifest has `advisory.alternatives` (up to three, ranked, each with a diff) and verdict NOT_MEASURED, and `perftest_sandbox` is not pushed.
+- [ ] **Semi-Automated** (pool=2 on Box A), approved from the UI: the manifest has `series`, `per_endpoint`, `caps` and `guarded_files`.
+- [ ] **Mid-run edit:** while it runs, raise p99 in the wizard and click **💾 Save changes**. The campaign pauses at the next experiment, and resuming records an `amendments` entry.
+- [ ] **Cap:** with a small cost cap the run pauses at the cap. `crucible resume <run> --cost-cap 1` continues; `crucible abort <run>` finishes it as aborted, and `crucible report --run <run>` works.
+- [ ] **Three misses:** a run whose first three experiments are all reverted stops with "3 measured experiments in a row were not kept".
+- [ ] **Hook (optional):** a `before_each` hook that prints its environment shows **no** `CRUCIBLE_CONTROL_TOKEN` in the manifest output.
+
+Reference: `docs/KNOWLEDGE_STORE.md`, `docs/HOOKS.md`, and assertion Groups 29–42.
+
 ---
 
 ## Step 10 — Demo recording ⬜

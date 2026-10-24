@@ -163,6 +163,10 @@ def build_parser() -> argparse.ArgumentParser:
     resume.add_argument("--sla", dest="sla_path", default=None)
     resume.add_argument("--scenario", default=None)
     resume.add_argument("--workspace", default=None)
+    resume.add_argument("--cost-cap", type=float, default=None, dest="cost_cap_usd",
+                        help="raise (or set) the cost cap when resuming a run paused at its cap")
+    resume.add_argument("--wall-clock-cap", type=float, default=None, dest="wall_clock_cap_h",
+                        help="raise (or set) the wall-clock cap, in hours, when resuming")
 
     ceiling = sub.add_parser(
         "ceiling",
@@ -384,6 +388,8 @@ def main() -> int:
             sla_path=getattr(args, "sla_path", None),
             scenario_name=getattr(args, "scenario", None),
             workspace=getattr(args, "workspace", None),
+            cost_cap_usd=getattr(args, "cost_cap_usd", None),
+            wall_clock_cap_h=getattr(args, "wall_clock_cap_h", None),
         )
     if args.command == "ceiling":
         return commands.cmd_ceiling(

@@ -1,6 +1,6 @@
 """Traffic-mix scenarios: several endpoints at set weights, each judged on its own p99. Group 39.
 
-DRAFTED by Claude Code, 24 October 2026. NOT YET REVIEWED by the operator.
+DRAFTED by Claude Code, 24 October 2026. REVIEWED AND APPROVED by the operator, 25 October 2026 (see docs/CRUCIBLE_TEST_ASSERTIONS.md).
 See `docs/CRUCIBLE_TEST_ASSERTIONS.md` GROUP 39 for the questions to check.
 
 Operator, 24 October 2026: distribute load across a service's endpoints
@@ -109,7 +109,7 @@ def test_one_verdict_never_hides_an_endpoint_that_got_worse(verdicts, combined):
 
 
 class TestTheCampaignJudgesPerEndpoint:
-    def _run(self, tmp_path, measurements, targets):
+    def _run(self, tmp_path, measurements, targets, accept=False):
         sla_path = tmp_path / "slo.yaml"
         sla_path.write_text(SLA_YAML, encoding="utf-8")
         workspace = tmp_path / "ws"
@@ -123,6 +123,7 @@ class TestTheCampaignJudgesPerEndpoint:
         })
         campaign = _campaign(profile, Sla.load(sla_path), workspace, p99s=[0.0] * 4)
         campaign.mix_targets = targets
+        campaign.accept_tradeoffs = accept
         seq = iter(measurements)
 
         def measure(scenario, run_id):
@@ -164,3 +165,49 @@ def test_build_campaign_runs_a_declared_mix(tmp_path, monkeypatch):
         mix={"/api/db": {"weight": 70, "p99_ms": None}, "/api/catalog": {"weight": 30, "p99_ms": 80.0}})
     assert campaign.scenario.mix == {"db": 70, "catalog": 30} and campaign.scenario.tags == ()
     assert campaign.mix_targets == {"/api/db": 120.0, "/api/catalog": 80.0}
+
+
+class TestAcceptedTradeoffs:
+    """39.3 (operator, 25 October 2026): opt-in. An endpoint that got slower but
+    stays within its own target does not make the change WORSE."""
+
+    def test_the_combiner_tolerates_only_named_endpoints(self):
+        verdicts = {"a": IMPROVED, "b": WORSE}
+        assert combine_endpoint_verdicts(verdicts) == WORSE
+        assert combine_endpoint_verdicts(verdicts, tolerated={"b"}) == IMPROVED
+        assert combine_endpoint_verdicts({"a": INCONCLUSIVE, "b": WORSE}, tolerated={"b"}) == INCONCLUSIVE
+
+    def _measure(self, tmp_path, after_orders, accept):
+        result = TestTheCampaignJudgesPerEndpoint()._run(tmp_path, [
+            (300.0, {"/api/db": 400.0, "/api/orders": 100.0}),
+            (200.0, {"/api/db": 200.0, "/api/orders": after_orders}),
+        ], {"/api/db": 120.0, "/api/orders": 120.0}, accept=accept)
+        return result.experiments[0]
+
+    def test_slower_but_within_target_is_accepted_when_opted_in(self, tmp_path):
+        experiment = self._measure(tmp_path, after_orders=115.0, accept=True)
+        assert experiment.verdict == IMPROVED
+        assert experiment.per_endpoint["/api/orders"]["tradeoff_accepted"] is True
+
+    def test_slower_and_over_target_is_still_worse_when_opted_in(self, tmp_path):
+        experiment = self._measure(tmp_path, after_orders=150.0, accept=True)
+        assert experiment.verdict == WORSE
+
+    def test_without_the_opt_in_slower_within_target_is_worse(self, tmp_path):
+        experiment = self._measure(tmp_path, after_orders=115.0, accept=False)
+        assert experiment.verdict == WORSE
+
+    def test_the_sla_and_build_campaign_carry_the_opt_in(self, tmp_path, monkeypatch):
+        from crucible.perf.commands import build_campaign
+
+        sla = _sla(tmp_path, '{"/api/db": 60, "/api/orders": 40}')
+        assert "accept_tradeoffs" not in sla.scenarios[0]
+        monkeypatch.chdir(REPO)
+        (tmp_path / "state").mkdir()
+        campaign = build_campaign(
+            profile_name="spring-boot", sla_path="config/slo.yaml", scenario_name="m", users=10, warmup_s=1,
+            measure_s=1, max_experiments=1, run_id="t", state_dir=tmp_path / "state", workspace="",
+            approve_mode="file", approval_timeout_s=1, model="m", provider="p",
+            mix={"/api/db": {"weight": 60, "p99_ms": None}, "/api/orders": {"weight": 40, "p99_ms": None}},
+            accept_tradeoffs=True)
+        assert campaign.accept_tradeoffs is True

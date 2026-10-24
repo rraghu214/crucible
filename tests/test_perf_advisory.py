@@ -1,6 +1,6 @@
 """Advisory mode: diagnose and propose with the exact diff, never apply. Group 38.
 
-DRAFTED by Claude Code, 24 October 2026. NOT YET REVIEWED by the operator.
+DRAFTED by Claude Code, 24 October 2026. REVIEWED AND APPROVED by the operator, 25 October 2026 (see docs/CRUCIBLE_TEST_ASSERTIONS.md).
 See `docs/CRUCIBLE_TEST_ASSERTIONS.md` GROUP 38 for the questions to check.
 
 The wizard offered Advisory ("AI diagnoses and suggests. You apply every change
@@ -78,7 +78,67 @@ class TestNothingIsApplied:
         campaign.advisory = True
         result = asyncio.run(campaign.run())
         assert all(m.refused_by_guard for m in result.experiments)
-        assert all(m.advisory == {} for m in result.experiments)
+        # The refusal is recorded; no diff is ever offered for a refused proposal.
+        assert all("diff" not in m.advisory for m in result.experiments)
+        assert all(a.get("refused") for m in result.experiments for a in m.advisory["alternatives"])
+
+
+class _VaryingDiagnoser:
+    """Proposes the pool sizes given in turn, as a model asked for alternatives would."""
+
+    def __init__(self, values):
+        self.values, self.ruled_out_seen = list(values), []
+
+    async def diagnose(self, snapshot, sla, *, ruled_out=(), prior_findings="", stakeholder_request=""):
+        from crucible.perf.diagnosis import Diagnosis
+
+        self.ruled_out_seen.append(tuple(ruled_out))
+        value = self.values.pop(0) if self.values else 20
+        proposal = Proposal(cause_family="connection_pool_exhaustion", changes=(Change(prop=POOL, value=value),),
+                            reasoning=f"try {value}", confidence=0.5)
+        return Diagnosis(proposal=proposal, provider="gemini", model="gemini-x", input_tokens=1000, output_tokens=100)
+
+
+class TestAlternatives:
+    def _run(self, parts, values):
+        profile, sla, workspace = parts
+        campaign = _campaign(profile, sla, workspace, p99s=[300.0])
+        campaign.advisory = True
+        campaign.diagnoser = _VaryingDiagnoser(values)
+        return campaign, asyncio.run(campaign.run())
+
+    def test_up_to_three_ranked_alternatives_each_with_its_own_diff(self, parts):
+        campaign, result = self._run(parts, [20, 30, 40, 50])
+        [manifest] = result.experiments
+        alternatives = manifest.advisory["alternatives"]
+        assert [a["rank"] for a in alternatives] == [1, 2, 3]
+        assert ["+spring.datasource.hikari.maximum-pool-size=" + v in a["diff"]
+                for a, v in zip(alternatives, ["20", "30", "40"])] == [True, True, True]
+        assert manifest.advisory["diff"] == alternatives[0]["diff"]
+        assert "already proposed" in " ".join(campaign.diagnoser.ruled_out_seen[1])
+        assert "3 ranked proposal(s)" in result.stopped_reason
+
+    def test_a_repeated_proposal_stops_the_search_early(self, parts):
+        _, result = self._run(parts, [20, 20, 20])
+        assert len(result.experiments[0].advisory["alternatives"]) == 1
+
+    def test_a_refused_alternative_is_kept_with_its_reason_and_the_rest_still_offered(self, parts):
+        _, result = self._run(parts, [20, 500, 30])
+        alternatives = result.experiments[0].advisory["alternatives"]
+        assert "refused" in alternatives[1] and "diff" not in alternatives[1]
+        assert "diff" in alternatives[0] and "diff" in alternatives[2]
+
+    def test_every_alternatives_model_call_is_priced(self, parts):
+        from crucible.economics.pricing import Pricing
+        from crucible.perf.scorer import score_cost
+
+        _, result = self._run(parts, [20, 30, 40])
+        pricing = Pricing.from_mapping({"currency": "USD", "models": {
+            "gemini-x": {"input": 1.0, "output": 1.0}}})
+        manifest = result.as_dict()
+        manifest["experiments"][0]["diagnosis"] = {"served_by_model": "gemini-x", "input_tokens": 1000,
+                                                   "output_tokens": 100}
+        assert score_cost(manifest, pricing).total == pytest.approx(3 * 1100 / 1e6)
 
 
 def test_without_the_config_file_the_diff_is_declared_unavailable(parts, tmp_path):
@@ -115,9 +175,9 @@ class TestPlumbing:
         cli.main()
         assert seen["advisory"] is True
 
-    def test_the_budget_counts_one_diagnosis_and_no_deploys(self):
+    def test_the_budget_counts_up_to_three_diagnoses_and_no_deploys(self):
         from crucible.ui.wizard import estimate
 
         est = estimate(mode="Advisory", warmup_s=120, measure_s=300, experiments=5, verify_timeout_s=300,
                        per_call_costs=[0.002])
-        assert est["calls"] == 1 and est["max_s"] == 420 and est["cost"] == pytest.approx(0.002)
+        assert est["calls"] == 3 and est["max_s"] == 420 and est["cost"] == pytest.approx(0.006)
