@@ -247,9 +247,60 @@ def _parse_scenarios(raw: Any, source: Path) -> list[dict[str, Any]]:
         if entry["users"] < 1 or entry["measure_s"] < 30 or entry["warmup_s"] < 0 or entry.get("spawn_rate", 1) <= 0:
             raise CampaignRefused(f"{source}: scenario {name!r} has an out-of-range value: {entry}")
         if "mix" in item:
-            entry["mix"] = item["mix"]
+            entry["mix"] = _parse_mix(item["mix"], name, source)
         out.append(entry)
     return out
+
+
+def _parse_mix(raw: Any, scenario: str, source: Path) -> dict[str, dict[str, Any]]:
+    """``{endpoint: weight}`` or ``{endpoint: {weight, p99_ms}}``; weights are
+    whole numbers summing to 100. Each endpoint is judged on its own p99 against
+    its own target (default: the objective's), never on a blend."""
+    if not isinstance(raw, dict) or len(raw) < 2:
+        raise CampaignRefused(f"{source}: scenario {scenario!r} mix must name at least two endpoints")
+    out: dict[str, dict[str, Any]] = {}
+    for endpoint, spec in raw.items():
+        spec = spec if isinstance(spec, dict) else {"weight": spec}
+        weight, target = spec.get("weight"), spec.get("p99_ms")
+        if isinstance(weight, bool) or not isinstance(weight, int) or weight < 1:
+            raise CampaignRefused(f"{source}: scenario {scenario!r} mix weight for {endpoint!r} must be a "
+                                  f"whole number of at least 1, got {weight!r}")
+        if target is not None and (isinstance(target, bool) or not isinstance(target, (int, float)) or target <= 0):
+            raise CampaignRefused(f"{source}: scenario {scenario!r} mix p99_ms for {endpoint!r} must be positive")
+        out[str(endpoint)] = {"weight": weight, "p99_ms": None if target is None else float(target)}
+    total = sum(v["weight"] for v in out.values())
+    if total != 100:
+        raise CampaignRefused(f"{source}: scenario {scenario!r} mix weights total {total}, not 100")
+    return out
+
+
+def mix_from(declared: dict[str, dict[str, Any]], sla: Sla) -> tuple[dict[str, int], dict[str, float]]:
+    """A declared mix as (Locust tag -> weight, endpoint -> p99 target).
+
+    Every endpoint must be one a Locust task drives (Group 31); a target left
+    unset is the objective's p99.
+    """
+    from .loadprofile import tag_for_endpoint  # noqa: PLC0415
+
+    tags = {tag_for_endpoint(endpoint): spec["weight"] for endpoint, spec in declared.items()}
+    targets = {endpoint: float(spec.get("p99_ms") or sla.p99_ms) for endpoint, spec in declared.items()}
+    return tags, targets
+
+
+def combine_endpoint_verdicts(verdicts: dict[str, str]) -> str:
+    """One verdict for a mix, never hiding an endpoint that got worse.
+
+    Any WORSE is WORSE; any endpoint unmeasured is NOT_MEASURED; IMPROVED needs
+    at least one IMPROVED and none WORSE; otherwise INCONCLUSIVE.
+    """
+    values = set(verdicts.values())
+    if WORSE in values:
+        return WORSE
+    if NOT_MEASURED in values or not values:
+        return NOT_MEASURED
+    if IMPROVED in values:
+        return IMPROVED
+    return INCONCLUSIVE
 
 
 def check_environment(sla: Sla) -> None:
@@ -624,6 +675,8 @@ class ExperimentManifest:
     notes: list[str] = field(default_factory=list)
     #: Advisory mode only: the proposal's exact diff, never applied.
     advisory: dict[str, Any] = field(default_factory=dict)
+    #: Traffic mix only: each endpoint's own verdict, before/after p99 and target.
+    per_endpoint: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -827,6 +880,24 @@ class Campaign:
     #: Advisory mode: diagnose and propose with the exact diff, never apply,
     #: deploy or measure a change. Needs no repository or deploy pipeline.
     advisory: bool = False
+    #: Traffic mix: endpoint -> its own p99 target. Non-empty means every SLA
+    #: check and verdict is per endpoint, never on the blended p99.
+    mix_targets: dict[str, float] = field(default_factory=dict)
+
+    def _met(self, load: dict[str, Any]) -> bool | None:
+        """Is the SLA met by this measurement (a load summary)? Per endpoint for a mix."""
+        if not self.mix_targets:
+            return self.sla.met_by(load.get("p99_ms"), load.get("error_rate_pct"))
+        per = load.get("per_endpoint") or {}
+        for endpoint, target in self.mix_targets.items():
+            row = per.get(endpoint) or {}
+            if row.get("p99_ms") is None:
+                return None
+            if row["p99_ms"] > target:
+                return False
+            if row.get("error_rate_pct") is not None and row["error_rate_pct"] > self.sla.error_rate_pct:
+                return False
+        return True
     #: ``(result) -> spent so far``; ``None`` prices the manifest the way the
     #: scorer does (config/pricing.yaml). Injectable so a test need not price.
     cost_so_far: Any = None
@@ -1065,7 +1136,7 @@ class Campaign:
             result.baseline = {
                 "load": baseline_load.as_load_summary(),
                 "snapshot": baseline_snapshot,
-                "sla_met": self.sla.met_by(baseline_load.p99_ms, baseline_load.error_rate_pct),
+                "sla_met": self._met(baseline_load.as_load_summary()),
             }
             if baseline_load.watchdog:
                 result.baseline["watchdog"] = baseline_load.watchdog
@@ -1158,7 +1229,7 @@ class Campaign:
                 started_at_epoch_s=time.time(),
                 noise_floor_pct=self.sla.noise_p99_spread_pct,
                 before={"load": current_load.as_load_summary(), "snapshot": current_snapshot},
-                sla_met_before=self.sla.met_by(current_load.p99_ms, current_load.error_rate_pct),
+                sla_met_before=self._met(current_load.as_load_summary()),
             )
             result.experiments.append(manifest)
             self._emit("experiment_started", experiment=number, p99_before=current_load.p99_ms)
@@ -1394,6 +1465,12 @@ class Campaign:
 
         self.sla, self.profile = new_sla, new_profile
         self.applicator.profile = new_profile
+        if self.mix_targets and self.declared_scenario:
+            # Endpoints without their own target inherit the objective's p99, so
+            # a goal edit moves them too.
+            definition = new_sla.scenario(self.declared_scenario)
+            if definition and definition.get("mix"):
+                _, self.mix_targets = mix_from(definition["mix"], new_sla)
         rebaselined = None
         if "at_load" in changes or "scenario" in changes or "endpoint" in changes:
             from .loadprofile import tag_for_endpoint  # noqa: PLC0415
@@ -1408,6 +1485,9 @@ class Campaign:
                 measure_s=float(load.get("measure_s", self.scenario.measure_s)),
                 tags=(tag_for_endpoint(new_sla.endpoint),) if "endpoint" in changes else self.scenario.tags,
             )
+            if "scenario" in changes and (changes["scenario"]["to"] or {}).get("mix"):
+                tag_mix, self.mix_targets = mix_from(changes["scenario"]["to"]["mix"], new_sla)
+                self.scenario = replace(self.scenario, mix=tag_mix, tags=())
             # A verdict compares two measurements at the same load. After a load
             # change the old "before" was taken under different traffic, so the
             # rest of the run starts like a new test case: with its own baseline.
@@ -1425,7 +1505,7 @@ class Campaign:
         result.guarded_files = fingerprint_files(self.guarded_files)
         self._edits_confirmed = False
         self._emit("amended", experiment=number, changes=list(changes))
-        if rebaselined is not None and new_sla.met_by(current_load.p99_ms, current_load.error_rate_pct):
+        if rebaselined is not None and self._met(current_load.as_load_summary()):
             return current_load, current_snapshot, (
                 f"after the operator's edit before experiment {number}, the new baseline already meets "
                 f"the SLA (p99 {current_load.p99_ms:.0f} ms <= {new_sla.p99_ms:.0f} ms)")
@@ -1683,12 +1763,28 @@ class Campaign:
         manifest.after = {"load": after_load.as_load_summary(), "snapshot": after_snapshot}
         if after_load.watchdog:
             manifest.watchdog = after_load.watchdog
-        manifest.sla_met_after = self.sla.met_by(after_load.p99_ms, after_load.error_rate_pct)
+        manifest.sla_met_after = self._met(after_load.as_load_summary())
 
         before_p99 = manifest.before.get("load", {}).get("p99_ms")
         manifest.verdict, manifest.verdict_reason = verdict_for(
             before_p99, after_load.p99_ms, self.sla.noise_p99_spread_pct
         )
+        if self.mix_targets:
+            # A mix is judged per endpoint. The blended row above is kept for
+            # context only: a slower endpoint must never hide behind a faster one.
+            before_per = (manifest.before.get("load") or {}).get("per_endpoint") or {}
+            per: dict[str, Any] = {}
+            for endpoint, target in self.mix_targets.items():
+                b = (before_per.get(endpoint) or {}).get("p99_ms")
+                a = (after_load.per_endpoint.get(endpoint) or {}).get("p99_ms")
+                verdict, reason = verdict_for(b, a, self.sla.noise_p99_spread_pct)
+                per[endpoint] = {"verdict": verdict, "reason": reason, "before_p99_ms": b, "after_p99_ms": a,
+                                 "target_p99_ms": target}
+            manifest.per_endpoint = per
+            manifest.verdict = combine_endpoint_verdicts({e: v["verdict"] for e, v in per.items()})
+            manifest.verdict_reason = "traffic mix, judged per endpoint: " + "; ".join(
+                f"{e} {v['verdict']} ({v['before_p99_ms']} -> {v['after_p99_ms']} ms, target {v['target_p99_ms']:g})"
+                for e, v in per.items())
         manifest.margin_over_noise = margin_over_noise(
             before_p99, after_load.p99_ms, self.sla.noise_p99_spread_pct
         )

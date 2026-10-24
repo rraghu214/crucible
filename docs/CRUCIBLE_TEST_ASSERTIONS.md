@@ -4075,6 +4075,88 @@ one baseline and one diagnosis.
 
 ---
 
+# GROUP 39 — Traffic-mix scenarios, judged per endpoint
+
+*Drafted 24 October 2026 by Claude Code. NOT YET REVIEWED. Implemented in
+`tests/test_perf_traffic_mix.py` (17), plus one test in `tests/test_ui_wizard.py`.
+Code: `_parse_mix`, `mix_from`, `combine_endpoint_verdicts`, `Campaign._met` and
+the per-endpoint verdict in `campaign.py`; `mix_env` and
+`_read_locust_per_endpoint` in `runner.py`; `_apply_traffic_mix` in
+`locust/locustfile.py`; the wizard's Mix column.*
+
+*Operator, 24 October 2026: distribute load across a service's endpoints,
+e.g. 30/25/20/15/10%. Group 31's lesson still holds: a blended p99 says nothing
+about any one endpoint. So a mix runs its endpoints at their weights, and every
+SLA check and every verdict is per endpoint.*
+
+---
+
+### 39.1 A mix is declared safely
+
+**What it checks.** In the SLA, a scenario's `mix` is
+`{endpoint: weight}` or `{endpoint: {weight, p99_ms}}`. It is refused whole if:
+- the weights don't total 100;
+- a weight isn't a whole number of at least 1;
+- fewer than two endpoints are named;
+- a target is 0 or negative.
+
+Every endpoint must be one a Locust task drives; `/transfer` is refused, naming
+it. An endpoint without its own target inherits the objective's p99, and follows
+it if that goal is edited mid-run.
+
+---
+
+### 39.2 Locust runs exactly the mix
+
+**What it checks.** The command runs exactly the mix's tags, passing their
+weights as `CRUCIBLE_MIX="db=60,orders=40"`. The locustfile then runs only those
+tasks at those weights, and a tag no task carries is an error, never a smaller
+mix. Each endpoint's own p50, p99, error rate and request count are read from
+Locust's per-endpoint rows into `per_endpoint`. That happens on every
+measurement, so diagnosis sees the breakdown too.
+
+**For review:** weights are whole numbers, because Locust's task weights are
+integers. Is 1% resolution enough?
+
+---
+
+### 39.3 One verdict never hides an endpoint that got worse
+
+**What it checks.** Any WORSE makes the experiment WORSE. Any endpoint left
+unmeasured makes it NOT_MEASURED. IMPROVED needs at least one IMPROVED and none
+WORSE; otherwise INCONCLUSIVE. In the key case, the blended p99 improves
+300 → 200 ms while `/api/orders` gets worse 100 → 150 ms: the verdict is
+**WORSE**. Each endpoint's verdict, before and after p99, and target are on the
+manifest (`per_endpoint`).
+
+**Why it exists.** A change that speeds the busiest endpoint while slowing
+another must not be kept as a win.
+
+**For review:** WORSE on any endpoint reverts the change, which is the
+conservative choice. Should a mix be able to *accept* a trade-off (one endpoint
+slower but still inside its target)? That would be an operator-set option, never
+the default.
+
+---
+
+### 39.4 The SLA is met only when every endpoint meets its own target
+
+**What it checks.** One endpoint over its target means the SLA is not met, even
+if the blend would pass. When every endpoint is within its target (and the error
+budget), it is met.
+
+---
+
+### 39.5 The wizard writes a mix, and refuses a bad one before writing
+
+**What it checks.** The Mix column takes `/api/db=60@150, /api/orders=40`
+(endpoint = weight, with an optional `@` p99 target in ms) and writes the SLA's
+mix mapping. Malformed text gets 422. An undriven endpoint, or weights not
+totalling 100, get 409. In every refused case, both files are left
+byte-identical.
+
+---
+
 # Review decisions — week 1
 
 Raised by Claude Code while implementing, decided by the operator on 10 September 2026.

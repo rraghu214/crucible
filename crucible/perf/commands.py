@@ -29,7 +29,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +46,7 @@ from .campaign import (
     Sla,
     abort_marker_path,
     check_environment,
+    mix_from,
     pause_marker_path,
     paused_state_path,
     request_abort,
@@ -1086,6 +1087,7 @@ def build_campaign(
     cost_cap_usd: float | None = None,
     wall_clock_cap_h: float | None = None,
     advisory: bool = False,
+    mix: dict[str, Any] | None = None,
 ) -> Any:
     """Assemble a real campaign from configuration. Kept apart from ``cmd_run``
     so a test can build one without going through argparse."""
@@ -1115,6 +1117,12 @@ def build_campaign(
         spawn_rate=resolve_spawn_rate(spawn_rate, sla),
         tags=(tag_for_endpoint(sla.endpoint),),
     )
+    mix_targets: dict[str, float] = {}
+    if mix:
+        # A traffic mix drives its own endpoints at its own weights, and every
+        # verdict is per endpoint (DESIGN.md §7, Group 39).
+        tag_mix, mix_targets = mix_from(mix, sla)
+        scenario = replace(scenario, mix=tag_mix, tags=())
 
     measure = build_measure(
         profile,
@@ -1179,6 +1187,7 @@ def build_campaign(
         guarded_files=tuple(p for p in (sla.source_path, profile.source_path) if p),
         confirm_config_changes=approve_mode == "file" and not advisory,
         advisory=advisory,
+        mix_targets=mix_targets,
         cost_cap_usd=_positive("cost cap", cost_cap_usd),
         wall_clock_cap_s=None if wall_clock_cap_h is None else _positive("wall-clock cap", wall_clock_cap_h) * 3600,
     )
@@ -1221,7 +1230,8 @@ def _scenario_campaign(root: Path, plan: dict[str, Any], name: str, index: int, 
         if kwargs.get(key) is not None and kwargs[key] <= 0:
             raise _SeriesCapReached(f"the series' {key.replace('_', ' ')} is used up before {name!r}")
     kwargs.update(scenario_name=name, users=definition["users"], warmup_s=definition["warmup_s"],
-                  measure_s=definition["measure_s"], spawn_rate=definition.get("spawn_rate"))
+                  measure_s=definition["measure_s"], spawn_rate=definition.get("spawn_rate"),
+                  mix=definition.get("mix"))
     campaign = build_campaign(run_id=f"{plan['id']}-{name}", state_dir=str(root), **kwargs)
     campaign.declared_scenario = name
     campaign.series = {"id": plan["id"], "index": index, "of": of, "scenario": name}
@@ -1306,7 +1316,7 @@ def _run_series(state_dir: Path, run_id: str, kwargs: dict[str, Any]) -> int:
         return REFUSED
     series_id = run_id or time.strftime("series-%Y%m%d-%H%M%S", time.gmtime())
     caps = {"cost_cap_usd": kwargs.pop("cost_cap_usd", None), "wall_clock_cap_h": kwargs.pop("wall_clock_cap_h", None)}
-    for key in ("scenario_name", "users", "warmup_s", "measure_s", "spawn_rate"):
+    for key in ("scenario_name", "users", "warmup_s", "measure_s", "spawn_rate", "mix"):
         kwargs.pop(key, None)
     plan = {"id": series_id, "started_at_epoch_s": time.time(), "kwargs": kwargs, "caps": caps,
             "done": [], "runs": {}, "spent_usd": 0.0, "active_s": 0.0, "status": "running"}

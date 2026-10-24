@@ -142,6 +142,9 @@ def render(form: WizardForm, sla_path: Path, profile_path: Path, locustfile: Pat
     """The two files as Launch would write them, validated. Writes nothing."""
     try:
         tag_for_endpoint(form.endpoint, locustfile)
+        for scenario in form.scenarios or []:
+            for endpoint in (scenario.get("mix") or {}):
+                tag_for_endpoint(endpoint, locustfile)
     except ValueError as exc:
         raise WizardRefused(str(exc)) from exc
     if not form.restart_command or not all(isinstance(a, str) and a for a in form.restart_command):
@@ -206,6 +209,7 @@ def _validate(form: WizardForm, sla_text: str, profile_text: str, sla_path: Path
         if key == "scenarios":
             want = [{k: (float(v) if k in ("measure_s", "warmup_s", "spawn_rate") else v) for k, v in sc.items()}
                     for sc in want]
+            got = [{k: v for k, v in sc.items()} for sc in got]
         if got != want:
             raise WizardRefused(f"{key} would read back as {got!r}, not {want!r}")
 

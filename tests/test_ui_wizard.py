@@ -158,6 +158,26 @@ class TestLaunch:
             ("steady_80u", 80, 300.0, 2.667), ("burst_160u", 160, 180.0, 10.667)]
         assert any("Runs 2 scenario(s) in order" in n for n in response.json()["notes"])
 
+    def test_a_traffic_mix_is_written_and_validated(self, client, root):
+        """Group 39: the scenario's mix field becomes the SLA's mix mapping."""
+        tc, started = client
+        mixed = [{"name": "mixed", "users": 100, "duration_s": 300, "ramp_s": 20,
+                  "mix": "/api/db=60@150, /api/orders=40"}]
+        assert tc.post("/v1/perf/wizard/launch", json=_body(scenarios=mixed), headers=AUTH).status_code == 200
+        assert Sla.load(_paths(root)[0]).scenarios[0]["mix"] == {
+            "/api/db": {"weight": 60, "p99_ms": 150.0}, "/api/orders": {"weight": 40, "p99_ms": None}}
+
+        before = (_paths(root)[0].read_bytes(), _paths(root)[1].read_bytes())
+        bad_text = [{**mixed[0], "mix": "/api/db 60"}]
+        assert tc.post("/v1/perf/wizard/launch", json=_body(scenarios=bad_text, run_id="x2"), headers=AUTH).status_code == 422
+        undriven = [{**mixed[0], "mix": "/api/db=60, /transfer=40"}]
+        response = tc.post("/v1/perf/wizard/launch", json=_body(scenarios=undriven, run_id="x3"), headers=AUTH)
+        assert response.status_code == 409 and "/transfer" in response.json()["detail"]
+        bad_total = [{**mixed[0], "mix": "/api/db=60, /api/orders=30"}]
+        response = tc.post("/v1/perf/wizard/launch", json=_body(scenarios=bad_total, run_id="x4"), headers=AUTH)
+        assert response.status_code == 409 and "not 100" in response.json()["detail"]
+        assert (_paths(root)[0].read_bytes(), _paths(root)[1].read_bytes()) == before
+
     def test_the_budget_steps_caps_reach_the_run(self, client):
         tc, started = client
         tc.post("/v1/perf/wizard/launch", json=_body(cost_cap_usd=0.1, wall_clock_cap_h=8), headers=AUTH)

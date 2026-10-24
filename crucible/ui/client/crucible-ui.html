@@ -257,8 +257,8 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
 .mode-card-desc{font-size:11px;color:var(--mid);line-height:1.5;}
 
 /* ── Scenario rows ── */
-.scenario-hdr{display:grid;grid-template-columns:1fr 70px 80px 70px 32px;gap:8px;padding:4px 12px 2px;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--lo);}
-.scenario-row{display:grid;grid-template-columns:1fr 70px 80px 70px 32px;gap:8px;align-items:center;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rs);padding:8px 12px;margin-bottom:6px;}
+.scenario-hdr{display:grid;grid-template-columns:minmax(0,1fr) 70px 80px 70px minmax(0,1.4fr) 32px;gap:8px;padding:4px 12px 2px;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--lo);}
+.scenario-row{display:grid;grid-template-columns:minmax(0,1fr) 70px 80px 70px minmax(0,1.4fr) 32px;gap:8px;align-items:center;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rs);padding:8px 12px;margin-bottom:6px;}
 .scenario-row input{background:var(--s1);border:1px solid var(--bd2);border-radius:4px;padding:5px 8px;font-size:12px;color:var(--hi);font-family:var(--f-body);outline:none;width:100%;}
 .scenario-row input:focus{border-color:var(--fire);}
 .scenario-rm{background:none;border:none;color:var(--lo);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;padding:0;transition:color .12s;}
@@ -822,13 +822,14 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
           <button class="btn btn-ghost btn-sm" onclick="addScenario()">+ Add Scenario</button>
         </div>
       </div>
-      <div class="scenario-hdr"><span>Name</span><span>Users</span><span>Duration</span><span>Ramp</span><span></span></div>
+      <div class="scenario-hdr"><span>Name</span><span>Users</span><span>Duration</span><span>Ramp</span><span title="Optional. endpoint=weight, optionally @ its own p99 in ms; weights total 100. Each endpoint is judged on its own p99.">Mix (optional)</span><span></span></div>
       <div id="scenarioList">
         <div class="scenario-row">
           <div><input value="steady_50u"></div>
           <div><input value="50" type="number" min="1"></div>
           <div><input value="300s"></div>
           <div><input value="30s"></div>
+          <div><input value="" placeholder="/api/db=60@150, /api/orders=40"></div>
           <button class="scenario-rm" onclick="rmScenario(this)">✕</button>
         </div>
         <div class="scenario-row">
@@ -836,6 +837,7 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
           <div><input value="100" type="number" min="1"></div>
           <div><input value="180s"></div>
           <div><input value="15s"></div>
+          <div><input value="" placeholder="/api/db=60@150, /api/orders=40"></div>
           <button class="scenario-rm" onclick="rmScenario(this)">✕</button>
         </div>
       </div>
@@ -1792,12 +1794,14 @@ let scenCount=2;
 let scenEdited=false;
 let scenSuggestedFor=null;
 const wzProvenance={sla:null,scenarios:null};
-function _scenarioRow(name,users,duration,ramp){
+function _scenarioRow(name,users,duration,ramp,mix){
   const row=document.createElement('div');
   row.className='scenario-row';
-  [[name,'text'],[users,'number'],[duration,'text'],[ramp,'text']].forEach(([v,type])=>{
+  [[name,'text'],[users,'number'],[duration,'text'],[ramp,'text'],[mix||'','text']].forEach(([v,type],i)=>{
     const cell=document.createElement('div');const inp=document.createElement('input');
-    inp.type=type;if(type==='number')inp.min='1';inp.value=String(v);cell.appendChild(inp);row.appendChild(cell);
+    inp.type=type;if(type==='number')inp.min='1';inp.value=String(v);
+    if(i===4)inp.placeholder='/api/db=60@150, /api/orders=40';
+    cell.appendChild(inp);row.appendChild(cell);
   });
   const rm=document.createElement('button');rm.className='scenario-rm';rm.textContent='✕';rm.onclick=()=>rmScenario(rm);row.appendChild(rm);
   return row;
@@ -1961,7 +1965,7 @@ function _provenance(){
 function wizardBody(){
   const scen=Array.from(document.querySelectorAll('#scenarioList .scenario-row')).map(row=>{
     const v=Array.from(row.querySelectorAll('input')).map(i=>i.value.trim());
-    return {name:v[0],users:parseInt(v[1]),duration_s:_seconds(v[2]),ramp_s:_seconds(v[3])};
+    return {name:v[0],users:parseInt(v[1]),duration_s:_seconds(v[2]),ramp_s:_seconds(v[3]),mix:v[4]||''};
   });
   const mode=wzMode()||'Semi-Automated';
   const body={endpoint:_wzVal('wz-endpoint'),p99_ms:Number(_wzVal('sla-p99')),error_rate_pct:Number(_wzVal('sla-err')),

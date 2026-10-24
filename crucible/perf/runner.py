@@ -28,6 +28,7 @@ handed to a shell.
 from __future__ import annotations
 
 import csv
+import os
 import shutil
 import subprocess
 import threading
@@ -78,6 +79,9 @@ class Scenario:
     repeats: int = 1
     locustfile: str = "locust/locustfile.py"
     tags: tuple[str, ...] = ()
+    #: Traffic mix: Locust tag -> integer weight (summing to 100). Empty means
+    #: one endpoint (``tags``). Passed to the locustfile as CRUCIBLE_MIX.
+    mix: dict[str, int] = field(default_factory=dict)
     push_beyond: bool = False
     expect_possible_failure: bool = False
     gauge_sample_interval_s: float = 1.0
@@ -115,6 +119,9 @@ class LoadResult:
     #: the observed CPU steal margin is what tells a later reader how much to
     #: trust the p99 beside it, and section 6 requires it either way.
     watchdog: dict[str, Any] | None = None
+    #: Each endpoint's own statistics, keyed by its Locust name (the path). A
+    #: traffic mix is judged per endpoint from these, never on the blended row.
+    per_endpoint: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def as_load_summary(self) -> dict[str, Any]:
         """The subset the snapshot's ``load_summary`` carries."""
@@ -131,6 +138,7 @@ class LoadResult:
             "warmup_s": self.warmup_s,
             "measure_s": self.measure_s,
             "ramp_s": self.ramp_s,
+            "per_endpoint": self.per_endpoint,
         }
 
 
@@ -227,6 +235,35 @@ def _read_locust_aggregated(stats_csv: Path) -> dict[str, str]:
     raise LoadRunnerError(f"no Aggregated row in {stats_csv}")
 
 
+def _read_locust_per_endpoint(stats_csv: Path) -> dict[str, dict[str, Any]]:
+    """Every named row of a locust ``_stats.csv``, i.e. one per endpoint."""
+    if not stats_csv.exists():
+        return {}
+    with stats_csv.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    out: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        name = row.get("Name") or ""
+        if not name or name == "Aggregated":
+            continue
+        requests = int(_as_float(row, "Request Count") or 0)
+        failures = int(_as_float(row, "Failure Count") or 0)
+        out[name] = {
+            "p50_ms": _as_float(row, "50%", "Median Response Time"),
+            "p99_ms": _as_float(row, "99%"),
+            "rps": _as_float(row, "Requests/s"),
+            "request_count": requests,
+            "failure_count": failures,
+            "error_rate_pct": (100.0 * failures / requests) if requests else None,
+        }
+    return out
+
+
+def mix_env(mix: dict[str, int]) -> dict[str, str]:
+    """The environment the locustfile reads its traffic mix from."""
+    return {"CRUCIBLE_MIX": ",".join(f"{tag}={int(weight)}" for tag, weight in mix.items())} if mix else {}
+
+
 def _as_float(row: dict[str, str], *names: str) -> float | None:
     for name in names:
         text = (row.get(name) or "").strip()
@@ -287,13 +324,16 @@ class LocustRunner:
             "--csv", str(csv_prefix),
             "--only-summary",
         ]
-        if scenario.tags:
+        tags = tuple(scenario.mix) if scenario.mix else scenario.tags
+        if tags:
             # Tags select which endpoint's tasks run. One cause family per tag, so
-            # a scenario measures one signal rather than a blend of eight.
-            command += ["--tags", *scenario.tags]
+            # a scenario measures one signal rather than a blend of eight; a mix
+            # runs exactly its own tags, at its own weights (CRUCIBLE_MIX).
+            command += ["--tags", *tags]
         return command
 
-    def _launch(self, command: list[str], budget_s: float) -> subprocess.CompletedProcess[str]:
+    def _launch(self, command: list[str], budget_s: float,
+                env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
         if shutil.which(self.locust_binary) is None:
             raise LoadRunnerError(
                 f"{self.locust_binary!r} is not on PATH. Install the load extra: "
@@ -302,6 +342,7 @@ class LocustRunner:
         try:
             return subprocess.run(  # noqa: S603 - argv list, no shell, config-built
                 command,
+                env={**os.environ, **env} if env else None,
                 capture_output=True,
                 text=True,
                 timeout=budget_s,
@@ -312,7 +353,7 @@ class LocustRunner:
                 f"load generator overran its wall-clock budget of {budget_s:.0f}s"
             ) from exc
 
-    def _launch_popen(self, command: list[str]) -> subprocess.Popen[str]:
+    def _launch_popen(self, command: list[str], env: dict[str, str] | None = None) -> subprocess.Popen[str]:
         """Start the load generator non-blocking, so a watchdog thread can signal it."""
         if shutil.which(self.locust_binary) is None:
             raise LoadRunnerError(
@@ -321,6 +362,7 @@ class LocustRunner:
             )
         return subprocess.Popen(  # noqa: S603 - argv list, no shell, config-built
             command,
+            env={**os.environ, **env} if env else None,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -360,6 +402,7 @@ class LocustRunner:
             self._launch(
                 self._command(scenario, scenario.warmup_s, warmup_prefix),
                 budget_s=scenario.warmup_s + 120.0,
+                env=mix_env(scenario.mix),
             )
         result.metrics_at_warmup_end = self._read_timers()
 
@@ -379,7 +422,7 @@ class LocustRunner:
         if self.watchdog is not None:
             # Non-blocking start so the watchdog thread can signal the process.
             proc = self._launch_popen(
-                self._command(scenario, scenario.measure_s, measure_prefix)
+                self._command(scenario, scenario.measure_s, measure_prefix), env=mix_env(scenario.mix)
             )
 
             def _stop_load() -> None:
@@ -434,6 +477,7 @@ class LocustRunner:
                 completed = self._launch(
                     self._command(scenario, scenario.measure_s, measure_prefix),
                     budget_s=scenario.measure_s + 120.0,
+                    env=mix_env(scenario.mix),
                 )
             finally:
                 if sampler is not None:
@@ -462,6 +506,7 @@ class LocustRunner:
         result.mean_ms = _as_float(row, "Average Response Time")
         result.max_ms = _as_float(row, "Max Response Time")
         result.rps = _as_float(row, "Requests/s")
+        result.per_endpoint = _read_locust_per_endpoint(Path(f"{measure_prefix}_stats.csv"))
         return result
 
 

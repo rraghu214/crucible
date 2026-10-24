@@ -366,6 +366,15 @@ steal).
   one are live for the next, which re-measures them as its baseline. The SLA is
   re-read between scenarios, the run caps cover the whole series, and a pause
   stops the series where it is: resuming that scenario carries the rest on.
+- **A traffic mix is judged per endpoint, never on the blend (24 October 2026).**
+  A scenario may declare `mix`: several endpoints at whole-number weights
+  totalling 100, each with an optional p99 target of its own (default: the
+  objective's). Locust runs exactly those tasks at those weights. The SLA is met
+  only when every endpoint meets its own target. An experiment is WORSE if any
+  endpoint got worse, even when the blended p99 improved, because a change that
+  speeds the busiest endpoint while slowing another is not a win. This is
+  Group 31's lesson (a blended p99 describes no endpoint) applied on purpose
+  rather than by accident.
 - **Wall clock is the real budget, not money.** Three light scenarios cost
   four cents and take three hours; adding a sustained burst makes it eight
   hours for the same four cents. Nobody picks a plan to save four cents —

@@ -1731,6 +1731,27 @@ class ScenarioRow(BaseModel):
     users: int = Field(ge=1, le=100_000)
     duration_s: int = Field(ge=30, le=86_400)
     ramp_s: int = Field(ge=0, le=86_400)
+    #: Optional traffic mix: "/api/db=60@150, /api/orders=40" -- endpoint=weight,
+    #: optionally @ its own p99 target in ms. Weights must total 100.
+    mix: str = Field(default="", max_length=1000)
+
+
+def parse_mix_text(text: str) -> dict[str, dict[str, Any]] | None:
+    """The wizard's mix field as the SLA's ``mix`` mapping. Blank means no mix."""
+    text = text.strip()
+    if not text:
+        return None
+    out: dict[str, dict[str, Any]] = {}
+    for part in text.split(","):
+        endpoint, sep, rest = part.strip().partition("=")
+        weight, _, target = rest.partition("@")
+        try:
+            if not sep or not endpoint.strip():
+                raise ValueError
+            out[endpoint.strip()] = {"weight": int(weight), "p99_ms": float(target) if target.strip() else None}
+        except ValueError:
+            raise HTTPException(422, f"mix entry {part.strip()!r} must look like /api/db=60 or /api/db=60@150") from None
+    return out
 
 
 class CeilingBounds(BaseModel):
@@ -1784,9 +1805,15 @@ def _wizard_form(body: WizardBody, operator: str) -> Any:
 def _declared_scenarios(body: WizardBody) -> list[dict[str, Any]] | None:
     if body.mode == "Ceiling Probe" or not body.scenarios:
         return None
-    return [{"name": sc.name, "users": sc.users, "measure_s": sc.duration_s, "warmup_s": 120,
-             "spawn_rate": round(sc.users / sc.ramp_s if sc.ramp_s > 0 else float(sc.users), 3)}
-            for sc in body.scenarios]
+    declared = []
+    for sc in body.scenarios:
+        entry: dict[str, Any] = {"name": sc.name, "users": sc.users, "measure_s": sc.duration_s, "warmup_s": 120,
+                                 "spawn_rate": round(sc.users / sc.ramp_s if sc.ramp_s > 0 else float(sc.users), 3)}
+        mix = parse_mix_text(sc.mix)
+        if mix:
+            entry["mix"] = mix
+        declared.append(entry)
+    return declared
 
 
 def _spawn_rate(body: WizardBody) -> float | None:

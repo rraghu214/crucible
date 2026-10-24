@@ -108,6 +108,37 @@ class PerfLabUser(HttpUser):
         self._get("/api/slow")
 
 
+def _apply_traffic_mix():
+    """CRUCIBLE_MIX="db=60,orders=40": run exactly these tagged tasks at these weights.
+
+    Set by Crucible for a traffic-mix scenario (the SLA's ``scenarios[].mix``).
+    Unset, every task keeps its weight of 1 and ``--tags`` picks one endpoint,
+    as before. A tag in the mix that no task carries is an error, never a
+    silently smaller mix.
+    """
+    raw = os.environ.get("CRUCIBLE_MIX", "").strip()
+    if not raw:
+        return
+    weights = {}
+    for part in raw.split(","):
+        name, _, weight = part.partition("=")
+        weights[name.strip()] = int(weight)
+    tasks = {}
+    for attribute in dir(PerfLabUser):
+        function = getattr(PerfLabUser, attribute)
+        for name in getattr(function, "locust_tag_set", set()):
+            if name in weights:
+                tasks[function] = weights[name]
+    found = {name for function in tasks for name in function.locust_tag_set}
+    missing = set(weights) - found
+    if missing:
+        raise RuntimeError(f"CRUCIBLE_MIX names tags no task carries: {sorted(missing)}")
+    PerfLabUser.tasks = tasks
+
+
+_apply_traffic_mix()
+
+
 @events.quitting.add_listener
 def save_summary(environment, **kwargs):
     """Write a JSON summary alongside locust's own CSV.
