@@ -28,6 +28,7 @@ handed to a shell.
 from __future__ import annotations
 
 import csv
+import json
 import os
 import shutil
 import subprocess
@@ -82,6 +83,11 @@ class Scenario:
     #: Traffic mix: Locust tag -> integer weight (summing to 100). Empty means
     #: one endpoint (``tags``). Passed to the locustfile as CRUCIBLE_MIX.
     mix: dict[str, int] = field(default_factory=dict)
+    #: Templated requests (the SLA's scenarios[].requests) and their data
+    #: mapping, {var: {file: <absolute path>, column}}. When set they replace the
+    #: locustfile's built-in tasks (CRUCIBLE_REQUESTS).
+    requests: tuple[dict[str, Any], ...] = ()
+    data: dict[str, dict[str, str]] = field(default_factory=dict)
     push_beyond: bool = False
     expect_possible_failure: bool = False
     gauge_sample_interval_s: float = 1.0
@@ -259,6 +265,18 @@ def _read_locust_per_endpoint(stats_csv: Path) -> dict[str, dict[str, Any]]:
     return out
 
 
+def load_env(scenario: Scenario, results_dir: Path, run_id: str) -> dict[str, str]:
+    """Everything the locustfile reads from its environment for this scenario."""
+    env = mix_env(scenario.mix)
+    if scenario.requests:
+        spec = Path(results_dir) / f"{run_id}.requests.json"
+        spec.parent.mkdir(parents=True, exist_ok=True)
+        spec.write_text(json.dumps({"requests": list(scenario.requests), "data": scenario.data}, indent=2),
+                        encoding="utf-8")
+        env["CRUCIBLE_REQUESTS"] = str(spec.resolve())
+    return env
+
+
 def mix_env(mix: dict[str, int]) -> dict[str, str]:
     """The environment the locustfile reads its traffic mix from."""
     return {"CRUCIBLE_MIX": ",".join(f"{tag}={int(weight)}" for tag, weight in mix.items())} if mix else {}
@@ -324,7 +342,7 @@ class LocustRunner:
             "--csv", str(csv_prefix),
             "--only-summary",
         ]
-        tags = tuple(scenario.mix) if scenario.mix else scenario.tags
+        tags = () if scenario.requests else tuple(scenario.mix) if scenario.mix else scenario.tags
         if tags:
             # Tags select which endpoint's tasks run. One cause family per tag, so
             # a scenario measures one signal rather than a blend of eight; a mix
@@ -402,7 +420,7 @@ class LocustRunner:
             self._launch(
                 self._command(scenario, scenario.warmup_s, warmup_prefix),
                 budget_s=scenario.warmup_s + 120.0,
-                env=mix_env(scenario.mix),
+                env=load_env(scenario, self.results_dir, run_id),
             )
         result.metrics_at_warmup_end = self._read_timers()
 
@@ -422,7 +440,8 @@ class LocustRunner:
         if self.watchdog is not None:
             # Non-blocking start so the watchdog thread can signal the process.
             proc = self._launch_popen(
-                self._command(scenario, scenario.measure_s, measure_prefix), env=mix_env(scenario.mix)
+                self._command(scenario, scenario.measure_s, measure_prefix),
+                env=load_env(scenario, self.results_dir, run_id),
             )
 
             def _stop_load() -> None:
@@ -477,7 +496,7 @@ class LocustRunner:
                 completed = self._launch(
                     self._command(scenario, scenario.measure_s, measure_prefix),
                     budget_s=scenario.measure_s + 120.0,
-                    env=mix_env(scenario.mix),
+                    env=load_env(scenario, self.results_dir, run_id),
                 )
             finally:
                 if sampler is not None:

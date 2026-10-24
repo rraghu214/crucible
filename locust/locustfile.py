@@ -19,9 +19,13 @@ Note on encoding: this file uses ``->`` and never the arrow character. Windows
 cp1252 cannot encode it, and that has broken things here before.
 """
 
+import csv
+import itertools
 import json
 import os
+import re
 import time
+import urllib.parse
 
 from locust import HttpUser, between, events, tag, task
 
@@ -137,6 +141,61 @@ def _apply_traffic_mix():
 
 
 _apply_traffic_mix()
+
+
+_TEMPLATE_VAR = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def _load_rows(path):
+    with open(path, encoding="utf-8", newline="") as handle:
+        if path.lower().endswith(".csv"):
+            return list(csv.DictReader(handle))
+        return json.load(handle)
+
+
+def _apply_templated_requests():
+    """CRUCIBLE_REQUESTS=<spec.json>: run the scenario's templated requests instead.
+
+    Each request is a path on the target, a method, a query and/or body with
+    ${var} placeholders, and a weight. Each ${var} takes the next row of its
+    data column, cycling (query values URL-encoded, body values as written).
+    Reported under the endpoint path, so per-endpoint statistics still work;
+    any non-2xx response is a failure.
+    """
+    spec_path = os.environ.get("CRUCIBLE_REQUESTS", "").strip()
+    if not spec_path:
+        return
+    with open(spec_path, encoding="utf-8") as handle:
+        spec = json.load(handle)
+    columns = {}
+    for var, mapping in (spec.get("data") or {}).items():
+        columns[var] = [str(row.get(mapping["column"], "")) for row in _load_rows(mapping["file"])]
+    counters = {var: itertools.count() for var in columns}
+
+    def next_value(var):
+        values = columns[var]
+        return values[next(counters[var]) % len(values)]
+
+    def make_task(request):
+        def templated(user):
+            used = set(_TEMPLATE_VAR.findall(request["query"] + request["body"]))
+            values = {var: next_value(var) for var in used}
+            query = _TEMPLATE_VAR.sub(lambda m: urllib.parse.quote(values[m.group(1)], safe=""), request["query"])
+            body = _TEMPLATE_VAR.sub(lambda m: values[m.group(1)], request["body"])
+            path = request["endpoint"] + ("?" + query if query else "")
+            headers = {"Content-Type": "application/json"} if body.lstrip()[:1] in ("{", "[") else None
+            with user.client.request(request["method"], path, data=body or None, headers=headers,
+                                     name=request["endpoint"], catch_response=True) as response:
+                if not 200 <= response.status_code < 300:
+                    response.failure(f"status={response.status_code}")
+
+        templated.__name__ = "templated_" + re.sub(r"\W+", "_", request["endpoint"])
+        return templated
+
+    PerfLabUser.tasks = {make_task(request): int(request["weight"]) for request in spec["requests"]}
+
+
+_apply_templated_requests()
 
 
 @events.quitting.add_listener

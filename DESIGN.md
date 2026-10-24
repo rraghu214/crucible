@@ -375,6 +375,13 @@ steal).
   speeds the busiest endpoint while slowing another is not a win. This is
   Group 31's lesson (a blended p99 describes no endpoint) applied on purpose
   rather than by accident.
+- **Templated requests with input data (24 October 2026).** A scenario may
+  declare `requests:`, each a path on the target (never another host), a method,
+  a query and/or body with `${var}` placeholders, a weight, and an optional p99.
+  It also declares `data:`, mapping each variable to an operator-uploaded
+  CSV/JSON file in `<state>/load-data/` and a column; rows are cycled. These
+  replace the built-in load script and are judged per endpoint, like a mix.
+  Placeholders, files and columns are all checked before anything runs.
 - **Wall clock is the real budget, not money.** Three light scenarios cost
   four cents and take three hours; adding a sustained burst makes it eight
   hours for the same four cents. Nobody picks a plan to save four cents —

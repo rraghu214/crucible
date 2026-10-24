@@ -4157,6 +4157,90 @@ byte-identical.
 
 ---
 
+# GROUP 40 — Input data and request templates
+
+*Drafted 24 October 2026 by Claude Code. NOT YET REVIEWED. Implemented in
+`tests/test_perf_templates.py` (20). Code: `_parse_requests` / `_parse_data` in
+`campaign.py`, `crucible/perf/loaddata.py`, `load_env` in `runner.py`,
+`_apply_templated_requests` in `locust/locustfile.py`, the `/v1/perf/load-data`
+routes, and the wizard's Input Data card.*
+
+*The card was a mock: an upload that only listed names, mappings to a hardcoded
+`users.csv`, and a POST body "for /transfer". Now a scenario can declare
+`requests:` (a path, a method, a query and/or body with `${var}` placeholders, a
+whole-number weight, an optional p99) and `data:` (each variable mapped to an
+uploaded file and a column). The requests replace the built-in load script, and
+each `${var}` takes the next row of its column, cycling.*
+
+---
+
+### 40.1 A request is a path on the target, never another host
+
+**What it checks.** Refused: `http://evil.example/x`, `//evil.example/x`,
+`api/orders`, and `/api/orders?size=1` (parameters belong in `query`). Methods
+are limited to GET, POST, PUT, PATCH and DELETE, and each endpoint may appear
+only once per scenario.
+
+**Why it exists.** The SLA file must never be able to point the load generator
+at someone else's service.
+
+---
+
+### 40.2 Every placeholder is mapped, and the data exists before anything runs
+
+**What it checks.** The SLA is refused if any `${var}` used in a template has no
+mapping, or if a mapped file isn't a plain `.csv`/`.json` name. At build time,
+and at Launch, a file that hasn't been uploaded, or lacks the mapped column, is
+refused (409), naming it, and nothing is written. A mid-run edit that points at
+a missing file is recorded as rejected (Group 33). A scenario cannot have both a
+mix and templates.
+
+---
+
+### 40.3 Data files are plain names in one folder, validated on upload
+
+**What it checks.** `POST /v1/perf/load-data` needs the control token. It accepts
+a CSV with a header row and at least one data row, or a JSON list of objects, up
+to 5 MB, and refuses `../`, other extensions, and malformed content. The listing
+shows each file's row count and columns. Only `<state>/load-data/` is ever read.
+
+---
+
+### 40.4 Locust runs the templates instead of the built-in tasks
+
+**What it checks.** With templated requests the command passes no `--tags`. The
+runner writes `<run>.requests.json` (the requests, plus absolute data paths) and
+points Locust at it with `CRUCIBLE_REQUESTS`. Probed with a fake client: a GET
+query is URL-encoded (`size=25%20x`), rows cycle 10 → 25 → 10, a POST body is
+filled in and sent as JSON, and the 3:1 weights are applied. Any non-2xx
+response counts as a failure, reported under the endpoint path.
+
+**For review:**
+- Body values are inserted as written. A value containing a quote would break a
+  JSON body. Should JSON bodies escape inserted values instead (safer, but then
+  a numeric column arrives as a string)?
+- Rows are shared by all simulated users, cycling in order. Is per-user
+  sequencing needed (e.g. each user owning one account)?
+
+---
+
+### 40.5 Templated endpoints are judged per endpoint, like a mix
+
+**What it checks.** `build_campaign` sets one target per endpoint (the request's
+`p99_ms`, otherwise the objective's), and the per-endpoint verdict rules of
+Group 39 apply unchanged.
+
+---
+
+### 40.6 The wizard uploads data and writes the templates
+
+**What it checks.** Upload is refused without the token, and listed after. A
+Launch with request rows and mappings writes them into every scenario in
+`slo.yaml`. A Launch that maps a file not yet uploaded is refused before
+anything is written or started.
+
+---
+
 # Review decisions — week 1
 
 Raised by Claude Code while implementing, decided by the operator on 10 September 2026.

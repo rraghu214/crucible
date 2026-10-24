@@ -1088,6 +1088,8 @@ def build_campaign(
     wall_clock_cap_h: float | None = None,
     advisory: bool = False,
     mix: dict[str, Any] | None = None,
+    requests: list[dict[str, Any]] | None = None,
+    data: dict[str, dict[str, str]] | None = None,
 ) -> Any:
     """Assemble a real campaign from configuration. Kept apart from ``cmd_run``
     so a test can build one without going through argparse."""
@@ -1118,7 +1120,15 @@ def build_campaign(
         tags=(tag_for_endpoint(sla.endpoint),),
     )
     mix_targets: dict[str, float] = {}
-    if mix:
+    if requests:
+        # Templated requests replace the built-in tasks; each endpoint is judged
+        # on its own p99, exactly like a mix (Group 40).
+        from .loaddata import resolve  # noqa: PLC0415
+
+        scenario = replace(scenario, requests=tuple(requests), data=resolve(Path(state_dir), data or {}),
+                           tags=())
+        mix_targets = {r["endpoint"]: float(r.get("p99_ms") or sla.p99_ms) for r in requests}
+    elif mix:
         # A traffic mix drives its own endpoints at its own weights, and every
         # verdict is per endpoint (DESIGN.md §7, Group 39).
         tag_mix, mix_targets = mix_from(mix, sla)
@@ -1231,7 +1241,7 @@ def _scenario_campaign(root: Path, plan: dict[str, Any], name: str, index: int, 
             raise _SeriesCapReached(f"the series' {key.replace('_', ' ')} is used up before {name!r}")
     kwargs.update(scenario_name=name, users=definition["users"], warmup_s=definition["warmup_s"],
                   measure_s=definition["measure_s"], spawn_rate=definition.get("spawn_rate"),
-                  mix=definition.get("mix"))
+                  mix=definition.get("mix"), requests=definition.get("requests"), data=definition.get("data"))
     campaign = build_campaign(run_id=f"{plan['id']}-{name}", state_dir=str(root), **kwargs)
     campaign.declared_scenario = name
     campaign.series = {"id": plan["id"], "index": index, "of": of, "scenario": name}
@@ -1316,7 +1326,7 @@ def _run_series(state_dir: Path, run_id: str, kwargs: dict[str, Any]) -> int:
         return REFUSED
     series_id = run_id or time.strftime("series-%Y%m%d-%H%M%S", time.gmtime())
     caps = {"cost_cap_usd": kwargs.pop("cost_cap_usd", None), "wall_clock_cap_h": kwargs.pop("wall_clock_cap_h", None)}
-    for key in ("scenario_name", "users", "warmup_s", "measure_s", "spawn_rate", "mix"):
+    for key in ("scenario_name", "users", "warmup_s", "measure_s", "spawn_rate", "mix", "requests", "data"):
         kwargs.pop(key, None)
     plan = {"id": series_id, "started_at_epoch_s": time.time(), "kwargs": kwargs, "caps": caps,
             "done": [], "runs": {}, "spent_usd": 0.0, "active_s": 0.0, "status": "running"}

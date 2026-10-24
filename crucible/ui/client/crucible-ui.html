@@ -261,6 +261,11 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
 .scenario-row{display:grid;grid-template-columns:minmax(0,1fr) 70px 80px 70px minmax(0,1.4fr) 32px;gap:8px;align-items:center;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rs);padding:8px 12px;margin-bottom:6px;}
 .scenario-row input{background:var(--s1);border:1px solid var(--bd2);border-radius:4px;padding:5px 8px;font-size:12px;color:var(--hi);font-family:var(--f-body);outline:none;width:100%;}
 .scenario-row input:focus{border-color:var(--fire);}
+.req-hdr,.req-row{display:grid;grid-template-columns:minmax(0,1.2fr) 80px minmax(0,1fr) minmax(0,1.4fr) 60px 70px 28px;gap:6px;}
+.req-hdr{padding:4px 12px;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--lo);}
+.req-row{align-items:center;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rs);padding:6px 12px;margin-bottom:5px;}
+.req-row input,.req-row select,.var-row input,.var-row select{background:var(--s1);border:1px solid var(--bd2);border-radius:4px;padding:5px 8px;font-size:12px;color:var(--hi);width:100%;min-width:0;}
+.req-row button,.var-row button{background:none;border:none;color:var(--lo);cursor:pointer;font-size:14px;}
 .scenario-rm{background:none;border:none;color:var(--lo);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;padding:0;transition:color .12s;}
 .scenario-rm:hover{color:var(--err);}
 
@@ -868,42 +873,19 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
     <!-- Input Data -->
     <div class="card">
       <div class="card-h">
-        <div><div class="card-title">Input Data &amp; Request Templates <span class="pill idle">Group B</span></div><div class="card-sub">CSV data files fed to Locust; variable mappings for POST body templates. <strong style="color:var(--warn);">Not built yet (Group B): nothing here is sent at Launch.</strong></div></div>
-        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('csvFile').click()">↑ Upload CSV</button>
-        <input type="file" id="csvFile" accept=".csv,.json" style="display:none" onchange="handleCsvInput(this)">
+        <div><div class="card-title">Input Data &amp; Request Templates <span style="font-size:11px;font-weight:400;color:var(--lo);">optional</span></div><div class="card-sub">Requests listed here replace the built-in load script for every scenario above. Each endpoint is judged on its own p99. <code>${var}</code> takes the next row of its mapped column.</div></div>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('csvFile').click()">↑ Upload data (.csv / .json)</button>
+        <input type="file" id="csvFile" accept=".csv,.json" multiple style="display:none" onchange="handleCsvInput(this)">
       </div>
-      <div style="font-size:12px;font-weight:600;color:var(--mid);margin-bottom:6px;">Uploaded data files</div>
-      <div id="dataFileList" style="margin-bottom:12px;">
-        <div style="display:flex;align-items:center;gap:8px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rs);padding:7px 12px;margin-bottom:5px;">
-          <span style="font-size:13px;">📊</span>
-          <span style="font-size:12px;font-family:var(--f-mono);flex:1;">users.csv</span>
-          <span style="font-size:11px;color:var(--lo);">1,000 rows · 3 cols</span>
-          <button style="background:none;border:none;color:var(--lo);cursor:pointer;font-size:13px;" onclick="this.closest('div').remove()">✕</button>
-        </div>
-      </div>
-      <div style="font-size:12px;font-weight:600;color:var(--mid);margin-bottom:6px;">Variable mappings <span style="font-size:11px;font-weight:400;color:var(--lo);">— bind template vars to CSV columns</span></div>
-      <div style="display:grid;grid-template-columns:120px 1fr 100px 28px;gap:6px;padding:4px 12px;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--lo);">
-        <span>Variable</span><span>CSV file</span><span>Column</span><span></span>
-      </div>
-      <div id="varList">
-        <div class="var-row">
-          <input value="${user_id}" placeholder="${var_name}">
-          <select><option>users.csv</option></select>
-          <input value="id" placeholder="col name or idx">
-          <button class="var-rm" onclick="this.closest('.var-row').remove()">✕</button>
-        </div>
-        <div class="var-row">
-          <input value="${amount}" placeholder="${var_name}">
-          <select><option>users.csv</option></select>
-          <input value="balance" placeholder="col name or idx">
-          <button class="var-rm" onclick="this.closest('.var-row').remove()">✕</button>
-        </div>
-      </div>
-      <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="addVarRow()">+ Add mapping</button>
-      <div style="margin-top:12px;">
-        <div style="font-size:12px;font-weight:600;color:var(--mid);margin-bottom:6px;">POST body template <span style="font-size:11px;font-weight:400;color:var(--lo);">— for /transfer · leave blank for GET</span></div>
-        <textarea class="form-input" rows="4" style="font-family:var(--f-mono);font-size:12px;resize:vertical;">{"from_account":"${user_id}","amount":${amount},"to_account":"ACC_TARGET"}</textarea>
-      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--mid);margin-bottom:6px;">Data files on the server</div>
+      <div id="dataFileList" style="margin-bottom:12px;font-size:12px;color:var(--lo);">None uploaded.</div>
+      <div style="font-size:12px;font-weight:600;color:var(--mid);margin-bottom:6px;">Requests <span style="font-size:11px;font-weight:400;color:var(--lo);">— a path on the target; query like <code>size=${size}</code>; body for POST/PUT</span></div>
+      <div class="req-hdr"><span>Endpoint</span><span>Method</span><span>Query</span><span>Body</span><span>Weight</span><span>p99 ms</span><span></span></div>
+      <div id="reqList"></div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="addRequestRow()">+ Add request</button>
+      <div style="font-size:12px;font-weight:600;color:var(--mid);margin:12px 0 6px;">Variable mappings <span style="font-size:11px;font-weight:400;color:var(--lo);">— each <code>${var}</code> to a file and column</span></div>
+      <div id="varList"></div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="addVarRow()">+ Add mapping</button>
     </div>
 
     <div class="wz-nav">
@@ -1973,6 +1955,7 @@ function wizardBody(){
     restart_command:_wzVal('gh-restart'),health_url:_wzVal('gh-probe'),provenance:_provenance(),
     mode,scenarios:scen,goal:_wzVal('goal-text'),run_id:_wzVal('wz-run-id'),
     experiments:parseInt(_wzVal('wz-experiments'))||5,
+    ..._requestsAndData(),
     cost_cap_usd:_wzVal('wz-cost-cap')?Number(_wzVal('wz-cost-cap')):null,
     wall_clock_cap_h:_wzVal('wz-wall-cap')?Number(_wzVal('wz-wall-cap')):null};
   if(mode==='Ceiling Probe') body.ceiling={start_users:parseInt(_wzVal('ceil-start')),step:parseInt(_wzVal('ceil-step')),max_users:parseInt(_wzVal('ceil-max')),hold_s:parseInt(_wzVal('ceil-hold'))};
@@ -2227,26 +2210,56 @@ function addHook(){
 }
 
 /* ── Input data / variable mappings ──────────────────────────────────── */
-function handleCsvInput(input){
-  if(!input.files||!input.files.length) return;
-  const list=document.getElementById('dataFileList');
-  if(!list) return;
-  Array.from(input.files).forEach(f=>{
-    const row=document.createElement('div');
-    row.style.cssText='display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rs);margin-bottom:4px;font-size:12px;';
-    row.innerHTML=`<span style="font-size:14px;">📄</span><span class="hi" style="flex:1;">${f.name}</span><span style="color:var(--lo);">${(f.size/1024).toFixed(1)} KB</span><button onclick="this.parentNode.remove()" style="background:none;border:none;color:var(--lo);cursor:pointer;font-size:13px;padding:0;">✕</button>`;
-    list.appendChild(row);
+let dataFiles=[];
+function _el(tag,props){const e=document.createElement(tag);Object.assign(e,props||{});return e;}
+async function loadDataFiles(){
+  try{const r=await fetch('/v1/perf/load-data');if(r.ok) dataFiles=(await r.json()).files||[];}catch(e){}
+  const list=document.getElementById('dataFileList');if(!list)return;
+  list.replaceChildren();
+  if(!dataFiles.length){list.textContent='None uploaded.';}
+  dataFiles.forEach(f=>list.appendChild(_el('div',{textContent:'📊 '+f.name+' — '+(f.error?('unreadable: '+f.error):(f.rows+' rows · columns: '+f.columns.join(', ')))})));
+  document.querySelectorAll('#varList select').forEach(sel=>{const v=sel.value;_fillFiles(sel);sel.value=v;});
+}
+function _fillFiles(sel){sel.replaceChildren(_el('option',{value:'',textContent:'— file —'}));dataFiles.filter(f=>!f.error).forEach(f=>sel.appendChild(_el('option',{value:f.name,textContent:f.name})));}
+async function handleCsvInput(input){
+  for(const f of Array.from(input.files||[])){
+    try{const info=await apiPost('/v1/perf/load-data',{name:f.name,text:await f.text()});addChatMsg('ai','Uploaded <strong>'+escHtml(info.name)+'</strong>: '+info.rows+' rows, columns '+escHtml(info.columns.join(', '))+'.');}
+    catch(e){addChatMsg('ai','⚠ '+escHtml(f.name)+' was not uploaded: '+escHtml(e.message));}
+  }
+  input.value='';loadDataFiles();
+}
+function addRequestRow(endpoint,method,query,body,weight,p99){
+  const row=_el('div',{className:'req-row'});
+  row.appendChild(_el('input',{value:endpoint||'',placeholder:'/api/orders'}));
+  const m=_el('select');['GET','POST','PUT','PATCH','DELETE'].forEach(x=>m.appendChild(_el('option',{value:x,textContent:x})));m.value=method||'GET';row.appendChild(m);
+  row.appendChild(_el('input',{value:query||'',placeholder:'size=${size}'}));
+  row.appendChild(_el('input',{value:body||'',placeholder:'{"id": "${user_id}"}'}));
+  row.appendChild(_el('input',{value:String(weight||1),type:'number',min:'1'}));
+  row.appendChild(_el('input',{value:p99||'',type:'number',min:'1',placeholder:'SLA'}));
+  const rm=_el('button',{textContent:'✕'});rm.onclick=()=>row.remove();row.appendChild(rm);
+  document.getElementById('reqList').appendChild(row);
+}
+function addVarRow(name,file,column){
+  const row=_el('div',{className:'var-row'});
+  row.appendChild(_el('input',{value:name||'',placeholder:'size'}));
+  const sel=_el('select');_fillFiles(sel);sel.value=file||'';row.appendChild(sel);
+  row.appendChild(_el('input',{value:column||'',placeholder:'column'}));
+  const rm=_el('button',{textContent:'✕'});rm.onclick=()=>row.remove();row.appendChild(rm);
+  document.getElementById('varList').appendChild(row);
+}
+function _requestsAndData(){
+  const requests=Array.from(document.querySelectorAll('#reqList .req-row')).map(r=>{
+    const [ep,m,q,b,w,p]=Array.from(r.querySelectorAll('input,select')).map(x=>x.value.trim());
+    return {endpoint:ep,method:m,query:q,body:b,weight:parseInt(w)||1,p99_ms:p?Number(p):null};
+  }).filter(r=>r.endpoint);
+  const data={};
+  document.querySelectorAll('#varList .var-row').forEach(r=>{
+    const [n,f,c]=Array.from(r.querySelectorAll('input,select')).map(x=>x.value.trim());
+    const name=n.replace(/^\$\{|\}$/g,'');if(name) data[name]={file:f,column:c};
   });
-  input.value='';
+  return {requests,data};
 }
-function addVarRow(){
-  const list=document.getElementById('varList');
-  if(!list) return;
-  const row=document.createElement('div');
-  row.className='var-row';
-  row.innerHTML=`<input class="form-input" placeholder="\${var_name}" style="font-size:12px;"><select class="form-input" style="font-size:12px;"><option>— select CSV —</option></select><input class="form-input" placeholder="column" style="font-size:12px;"><button onclick="this.closest('.var-row').remove()" style="background:none;border:none;color:var(--lo);cursor:pointer;font-size:14px;">✕</button>`;
-  list.appendChild(row);
-}
+loadDataFiles();
 
 /* ── Theme toggle ────────────────────────────────────────────────────── */
 function toggleTheme(){

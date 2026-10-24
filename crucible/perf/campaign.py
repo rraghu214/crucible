@@ -248,7 +248,67 @@ def _parse_scenarios(raw: Any, source: Path) -> list[dict[str, Any]]:
             raise CampaignRefused(f"{source}: scenario {name!r} has an out-of-range value: {entry}")
         if "mix" in item:
             entry["mix"] = _parse_mix(item["mix"], name, source)
+        if "requests" in item:
+            if "mix" in entry:
+                raise CampaignRefused(f"{source}: scenario {name!r} declares both mix and requests; a "
+                                      "templated scenario sets its own weights per request")
+            entry["requests"] = _parse_requests(item["requests"], name, source)
+            entry["data"] = _parse_data(item.get("data") or {}, entry["requests"], name, source)
         out.append(entry)
+    return out
+
+
+_TEMPLATE_VAR = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
+_DATA_FILE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\.(csv|json)$")
+
+
+def _parse_requests(raw: Any, scenario: str, source: Path) -> list[dict[str, Any]]:
+    """Templated requests: each a path on the target, a method, an optional query
+    and body with ${var} placeholders, a whole-number weight, an optional p99."""
+    if not isinstance(raw, list) or not raw:
+        raise CampaignRefused(f"{source}: scenario {scenario!r} requests must be a non-empty list")
+    out, endpoints = [], set()
+    for item in raw:
+        if not isinstance(item, dict):
+            raise CampaignRefused(f"{source}: scenario {scenario!r} each request must be a mapping")
+        endpoint = str(item.get("endpoint", ""))
+        # A path on the target, never another host: the load generator must not
+        # be pointable at somebody else's service from a file.
+        if not endpoint.startswith("/") or endpoint.startswith("//") or "://" in endpoint or "?" in endpoint:
+            raise CampaignRefused(f"{source}: scenario {scenario!r} request endpoint {endpoint!r} must be a "
+                                  "path on the target such as /api/orders (put parameters in query)")
+        if endpoint in endpoints:
+            raise CampaignRefused(f"{source}: scenario {scenario!r} names {endpoint!r} twice")
+        endpoints.add(endpoint)
+        method = str(item.get("method", "GET")).upper()
+        weight, target = item.get("weight", 1), item.get("p99_ms")
+        if method not in _METHODS:
+            raise CampaignRefused(f"{source}: scenario {scenario!r} method {method!r} is not one of {_METHODS}")
+        if isinstance(weight, bool) or not isinstance(weight, int) or weight < 1:
+            raise CampaignRefused(f"{source}: scenario {scenario!r} weight for {endpoint!r} must be a whole number >= 1")
+        if target is not None and (isinstance(target, bool) or not isinstance(target, (int, float)) or target <= 0):
+            raise CampaignRefused(f"{source}: scenario {scenario!r} p99_ms for {endpoint!r} must be positive")
+        out.append({"endpoint": endpoint, "method": method, "query": str(item.get("query") or ""),
+                    "body": str(item.get("body") or ""), "weight": weight,
+                    "p99_ms": None if target is None else float(target)})
+    return out
+
+
+def _parse_data(raw: Any, requests: list[dict[str, Any]], scenario: str, source: Path) -> dict[str, dict[str, str]]:
+    """``{var: {file, column}}``. Every ${var} a template uses must be mapped."""
+    if not isinstance(raw, dict):
+        raise CampaignRefused(f"{source}: scenario {scenario!r} data must map each variable to a file and column")
+    out: dict[str, dict[str, str]] = {}
+    for var, spec in raw.items():
+        if not isinstance(spec, dict) or not _DATA_FILE.match(str(spec.get("file", ""))) or not spec.get("column"):
+            raise CampaignRefused(f"{source}: scenario {scenario!r} variable {var!r} needs a plain .csv/.json "
+                                  "file name and a column")
+        out[str(var)] = {"file": str(spec["file"]), "column": str(spec["column"])}
+    used = {v for r in requests for v in _TEMPLATE_VAR.findall(r["query"] + r["body"])}
+    unmapped = sorted(used - set(out))
+    if unmapped:
+        raise CampaignRefused(f"{source}: scenario {scenario!r} uses {unmapped} with no data mapping")
     return out
 
 
@@ -1417,6 +1477,11 @@ class Campaign:
         try:
             new_sla = Sla.load(sla_path) if sla_path else self.sla
             check_environment(new_sla)
+            running = new_sla.scenario(self.declared_scenario) if self.declared_scenario else None
+            if running and running.get("requests"):
+                from .loaddata import resolve  # noqa: PLC0415
+
+                resolve(self.state_dir, running.get("data") or {})
             new_profile = TargetProfile.load(profile_path) if profile_path else self.profile
         except Exception as exc:  # noqa: BLE001 - recorded, and the run keeps the configuration it had
             result.amendments.append({
@@ -1471,6 +1536,9 @@ class Campaign:
             definition = new_sla.scenario(self.declared_scenario)
             if definition and definition.get("mix"):
                 _, self.mix_targets = mix_from(definition["mix"], new_sla)
+            elif definition and definition.get("requests"):
+                self.mix_targets = {r["endpoint"]: float(r.get("p99_ms") or new_sla.p99_ms)
+                                    for r in definition["requests"]}
         rebaselined = None
         if "at_load" in changes or "scenario" in changes or "endpoint" in changes:
             from .loadprofile import tag_for_endpoint  # noqa: PLC0415
@@ -1485,9 +1553,17 @@ class Campaign:
                 measure_s=float(load.get("measure_s", self.scenario.measure_s)),
                 tags=(tag_for_endpoint(new_sla.endpoint),) if "endpoint" in changes else self.scenario.tags,
             )
-            if "scenario" in changes and (changes["scenario"]["to"] or {}).get("mix"):
-                tag_mix, self.mix_targets = mix_from(changes["scenario"]["to"]["mix"], new_sla)
+            new_def = changes["scenario"]["to"] if "scenario" in changes else None
+            if new_def and new_def.get("mix"):
+                tag_mix, self.mix_targets = mix_from(new_def["mix"], new_sla)
                 self.scenario = replace(self.scenario, mix=tag_mix, tags=())
+            elif new_def and new_def.get("requests"):
+                from .loaddata import resolve  # noqa: PLC0415
+
+                self.scenario = replace(self.scenario, requests=tuple(new_def["requests"]),
+                                        data=resolve(self.state_dir, new_def.get("data") or {}), tags=())
+                self.mix_targets = {r["endpoint"]: float(r.get("p99_ms") or new_sla.p99_ms)
+                                    for r in new_def["requests"]}
             # A verdict compares two measurements at the same load. After a load
             # change the old "before" was taken under different traffic, so the
             # rest of the run starts like a new test case: with its own baseline.

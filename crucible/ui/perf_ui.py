@@ -1754,6 +1754,20 @@ def parse_mix_text(text: str) -> dict[str, dict[str, Any]] | None:
     return out
 
 
+class RequestRow(BaseModel):
+    endpoint: str = Field(min_length=1, max_length=300)
+    method: str = Field(default="GET", pattern="^(GET|POST|PUT|PATCH|DELETE)$")
+    query: str = Field(default="", max_length=2000)
+    body: str = Field(default="", max_length=20_000)
+    weight: int = Field(default=1, ge=1, le=1000)
+    p99_ms: float | None = Field(default=None, gt=0)
+
+
+class DataMapping(BaseModel):
+    file: str = Field(min_length=1, max_length=120)
+    column: str = Field(min_length=1, max_length=200)
+
+
 class CeilingBounds(BaseModel):
     start_users: int = Field(ge=1, le=100_000)
     step: int = Field(ge=1, le=100_000)
@@ -1779,6 +1793,9 @@ class WizardBody(BaseModel):
     ceiling: CeilingBounds | None = None
     cost_cap_usd: float | None = Field(default=None, gt=0)
     wall_clock_cap_h: float | None = Field(default=None, gt=0)
+    #: Templated requests and their data, applied to every scenario (Group 40).
+    requests: list[RequestRow] = Field(default_factory=list, max_length=20)
+    data: dict[str, DataMapping] = Field(default_factory=dict)
 
 
 def _wizard_paths(ctx: PerfContext) -> tuple[Path, Path, Path]:
@@ -1806,14 +1823,33 @@ def _declared_scenarios(body: WizardBody) -> list[dict[str, Any]] | None:
     if body.mode == "Ceiling Probe" or not body.scenarios:
         return None
     declared = []
+    requests = [r.model_dump() for r in body.requests]
     for sc in body.scenarios:
         entry: dict[str, Any] = {"name": sc.name, "users": sc.users, "measure_s": sc.duration_s, "warmup_s": 120,
                                  "spawn_rate": round(sc.users / sc.ramp_s if sc.ramp_s > 0 else float(sc.users), 3)}
         mix = parse_mix_text(sc.mix)
+        if mix and requests:
+            raise HTTPException(422, f"scenario {sc.name!r} has a mix, but request templates set their own "
+                                     "weights; use one or the other")
         if mix:
             entry["mix"] = mix
+        if requests:
+            entry["requests"] = requests
+            entry["data"] = {var: m.model_dump() for var, m in body.data.items()}
         declared.append(entry)
     return declared
+
+
+def _check_load_data(body: WizardBody, ctx: PerfContext) -> None:
+    """Every mapped data file must already be uploaded, with its column."""
+    if not body.requests:
+        return
+    from ..perf.loaddata import LoadDataError, resolve
+
+    try:
+        resolve(ctx.state, {var: m.model_dump() for var, m in body.data.items()})
+    except LoadDataError as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 def _spawn_rate(body: WizardBody) -> float | None:
@@ -1840,6 +1876,7 @@ async def perf_wizard_preview(body: WizardBody, request: Request):
     """The diffs Launch would write. Writes nothing."""
     from .wizard import WizardRefused, render
 
+    _check_load_data(body, _context(request))
     try:
         rendered = render(_wizard_form(body, "operator"), *_wizard_paths(_context(request)))
     except WizardRefused as exc:
@@ -1933,6 +1970,7 @@ async def perf_wizard_save(body: WizardBody, request: Request):
     from .wizard import WizardRefused, render, write
 
     ctx = _context(request)
+    _check_load_data(body, ctx)
     sla_path, profile_path, locustfile = _wizard_paths(ctx)
     try:
         rendered = render(_wizard_form(body, "operator:ui"), sla_path, profile_path, locustfile)
@@ -1955,6 +1993,7 @@ async def perf_wizard_launch(body: WizardBody, request: Request):
         raise HTTPException(422, "a ceiling probe needs its bounds (DESIGN.md 20.2)")
     if body.mode != "Ceiling Probe" and not body.scenarios:
         raise HTTPException(422, "at least one scenario is required")
+    _check_load_data(body, ctx)
     sla_path, profile_path, locustfile = _wizard_paths(ctx)
     try:
         rendered = render(_wizard_form(body, "operator:ui"), sla_path, profile_path, locustfile)
@@ -1986,6 +2025,29 @@ async def perf_wizard_launch(body: WizardBody, request: Request):
     job = start_job(ctx.state, ctx.root, args, label=f"{body.mode.lower()} {body.run_id or ''}".strip())
     return {"job": _job_dict(job), "sla_diff": rendered["sla_diff"], "profile_diff": rendered["profile_diff"],
             "notes": _launch_notes(body)}
+
+
+class LoadDataBody(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    text: str = Field(min_length=1, max_length=6_000_000)
+
+
+@router.post("/v1/perf/load-data", dependencies=[Depends(require_control)])
+async def perf_load_data_upload(body: LoadDataBody, request: Request):
+    """Upload a CSV/JSON data file for templated requests (Group 40)."""
+    from ..perf.loaddata import LoadDataError, save
+
+    try:
+        return save(_context(request).state, body.name, body.text)
+    except LoadDataError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.get("/v1/perf/load-data")
+async def perf_load_data_list(request: Request):
+    from ..perf.loaddata import listing
+
+    return {"files": await asyncio.to_thread(listing, _context(request).state)}
 
 
 class SuggestBody(BaseModel):
