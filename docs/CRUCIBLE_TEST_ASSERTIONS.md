@@ -3931,6 +3931,86 @@ builder (one token each, 28.4) and the wizard's Launch all pass both caps.
 
 ---
 
+# GROUP 37 — Multi-scenario campaigns, and ceiling-probe goal edits
+
+*Drafted 24 October 2026 by Claude Code. NOT YET REVIEWED. Implemented in
+`tests/test_perf_series.py` (13), plus updated tests in `tests/test_ui_wizard.py`.
+Code: `Sla.scenarios` / `_parse_scenarios` in `campaign.py`; `_run_series`,
+`_continue_series`, `--all-scenarios` and series-aware `cmd_resume` in
+`commands.py`; `CeilingProbe._take_sla_edit`.*
+
+*Only the wizard's first scenario used to run. Now the SLA declares a
+`scenarios:` list (written by the wizard, editable by hand), and
+`crucible run --all-scenarios` runs each one in order as **its own campaign**,
+named `<series>-<scenario>`, with its own baseline and verdicts. Changes kept by
+one scenario are live on the target, so the next scenario's baseline measures
+them. Every scenario is judged against the one objective.*
+
+---
+
+### 37.1 Each scenario runs on its declared load, in order
+
+**What it checks.** Two declared scenarios run as `s1-steady` (50 users, 300 s,
+5 users/s) and `s1-burst` (100 users, 180 s). Each manifest carries
+`series: {id, index, of, scenario}`. The series record
+(`<state>/series/<id>.json`) ends `complete`. The wizard writes every scenario,
+with its Ramp as a spawn rate, and runs `--all-scenarios`.
+
+**For review:**
+- Is one shared objective right for every scenario? A burst at 2× load is judged
+  against the same p99 as steady load. Per-scenario targets arrive with
+  traffic-mix scenarios (item 6); should plain scenarios get an optional target
+  too?
+- `--experiments` is per scenario, not shared across the series. OK?
+
+---
+
+### 37.2 The SLA is re-read between scenarios
+
+**What it checks.** An edit to a later scenario made while an earlier one runs
+(burst users 100 → 40) is the value the later one runs with. An edit to the
+*running* scenario's own definition is a load change for that campaign and
+re-measures its baseline (Group 33).
+
+---
+
+### 37.3 A pause stops the series; resuming that scenario carries it on
+
+**What it checks.** A pause in `steady` leaves the series "paused in steady",
+with `burst` not started. `crucible resume s3-steady` rebuilds that scenario on
+its **declared** load (not the resume command's defaults), finishes it, then runs
+`burst`. The series ends `complete`.
+
+---
+
+### 37.4 Caps cover the whole series
+
+**What it checks.** With a $0.10 cap and $0.06 spent in `steady`, `burst` is
+built with $0.04. A cap used up between scenarios stops the series before the
+next one ("used up before 'burst'"), and a cap hit inside a scenario stops the
+series there. Wall clock works the same way, counting only time spent running.
+
+---
+
+### 37.5 A malformed scenario list is refused whole
+
+**What it checks.** The SLA is refused at load if any scenario has 0 users, a
+duplicate or non-plain name, a measure window under 30 s, or the list isn't a
+list. `--all-scenarios` against an SLA with no scenarios is refused and points
+to `objective.at_load`.
+
+---
+
+### 37.6 The ceiling probe takes goal edits between steps, without pausing
+
+**What it checks.** The p99 goal tightened from 150 to 100 ms during step 1:
+step 2 is judged against 100 ms (recorded on the step as `sla_p99_ms`), so the
+knee moves to (50, 100), and an amendment records the change. An endpoint edit
+mid-probe is recorded as not applied: a ceiling probe is one load ramp on one
+endpoint, with the bounds it was started with.
+
+---
+
 # Review decisions — week 1
 
 Raised by Claude Code while implementing, decided by the operator on 10 September 2026.

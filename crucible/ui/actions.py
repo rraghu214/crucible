@@ -106,7 +106,7 @@ def run_args(
     approval_timeout: float | None = None, provider: str = "", model: str = "",
     jaeger_url: str = "", jaeger_service: str = "", trace_sampling_rate: float | None = None,
     stakeholder_request: str = "", spawn_rate: float | None = None,
-    cost_cap: float | None = None, wall_clock_cap: float | None = None,
+    cost_cap: float | None = None, wall_clock_cap: float | None = None, all_scenarios: bool = False,
 ) -> list[str]:
     if approve not in ("file", "preapproved"):
         raise ActionError(f"approve mode must be 'file' or 'preapproved', got {approve!r}")
@@ -119,6 +119,7 @@ def run_args(
     _num(args, "measure", measure, float)
     _num(args, "spawn-rate", spawn_rate, float)
     _num(args, "experiments", experiments)
+    _flag(args, "all-scenarios", all_scenarios)
     _num(args, "cost-cap", cost_cap, float)
     _num(args, "wall-clock-cap", wall_clock_cap, float)
     if _text(run_id):

@@ -1777,7 +1777,16 @@ def _wizard_form(body: WizardBody, operator: str) -> Any:
     return WizardForm(endpoint=body.endpoint, p99_ms=float(body.p99_ms), error_rate_pct=float(body.error_rate_pct),
                       users=body.users, config_file=body.config_file, base_branch=body.base_branch,
                       restart_command=command, health_url=body.health_url, operator=operator,
-                      provenance=body.provenance, spawn_rate=_spawn_rate(body))
+                      provenance=body.provenance, spawn_rate=_spawn_rate(body),
+                      scenarios=_declared_scenarios(body))
+
+
+def _declared_scenarios(body: WizardBody) -> list[dict[str, Any]] | None:
+    if body.mode == "Ceiling Probe" or not body.scenarios:
+        return None
+    return [{"name": sc.name, "users": sc.users, "measure_s": sc.duration_s, "warmup_s": 120,
+             "spawn_rate": round(sc.users / sc.ramp_s if sc.ramp_s > 0 else float(sc.users), 3)}
+            for sc in body.scenarios]
 
 
 def _spawn_rate(body: WizardBody) -> float | None:
@@ -1856,9 +1865,16 @@ async def perf_wizard_budget(body: WizardBody, request: Request):
     else:
         if not body.scenarios:
             raise HTTPException(422, "at least one scenario is required")
-        result = estimate(mode=body.mode, warmup_s=DEFAULT_WARMUP_S, measure_s=body.scenarios[0].duration_s,
-                          experiments=body.experiments, verify_timeout_s=float(profile.deploy.verify_timeout_s or 0),
-                          per_call_costs=per_call)
+        parts = [(sc.name, estimate(mode=body.mode, warmup_s=DEFAULT_WARMUP_S, measure_s=sc.duration_s,
+                                    experiments=body.experiments,
+                                    verify_timeout_s=float(profile.deploy.verify_timeout_s or 0),
+                                    per_call_costs=per_call)) for sc in body.scenarios]
+        result = dict(parts[0][1])
+        if len(parts) > 1:
+            result["rows"] = [{**row, "phase": f"{name} · {row['phase']}"} for name, est in parts for row in est["rows"]]
+            for key in ("min_s", "max_s", "calls"):
+                result[key] = sum(est[key] for _, est in parts)
+            result["cost"] = None if parts[0][1]["cost"] is None else sum(est["cost"] for _, est in parts)
     result["currency"] = pricing.currency
     return result
 
@@ -1867,13 +1883,14 @@ def _launch_notes(body: WizardBody) -> list[str]:
     notes = []
     if body.mode == "Advisory":
         notes.append("Advisory mode is not built yet (Group B); Launch will refuse it.")
-    if body.mode != "Ceiling Probe" and len(body.scenarios) > 1:
-        notes.append(f"Only the first scenario ({body.scenarios[0].name}) runs; "
-                     "multi-scenario campaigns come in Group B.")
     if body.mode != "Ceiling Probe" and body.scenarios:
-        rate = _spawn_rate(body)
-        notes.append(f"Ramp: {body.scenarios[0].users} users over {body.scenarios[0].ramp_s} s = "
-                     f"{rate:.2f} users/s. A 120 s warmup is discarded before the measured duration.")
+        names = ", ".join(sc.name for sc in body.scenarios)
+        notes.append(f"Runs {len(body.scenarios)} scenario(s) in order ({names}), each as its own campaign "
+                     "with its own baseline; caps cover the whole series.")
+        for sc in body.scenarios:
+            rate = sc.users / sc.ramp_s if sc.ramp_s > 0 else float(sc.users)
+            notes.append(f"{sc.name}: {sc.users} users over {sc.ramp_s} s = {rate:.2f} users/s; "
+                         f"120 s warmup discarded, {sc.duration_s} s measured.")
     return notes
 
 
@@ -1930,7 +1947,7 @@ async def perf_wizard_launch(body: WizardBody, request: Request):
             first = body.scenarios[0]
             args = _actions.run_args(
                 profile=ctx.profile_name, sla=str(sla_path), scenario=first.name, users=first.users,
-                measure=float(first.duration_s), spawn_rate=_spawn_rate(body),
+                measure=float(first.duration_s), spawn_rate=_spawn_rate(body), all_scenarios=True,
                 experiments=body.experiments, run_id=body.run_id,
                 state_dir=str(ctx.state), workspace=os.getenv("CRUCIBLE_WORKSPACE", ""),
                 approve="preapproved" if body.mode == "Fully Automated" else "file",

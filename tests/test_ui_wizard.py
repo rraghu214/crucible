@@ -151,9 +151,12 @@ class TestLaunch:
         assert Sla.load(sla_path).endpoint == "/api/orders"
         assert sla_path.read_text(encoding="utf-8").count(MARKER) == 1
         args = started[0]
-        assert args[0] == "run" and f"--sla={sla_path}" in args and "--users=80" in args
+        assert args[0] == "run" and f"--sla={sla_path}" in args and "--all-scenarios" in args
         assert "--approve=file" in args
-        assert any("Only the first scenario" in n for n in response.json()["notes"])
+        declared = Sla.load(sla_path).scenarios
+        assert [(s["name"], s["users"], s["measure_s"], s["spawn_rate"]) for s in declared] == [
+            ("steady_80u", 80, 300.0, 2.667), ("burst_160u", 160, 180.0, 10.667)]
+        assert any("Runs 2 scenario(s) in order" in n for n in response.json()["notes"])
 
     def test_the_budget_steps_caps_reach_the_run(self, client):
         tc, started = client
@@ -282,8 +285,11 @@ class TestBudget:
     def test_the_route_reads_the_profiles_verify_timeout(self, client):
         tc, _ = client
         d = tc.post("/v1/perf/wizard/budget", json=_body(experiments=2)).json()
-        deploy = next(r for r in d["rows"] if r["phase"].startswith("Deploy"))
-        assert deploy["max_s"] == 2 * 300
+        deploys = [r for r in d["rows"] if "Deploy" in r["phase"]]
+        assert [r["phase"].split(" · ")[0] for r in deploys] == ["steady_80u", "burst_160u"]
+        assert all(r["max_s"] == 2 * 300 for r in deploys)
+        windows = (120 + 300) * 3 + (120 + 180) * 3
+        assert d["max_s"] == windows + 2 * 2 * 300
 
 
 def test_the_wizard_opens_with_the_files_values_and_the_driven_endpoints(client):

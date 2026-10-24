@@ -50,6 +50,17 @@ objective:
     spawn_rate: 10
     think_time_s: [0.1, 0.3]
 
+# --- Load scenarios ----------------------------------------------------------
+#
+# Run in order by `crucible run --all-scenarios`, each as its own campaign with
+# its own baseline and verdicts (changes kept by one are live for the next).
+# Every scenario is judged against the objective above. Empty means "run
+# objective.at_load". The wizard writes this line; editing it by hand works too,
+# and an edit mid-run is honoured at the next experiment boundary (Group 33).
+# Fields: name, users, measure_s (default 300), warmup_s (default 120),
+# spawn_rate (users started per second; default at_load.spawn_rate).
+scenarios: []
+
 # --- What counts as a real change -----------------------------------------
 #
 # Measured on this environment, not assumed. The baseline p99 spread across

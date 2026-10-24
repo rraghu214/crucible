@@ -360,6 +360,12 @@ steal).
   control experiment count and model tier; scenarios control duration and
   repeats. A 24-hour scenario declares `repeats: 1`, and the claim states
   variance bounds are unavailable for it.
+- **A collection's scenarios run as a series (24 October 2026).** The SLA
+  declares `scenarios:`, and `crucible run --all-scenarios` runs each one in
+  order as its own campaign with its own baseline and verdicts. Changes kept by
+  one are live for the next, which re-measures them as its baseline. The SLA is
+  re-read between scenarios, the run caps cover the whole series, and a pause
+  stops the series where it is: resuming that scenario carries the rest on.
 - **Wall clock is the real budget, not money.** Three light scenarios cost
   four cents and take three hours; adding a sustained burst makes it eight
   hours for the same four cents. Nobody picks a plan to save four cents —

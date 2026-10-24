@@ -38,6 +38,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import time
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
@@ -151,6 +152,9 @@ class Sla:
     noise_source: str = ""
     cpu_steal_abort_pct: float = 5.0
     at_load: dict[str, Any] = field(default_factory=dict)
+    #: Named load scenarios, run in order by ``crucible run --all-scenarios``,
+    #: each as its own campaign with its own baseline. Empty means "at_load".
+    scenarios: list[dict[str, Any]] = field(default_factory=list)
     source_path: Path | None = None
 
     @classmethod
@@ -187,6 +191,7 @@ class Sla:
             noise_source=str(noise.get("source", "")),
             cpu_steal_abort_pct=float(contention.get("cpu_steal_abort_pct", 5.0)),
             at_load=dict(objective.get("at_load") or {}),
+            scenarios=_parse_scenarios(data.get("scenarios"), resolved),
             source_path=resolved,
         )
 
@@ -194,6 +199,9 @@ class Sla:
         payload = asdict(self)
         payload["source_path"] = str(self.source_path) if self.source_path else None
         return payload
+
+    def scenario(self, name: str) -> dict[str, Any] | None:
+        return next((s for s in self.scenarios if s["name"] == name), None)
 
     def met_by(self, p99_ms: float | None, error_rate_pct: float | None) -> bool | None:
         """Whether a measurement meets the objective. ``None`` when unmeasured.
@@ -209,6 +217,39 @@ class Sla:
         if error_rate_pct is not None and error_rate_pct > self.error_rate_pct:
             return False
         return True
+
+
+_SCENARIO_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,39}$")
+
+
+def _parse_scenarios(raw: Any, source: Path) -> list[dict[str, Any]]:
+    """Validate the SLA's ``scenarios:`` list. Refused whole, never half-read."""
+    if raw in (None, []):
+        return []
+    if not isinstance(raw, list):
+        raise CampaignRefused(f"{source}: scenarios must be a list")
+    out, names = [], set()
+    for item in raw:
+        if not isinstance(item, dict):
+            raise CampaignRefused(f"{source}: each scenario must be a mapping")
+        name = str(item.get("name", ""))
+        if not _SCENARIO_NAME.match(name) or name in names:
+            raise CampaignRefused(f"{source}: scenario name {name!r} must be unique and plain")
+        names.add(name)
+        try:
+            entry = {"name": name, "users": int(item["users"]),
+                     "measure_s": float(item.get("measure_s", 300)),
+                     "warmup_s": float(item.get("warmup_s", 120))}
+            if "spawn_rate" in item:
+                entry["spawn_rate"] = float(item["spawn_rate"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise CampaignRefused(f"{source}: scenario {name!r} is malformed ({exc})") from exc
+        if entry["users"] < 1 or entry["measure_s"] < 30 or entry["warmup_s"] < 0 or entry.get("spawn_rate", 1) <= 0:
+            raise CampaignRefused(f"{source}: scenario {name!r} has an out-of-range value: {entry}")
+        if "mix" in item:
+            entry["mix"] = item["mix"]
+        out.append(entry)
+    return out
 
 
 def check_environment(sla: Sla) -> None:
@@ -622,6 +663,8 @@ class CampaignResult:
     #: Time spent paused, excluded from the wall-clock cap: a campaign paused
     #: overnight must not trip its cap the moment it resumes.
     paused_seconds: float = 0.0
+    #: Set when this campaign is one scenario of an --all-scenarios series.
+    series: dict[str, Any] = field(default_factory=dict)
 
     @property
     def spans_multiple_models(self) -> bool:
@@ -663,6 +706,7 @@ class CampaignResult:
             "caps": self.caps,
             "cap_hit": self.cap_hit,
             "paused_seconds": self.paused_seconds,
+            "series": self.series,
         }
 
     def write(self, directory: Path) -> Path:
@@ -773,6 +817,11 @@ class Campaign:
     #: rolled back, because every kept change was measured and verified.
     cost_cap_usd: float | None = None
     wall_clock_cap_s: float | None = None
+    #: When this campaign runs one of the SLA's declared scenarios, its name; the
+    #: scenario's definition (not at_load) is then its load. And the series it
+    #: belongs to, recorded on the manifest: {"id", "index", "of", "scenario"}.
+    declared_scenario: str = ""
+    series: dict[str, Any] = field(default_factory=dict)
     #: ``(result) -> spent so far``; ``None`` prices the manifest the way the
     #: scorer does (config/pricing.yaml). Injectable so a test need not price.
     cost_so_far: Any = None
@@ -853,6 +902,7 @@ class Campaign:
             scenario=self.scenario.name,
             guarded_files=fingerprint_files(self.guarded_files),
             caps={"cost_usd": self.cost_cap_usd, "wall_clock_s": self.wall_clock_cap_s},
+            series=dict(self.series),
         )
         lock = BranchLock(
             state_dir=self.state_dir,
@@ -925,6 +975,7 @@ class Campaign:
             scenario=self.scenario.name,
             guarded_files=dict(resume_state.get("guarded_files") or fingerprint_files(self.guarded_files)),
             caps={"cost_usd": self.cost_cap_usd, "wall_clock_s": self.wall_clock_cap_s},
+            series=dict(self.series),
             paused_seconds=float(resume_state.get("paused_seconds") or 0.0) + max(
                 0.0, time.time() - float(resume_state.get("paused_at_epoch_s") or time.time())),
         )
@@ -1306,6 +1357,16 @@ class Campaign:
             if old != new:
                 changes[key] = {"from": old, "to": new}
         notes: list[str] = []
+        if self.declared_scenario:
+            # This run's load is its declared scenario, not at_load.
+            changes.pop("at_load", None)
+            old_def = self.sla.scenario(self.declared_scenario)
+            new_def = new_sla.scenario(self.declared_scenario)
+            if new_def is None:
+                notes.append(f"scenario {self.declared_scenario!r} was removed from the SLA; this run "
+                             "finishes it on its last definition")
+            elif new_def != old_def:
+                changes["scenario"] = {"from": old_def, "to": new_def}
         old_deploy, new_deploy = self.profile.deploy, new_profile.deploy
         if (old_deploy.branch, old_deploy.remote) != (new_deploy.branch, new_deploy.remote):
             notes.append("deploy branch/remote edits are not applied mid-run: this campaign holds "
@@ -1329,10 +1390,11 @@ class Campaign:
         self.sla, self.profile = new_sla, new_profile
         self.applicator.profile = new_profile
         rebaselined = None
-        if "at_load" in changes or "endpoint" in changes:
+        if "at_load" in changes or "scenario" in changes or "endpoint" in changes:
             from .loadprofile import tag_for_endpoint  # noqa: PLC0415
 
-            load = new_sla.at_load or {}
+            load = (changes["scenario"]["to"] if "scenario" in changes
+                    else {} if self.declared_scenario else new_sla.at_load or {})
             self.scenario = replace(
                 self.scenario,
                 users=int(load.get("users", self.scenario.users)),

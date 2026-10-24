@@ -671,9 +671,17 @@ def cmd_resume(run_id: str, state_dir: str | None = None, **kwargs: Any) -> int:
         print(f"no paused state for {run_id!r} — expected {ps}")
         return REFUSED
 
+    plan = _series_for_run(root, run_id)
     try:
-        campaign = build_campaign(run_id=run_id, state_dir=str(root), **kwargs)
-    except (CampaignRefused, FileNotFoundError, ValueError) as exc:
+        if plan is not None:
+            # One scenario of a series: rebuild it on its declared load, not the
+            # resume command's defaults.
+            name = next(n for n, r in plan["runs"].items() if r == run_id)
+            names = list(plan["runs"])
+            campaign = _scenario_campaign(root, plan, name, names.index(name) + 1, len(names))
+        else:
+            campaign = build_campaign(run_id=run_id, state_dir=str(root), **kwargs)
+    except (CampaignRefused, FileNotFoundError, ValueError, _SeriesCapReached) as exc:
         print(f"campaign refused: {exc}")
         return REFUSED
 
@@ -688,6 +696,15 @@ def cmd_resume(run_id: str, state_dir: str | None = None, **kwargs: Any) -> int:
         return REFUSED
 
     print(f"\nresume finished: {result.stopped_reason or 'complete'}")
+    if plan is not None and not result.paused and not result.aborted:
+        _record_scenario(plan, campaign.declared_scenario, result)
+        plan["done"].append(campaign.declared_scenario)
+        if result.cap_hit:
+            plan["status"] = f"stopped: {result.stopped_reason}"
+            _save_series(root, plan)
+            return OK
+        print(f"continuing series {plan['id']}")
+        return _continue_series(root, plan)
     return OK
 
 
@@ -1161,12 +1178,143 @@ def build_campaign(
     )
 
 
+def _series_path(root: Path, series_id: str) -> Path:
+    return Path(root) / "series" / f"{series_id}.json"
+
+
+def _series_for_run(root: Path, run_id: str) -> dict[str, Any] | None:
+    for path in sorted((Path(root) / "series").glob("*.json")):
+        try:
+            plan = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if run_id in (plan.get("runs") or {}).values():
+            return plan
+    return None
+
+
+def _save_series(root: Path, plan: dict[str, Any]) -> None:
+    path = _series_path(root, plan["id"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(plan, indent=2, default=str), encoding="utf-8")
+
+
+def _scenario_campaign(root: Path, plan: dict[str, Any], name: str, index: int, of: int) -> Any:
+    """One declared scenario as its own campaign, with whatever cap is left."""
+    sla = Sla.load(plan["kwargs"]["sla_path"])
+    definition = sla.scenario(name)
+    if definition is None:
+        raise CampaignRefused(f"scenario {name!r} is no longer declared in {plan['kwargs']['sla_path']}")
+    kwargs = dict(plan["kwargs"])
+    caps = plan.get("caps") or {}
+    if caps.get("cost_cap_usd") is not None:
+        kwargs["cost_cap_usd"] = caps["cost_cap_usd"] - plan.get("spent_usd", 0.0)
+    if caps.get("wall_clock_cap_h") is not None:
+        kwargs["wall_clock_cap_h"] = caps["wall_clock_cap_h"] - plan.get("active_s", 0.0) / 3600
+    for key in ("cost_cap_usd", "wall_clock_cap_h"):
+        if kwargs.get(key) is not None and kwargs[key] <= 0:
+            raise _SeriesCapReached(f"the series' {key.replace('_', ' ')} is used up before {name!r}")
+    kwargs.update(scenario_name=name, users=definition["users"], warmup_s=definition["warmup_s"],
+                  measure_s=definition["measure_s"], spawn_rate=definition.get("spawn_rate"))
+    campaign = build_campaign(run_id=f"{plan['id']}-{name}", state_dir=str(root), **kwargs)
+    campaign.declared_scenario = name
+    campaign.series = {"id": plan["id"], "index": index, "of": of, "scenario": name}
+    return campaign
+
+
+class _SeriesCapReached(RuntimeError):
+    pass
+
+
+def _record_scenario(plan: dict[str, Any], name: str, result: Any) -> None:
+    plan.setdefault("runs", {})[name] = result.run_id
+    from ..economics.pricing import Pricing  # noqa: PLC0415
+    from .scorer import _load_pricing_yaml, score_cost  # noqa: PLC0415
+
+    plan["spent_usd"] = plan.get("spent_usd", 0.0) + score_cost(
+        result.as_dict(), Pricing.from_mapping(_load_pricing_yaml())).total
+    finished = result.finished_at_epoch_s or time.time()
+    plan["active_s"] = plan.get("active_s", 0.0) + max(0.0, finished - result.started_at_epoch_s - result.paused_seconds)
+
+
+def _continue_series(root: Path, plan: dict[str, Any]) -> int:
+    """Run the series' remaining scenarios, re-reading the SLA between each.
+
+    Re-reading is what honours an operator's mid-series edit to a later
+    scenario (Group 33). A pause stops the series where it is; `crucible resume`
+    on that scenario's run carries the rest on afterwards.
+    """
+    import asyncio
+
+    while True:
+        try:
+            declared = [s["name"] for s in Sla.load(plan["kwargs"]["sla_path"]).scenarios]
+        except CampaignRefused as exc:
+            plan["status"] = f"stopped: the SLA no longer loads ({exc})"
+            break
+        remaining = [n for n in declared if n not in plan["done"]]
+        if not remaining:
+            plan["status"] = "complete"
+            break
+        name = remaining[0]
+        index, of = len(plan["done"]) + 1, len(plan["done"]) + len(remaining)
+        try:
+            campaign = _scenario_campaign(root, plan, name, index, of)
+        except _SeriesCapReached as exc:
+            plan["status"] = f"stopped: {exc}"
+            break
+        except (CampaignRefused, FileNotFoundError, ValueError) as exc:
+            plan["status"] = f"stopped: scenario {name!r} refused ({exc})"
+            break
+        plan.setdefault("runs", {})[name] = campaign.run_id
+        _save_series(root, plan)
+        print(_rule(f"series {plan['id']} | scenario {index} of {of}: {name} | run {campaign.run_id}"))
+        result = asyncio.run(campaign.run())
+        _record_scenario(plan, name, result)
+        print(f"  {name}: {result.stopped_reason}")
+        if result.paused:
+            plan["status"] = f"paused in {name}: resume with `crucible resume {result.run_id}`"
+            break
+        if result.aborted:
+            plan["status"] = f"aborted in {name}: {result.abort_reason}"
+            break
+        plan["done"].append(name)
+        if result.cap_hit:
+            plan["status"] = f"stopped: {result.stopped_reason}"
+            break
+        _save_series(root, plan)
+    _save_series(root, plan)
+    print(f"\nseries {plan['id']}: {plan['status']}")
+    return OK
+
+
+def _run_series(state_dir: Path, run_id: str, kwargs: dict[str, Any]) -> int:
+    try:
+        sla = Sla.load(kwargs["sla_path"])
+    except CampaignRefused as exc:
+        print(f"campaign refused: {exc}")
+        return REFUSED
+    if not sla.scenarios:
+        print(f"campaign refused: {kwargs['sla_path']} declares no scenarios; run without --all-scenarios "
+              "to use objective.at_load")
+        return REFUSED
+    series_id = run_id or time.strftime("series-%Y%m%d-%H%M%S", time.gmtime())
+    caps = {"cost_cap_usd": kwargs.pop("cost_cap_usd", None), "wall_clock_cap_h": kwargs.pop("wall_clock_cap_h", None)}
+    for key in ("scenario_name", "users", "warmup_s", "measure_s", "spawn_rate"):
+        kwargs.pop(key, None)
+    plan = {"id": series_id, "started_at_epoch_s": time.time(), "kwargs": kwargs, "caps": caps,
+            "done": [], "runs": {}, "spent_usd": 0.0, "active_s": 0.0, "status": "running"}
+    return _continue_series(state_dir, plan)
+
+
 def cmd_run(**kwargs: Any) -> int:
     """Run a campaign. Blocks until it finishes, is aborted, or is declined."""
     import asyncio
 
     state_dir = _state_dir(kwargs.pop("state_dir", None))
     run_id = kwargs.pop("run_id", "") or ""
+    if kwargs.pop("all_scenarios", False):
+        return _run_series(state_dir, run_id, kwargs)
     try:
         campaign = build_campaign(run_id=run_id, state_dir=state_dir, **kwargs)
     except (CampaignRefused, FileNotFoundError, ValueError) as exc:
@@ -1269,6 +1417,7 @@ def cmd_ceiling(
         step_size=step_size,
         run_id=run_id or "",
         results_dir=root / "results",
+        sla_path=sla.source_path,
     )
 
     print(f"ceiling probe: {sla.name} — {probe.min_users}..{probe.max_users} users, step {probe.step_size}")

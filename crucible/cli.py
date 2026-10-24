@@ -62,6 +62,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     run = with_common(sub.add_parser("run", help="run a campaign"))
     run.add_argument("--scenario", default="db-latency")
+    run.add_argument("--all-scenarios", action="store_true", dest="all_scenarios",
+                     help="run every scenario declared in the SLA, in order, each as its own campaign "
+                          "with its own baseline; caps apply to the whole series")
     run.add_argument("--users", type=int, default=50)
     run.add_argument("--warmup", type=float, default=120.0, help="seconds, discarded")
     run.add_argument("--measure", type=float, default=300.0, help="seconds, measured")
@@ -403,6 +406,7 @@ def main() -> int:
             warmup_s=args.warmup,
             measure_s=args.measure,
             spawn_rate=args.spawn_rate,
+            all_scenarios=args.all_scenarios,
             cost_cap_usd=args.cost_cap_usd,
             wall_clock_cap_h=args.wall_clock_cap_h,
             max_experiments=args.experiments,

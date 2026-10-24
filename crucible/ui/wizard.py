@@ -59,6 +59,8 @@ class WizardForm:
     #: Users started per second, from the first scenario's Ramp (users / ramp
     #: seconds). None leaves at_load.spawn_rate as it is.
     spawn_rate: float | None = None
+    #: Declared scenarios for slo.yaml; None leaves the file's list as it is.
+    scenarios: list[dict[str, Any]] | None = None
 
 
 def _scalar(value: Any) -> str:
@@ -155,6 +157,8 @@ def render(form: WizardForm, sla_path: Path, profile_path: Path, locustfile: Pat
         new_sla = set_value(new_sla, keys, value)
     if form.spawn_rate is not None:
         new_sla = set_value(new_sla, ["objective", "at_load", "spawn_rate"], round(form.spawn_rate, 3))
+    if form.scenarios is not None:
+        new_sla = set_value(new_sla, ["scenarios"], form.scenarios)
     new_sla = _stamp(new_sla, "objective:", note)
 
     old_profile = profile_path.read_text(encoding="utf-8")
@@ -193,10 +197,15 @@ def _validate(form: WizardForm, sla_text: str, profile_text: str, sla_path: Path
     }
     if form.spawn_rate is not None:
         read_back["spawn_rate"] = (sla.at_load or {}).get("spawn_rate")
+    if form.scenarios is not None:
+        read_back["scenarios"] = sla.scenarios
     for key, got in read_back.items():
         want = getattr(form, key)
         if key == "spawn_rate":
             want = round(want, 3)
+        if key == "scenarios":
+            want = [{k: (float(v) if k in ("measure_s", "warmup_s", "spawn_rate") else v) for k, v in sc.items()}
+                    for sc in want]
         if got != want:
             raise WizardRefused(f"{key} would read back as {got!r}, not {want!r}")
 

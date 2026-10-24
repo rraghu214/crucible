@@ -18,9 +18,10 @@ compared to experiment manifests as though it were one.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +43,8 @@ class CeilingStep:
     watchdog_tripped: bool = False
     watchdog_reason: str = ""
     aborted: bool = False
+    #: The p99 ceiling this step was judged against (it can change mid-probe).
+    sla_p99_ms: float | None = None
 
 
 @dataclass
@@ -62,10 +65,13 @@ class CeilingResult:
     stopped_reason: str = ""
     started_at_epoch_s: float = field(default_factory=time.time)
     finished_at_epoch_s: float | None = None
+    #: Operator edits to the SLA taken between steps (Group 37).
+    amendments: list[dict[str, Any]] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "kind": "ceiling",
+            "amendments": self.amendments,
             "run_id": self.run_id,
             "sla": self.sla,
             "scenario_name": self.scenario_name,
@@ -128,12 +134,46 @@ class CeilingProbe:
     step_size: int = 50
     run_id: str = ""
     results_dir: Path = field(default_factory=lambda: Path("results"))
+    #: The SLA file, re-read between steps so an operator's edit to the goal is
+    #: honoured without pausing (operator decision, 24 October 2026). None skips it.
+    sla_path: Path | None = None
+
+    def _take_sla_edit(self, result: CeilingResult, step_number: int) -> None:
+        if self.sla_path is None:
+            return
+        digest = hashlib.sha256(Path(self.sla_path).read_bytes()).hexdigest() if Path(self.sla_path).exists() else ""
+        if digest == self._sla_digest:
+            return
+        self._sla_digest = digest
+        try:
+            new = Sla.load(self.sla_path)
+            check_environment(new)
+        except Exception as exc:  # noqa: BLE001 - recorded; the probe keeps the goal it had
+            result.amendments.append({"at_step": step_number, "rejected": f"the edited SLA does not load ({exc})"})
+            return
+        changes = {k: {"from": getattr(self.sla, k), "to": getattr(new, k)}
+                   for k in ("p99_ms", "error_rate_pct") if getattr(self.sla, k) != getattr(new, k)}
+        ignored = [k for k in ("endpoint", "at_load", "scenarios") if getattr(self.sla, k) != getattr(new, k)]
+        if not changes and not ignored:
+            return
+        entry: dict[str, Any] = {"at_step": step_number, "by": "operator (file edit)",
+                                 "accepted": "automatically (a ceiling probe does not pause)"}
+        if changes:
+            self.sla = replace(self.sla, p99_ms=new.p99_ms, error_rate_pct=new.error_rate_pct)
+            result.sla = self.sla.as_dict()
+            entry["changes"] = changes
+        if ignored:
+            entry["not_applied"] = (f"{', '.join(ignored)} edits are not applied mid-probe: a ceiling probe is one "
+                                    "load ramp on one endpoint, with the bounds it was started with")
+        result.amendments.append(entry)
 
     def __post_init__(self) -> None:
         if not self.run_id:
             self.run_id = time.strftime("ceiling-%Y%m%d-%H%M%S", time.gmtime())
         if self.min_users <= 0:
             self.min_users = self.base_scenario.users
+        self._sla_digest = (hashlib.sha256(Path(self.sla_path).read_bytes()).hexdigest()
+                            if self.sla_path and Path(self.sla_path).exists() else "")
         # §20.1: a probe on a scenario that suspends error tripwires
         # (push_beyond=True) is a different question — see §6 and §20.
         # The two probe types may look similar but answer different questions;
@@ -160,12 +200,13 @@ class CeilingProbe:
         step_number = 0
         while users <= self.max_users:
             step_number += 1
+            self._take_sla_edit(result, step_number)
             scenario = _at_users(self.base_scenario, users)
             run_id = f"{self.run_id}-step{step_number:02d}"
             load: LoadResult
             load, _snapshot = self.measure(scenario, run_id)
 
-            step = CeilingStep(users=users, load=load.as_load_summary())
+            step = CeilingStep(users=users, load=load.as_load_summary(), sla_p99_ms=self.sla.p99_ms)
 
             if load.aborted:
                 step.aborted = True
