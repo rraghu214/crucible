@@ -69,6 +69,10 @@ def build_parser() -> argparse.ArgumentParser:
                      help="users started per second until --users are running (Locust -r); "
                           "default: the SLA's at_load.spawn_rate, else 10")
     run.add_argument("--experiments", type=int, default=5)
+    run.add_argument("--cost-cap", type=float, default=None, dest="cost_cap_usd",
+                     help="stop at the next experiment boundary once model calls have cost this much (USD)")
+    run.add_argument("--wall-clock-cap", type=float, default=None, dest="wall_clock_cap_h",
+                     help="stop at the next experiment boundary after this many hours (time paused excluded)")
     run.add_argument("--run-id", default="")
     run.add_argument("--state-dir", default=None)
     run.add_argument("--workspace", default=".")
@@ -399,6 +403,8 @@ def main() -> int:
             warmup_s=args.warmup,
             measure_s=args.measure,
             spawn_rate=args.spawn_rate,
+            cost_cap_usd=args.cost_cap_usd,
+            wall_clock_cap_h=args.wall_clock_cap_h,
             max_experiments=args.experiments,
             run_id=args.run_id,
             state_dir=args.state_dir,

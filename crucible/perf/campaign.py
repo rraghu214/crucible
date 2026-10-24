@@ -616,6 +616,12 @@ class CampaignResult:
     #: Every operator edit taken mid-run: when, what changed (from -> to), how it
     #: was accepted, and the re-measured baseline when the load moved.
     amendments: list[dict[str, Any]] = field(default_factory=list)
+    #: The caps in force, and which one stopped the run (if any).
+    caps: dict[str, Any] = field(default_factory=dict)
+    cap_hit: dict[str, Any] = field(default_factory=dict)
+    #: Time spent paused, excluded from the wall-clock cap: a campaign paused
+    #: overnight must not trip its cap the moment it resumes.
+    paused_seconds: float = 0.0
 
     @property
     def spans_multiple_models(self) -> bool:
@@ -654,6 +660,9 @@ class CampaignResult:
             "finished_at_epoch_s": self.finished_at_epoch_s,
             "guarded_files": self.guarded_files,
             "amendments": self.amendments,
+            "caps": self.caps,
+            "cap_hit": self.cap_hit,
+            "paused_seconds": self.paused_seconds,
         }
 
     def write(self, directory: Path) -> Path:
@@ -759,6 +768,14 @@ class Campaign:
     #: the other modes take it at the next boundary without pausing.
     confirm_config_changes: bool = False
     _edits_confirmed: bool = field(default=False, init=False, repr=False)
+    #: Run caps from the Budget step (operator, 24 October 2026). Checked at each
+    #: experiment boundary; reaching one stops the campaign cleanly -- nothing is
+    #: rolled back, because every kept change was measured and verified.
+    cost_cap_usd: float | None = None
+    wall_clock_cap_s: float | None = None
+    #: ``(result) -> spent so far``; ``None`` prices the manifest the way the
+    #: scorer does (config/pricing.yaml). Injectable so a test need not price.
+    cost_so_far: Any = None
     #: Per-experiment hooks (§10). before_each and after_each gate each
     #: experiment; on_abort fires when the campaign is cut short. A failing
     #: before_each or after_each raises HookFailed, which becomes a
@@ -835,6 +852,7 @@ class Campaign:
             profile=self.profile.name,
             scenario=self.scenario.name,
             guarded_files=fingerprint_files(self.guarded_files),
+            caps={"cost_usd": self.cost_cap_usd, "wall_clock_s": self.wall_clock_cap_s},
         )
         lock = BranchLock(
             state_dir=self.state_dir,
@@ -906,6 +924,9 @@ class Campaign:
             profile=self.profile.name,
             scenario=self.scenario.name,
             guarded_files=dict(resume_state.get("guarded_files") or fingerprint_files(self.guarded_files)),
+            caps={"cost_usd": self.cost_cap_usd, "wall_clock_s": self.wall_clock_cap_s},
+            paused_seconds=float(resume_state.get("paused_seconds") or 0.0) + max(
+                0.0, time.time() - float(resume_state.get("paused_at_epoch_s") or time.time())),
         )
         lock = BranchLock(
             state_dir=self.state_dir,
@@ -1050,6 +1071,10 @@ class Campaign:
             )
             if stop:
                 result.stopped_reason = stop
+                return
+            capped = self._cap_reached(result, number)
+            if capped:
+                result.stopped_reason = capped
                 return
             pause_reason = pause_requested(self.state_dir, self.run_id)
             if pause_reason:
@@ -1218,7 +1243,33 @@ class Campaign:
             "pending_manifest": pending.as_dict() if pending is not None else None,
             "guarded_files": dict(result.guarded_files),
             "sla_object": self.sla.as_dict(),
+            "paused_seconds": result.paused_seconds,
         }
+
+    def _spent(self, result: CampaignResult) -> float:
+        if self.cost_so_far is not None:
+            return float(self.cost_so_far(result))
+        from ..economics.pricing import Pricing  # noqa: PLC0415
+        from .scorer import _load_pricing_yaml, score_cost  # noqa: PLC0415 - scorer imports this module
+
+        return score_cost(result.as_dict(), Pricing.from_mapping(_load_pricing_yaml())).total
+
+    def _cap_reached(self, result: CampaignResult, number: int) -> str:
+        if self.wall_clock_cap_s is not None:
+            elapsed = time.time() - result.started_at_epoch_s - result.paused_seconds
+            if elapsed >= self.wall_clock_cap_s:
+                result.cap_hit = {"cap": "wall_clock", "limit_s": self.wall_clock_cap_s,
+                                  "elapsed_s": round(elapsed, 1), "before_experiment": number}
+                return (f"wall-clock cap reached before experiment {number}: {elapsed / 3600:.2f} h of "
+                        f"{self.wall_clock_cap_s / 3600:.2f} h used (time paused excluded). Kept changes stand.")
+        if self.cost_cap_usd is not None:
+            spent = self._spent(result)
+            if spent >= self.cost_cap_usd:
+                result.cap_hit = {"cap": "cost", "limit_usd": self.cost_cap_usd,
+                                  "spent_usd": round(spent, 6), "before_experiment": number}
+                return (f"cost cap reached before experiment {number}: ${spent:.4f} of "
+                        f"${self.cost_cap_usd:.4f} spent on model calls. Kept changes stand.")
+        return ""
 
     def _absorb_operator_edits(
         self, result: CampaignResult, number: int, current_load: LoadResult,

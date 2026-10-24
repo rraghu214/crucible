@@ -1024,6 +1024,12 @@ def _check_workspace_sync(workspace: Path, profile: "TargetProfile") -> None:
         )
 
 
+def _positive(name: str, value: float | None) -> float | None:
+    if value is not None and value <= 0:
+        raise ValueError(f"{name} must be greater than 0, got {value}")
+    return value
+
+
 def resolve_spawn_rate(given: float | None, sla: Sla) -> float:
     """Users started per second: the flag, else the SLA's at_load, else Locust's 10.
 
@@ -1060,6 +1066,8 @@ def build_campaign(
     trace_sampling_rate_pct: float | None = None,
     stakeholder_request: str = "",
     spawn_rate: float | None = None,
+    cost_cap_usd: float | None = None,
+    wall_clock_cap_h: float | None = None,
 ) -> Any:
     """Assemble a real campaign from configuration. Kept apart from ``cmd_run``
     so a test can build one without going through argparse."""
@@ -1148,6 +1156,8 @@ def build_campaign(
         stakeholder_request=stakeholder_request,
         guarded_files=tuple(p for p in (sla.source_path, profile.source_path) if p),
         confirm_config_changes=approve_mode == "file",
+        cost_cap_usd=_positive("cost cap", cost_cap_usd),
+        wall_clock_cap_s=None if wall_clock_cap_h is None else _positive("wall-clock cap", wall_clock_cap_h) * 3600,
     )
 
 

@@ -928,7 +928,22 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
         </table>
       </div>
       <div id="budget-note" style="font-size:12px;color:var(--mid);margin-bottom:14px;"></div>
-      <div style="font-size:12px;color:var(--warn);">Run caps (stop at a cost or wall-clock limit) are not built. The only spending limit in force is <code>config/budgets.yaml</code>.</div>
+      <div class="budget-cap-row">
+        <div>
+          <div class="budget-cap-label">Stop if model cost exceeds</div>
+          <div style="font-size:11px;color:var(--lo);">Checked between experiments; the run stops cleanly and kept changes stand. Blank = no cap.</div>
+        </div>
+        <span style="font-size:13px;color:var(--mid);">$</span>
+        <input class="budget-cap-input" id="wz-cost-cap" type="number" min="0.001" step="0.01" placeholder="none">
+      </div>
+      <div class="budget-cap-row" style="margin-top:8px;">
+        <div>
+          <div class="budget-cap-label">Stop if wall clock exceeds</div>
+          <div style="font-size:11px;color:var(--lo);">The in-flight experiment finishes first; time paused does not count. Blank = no cap.</div>
+        </div>
+        <input class="budget-cap-input" id="wz-wall-cap" type="number" min="0.1" step="0.5" style="width:70px;" placeholder="none">
+        <span style="font-size:13px;color:var(--mid);">h</span>
+      </div>
     </div>
     <div class="wz-nav">
       <button class="btn btn-ghost" onclick="wzGo(2)">← Back</button>
@@ -1953,7 +1968,9 @@ function wizardBody(){
     users:parseInt(_wzVal('sla-users')),config_file:_wzVal('gh-cfg'),base_branch:_wzVal('gh-base'),
     restart_command:_wzVal('gh-restart'),health_url:_wzVal('gh-probe'),provenance:_provenance(),
     mode,scenarios:scen,goal:_wzVal('goal-text'),run_id:_wzVal('wz-run-id'),
-    experiments:parseInt(_wzVal('wz-experiments'))||5};
+    experiments:parseInt(_wzVal('wz-experiments'))||5,
+    cost_cap_usd:_wzVal('wz-cost-cap')?Number(_wzVal('wz-cost-cap')):null,
+    wall_clock_cap_h:_wzVal('wz-wall-cap')?Number(_wzVal('wz-wall-cap')):null};
   if(mode==='Ceiling Probe') body.ceiling={start_users:parseInt(_wzVal('ceil-start')),step:parseInt(_wzVal('ceil-step')),max_users:parseInt(_wzVal('ceil-max')),hold_s:parseInt(_wzVal('ceil-hold'))};
   return body;
 }

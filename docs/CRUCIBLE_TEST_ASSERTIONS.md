@@ -3880,6 +3880,57 @@ campaigns (item 4) give each scenario its own. OK?
 
 ---
 
+# GROUP 36 — Run caps: cost and wall clock
+
+*Drafted 24 October 2026 by Claude Code. NOT YET REVIEWED. Implemented in
+`tests/test_perf_run_caps.py` (8), plus one test in `tests/test_ui_wizard.py`.
+Code: `Campaign._cap_reached`, `crucible run --cost-cap / --wall-clock-cap`, and
+the wizard's Budget step.*
+
+*Operator, 24 October 2026: "Caps should be built." Both are checked at each
+experiment boundary, never mid-experiment. Reaching one stops the campaign
+cleanly: it is not an abort, so nothing is rolled back, because every kept
+change was measured and verified.*
+
+---
+
+### 36.1 The cost cap stops the run once spend reaches it
+
+**What it checks.** With a cap of $0.002 and $0.001 spent per experiment, the run
+stops before experiment 3 with "cost cap reached". `cap_hit` names the cap,
+limit, amount spent and experiment, and the run is not marked aborted. Spend is
+priced from the manifest's own token counts, exactly as the scorer prices it
+(`config/pricing.yaml`).
+
+**For review:**
+- The check happens *before* an experiment, so the last experiment can take spend
+  past the cap by one diagnosis call (about $0.002). Acceptable, or should it
+  refuse an experiment whose estimated cost would cross the cap?
+- Hitting a cap stops in every mode, including Semi-Automated, rather than
+  pausing to ask for more budget. Right?
+
+---
+
+### 36.2 The wall-clock cap counts running time, not time paused
+
+**What it checks.** A cap already exceeded stops the run before experiment 1.
+Started 2 h ago with 1 h 57 min paused, a 1 h cap is *not* reached; never paused,
+it is. Paused time accumulates across resumes (`paused_seconds` on the manifest).
+
+**Why it exists.** A campaign paused overnight must not trip its cap the moment
+it resumes. Wall clock is the real budget (§7), so this cap matters most.
+
+---
+
+### 36.3 The caps are on the manifest, and every path carries them
+
+**What it checks.** `caps` holds the limits in force (`cost_usd`,
+`wall_clock_s`), and `cap_hit` is empty unless one fired. `build_campaign`
+converts hours to seconds and refuses a cap of 0 or less. The CLI, the action
+builder (one token each, 28.4) and the wizard's Launch all pass both caps.
+
+---
+
 # Review decisions — week 1
 
 Raised by Claude Code while implementing, decided by the operator on 10 September 2026.

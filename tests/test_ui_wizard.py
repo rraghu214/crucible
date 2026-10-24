@@ -155,6 +155,11 @@ class TestLaunch:
         assert "--approve=file" in args
         assert any("Only the first scenario" in n for n in response.json()["notes"])
 
+    def test_the_budget_steps_caps_reach_the_run(self, client):
+        tc, started = client
+        tc.post("/v1/perf/wizard/launch", json=_body(cost_cap_usd=0.1, wall_clock_cap_h=8), headers=AUTH)
+        assert "--cost-cap=0.1" in started[0] and "--wall-clock-cap=8.0" in started[0]
+
     def test_fully_automated_is_preapproved(self, client):
         tc, started = client
         tc.post("/v1/perf/wizard/launch", json=_body(mode="Fully Automated"), headers=AUTH)

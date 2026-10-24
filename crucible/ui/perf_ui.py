@@ -1756,6 +1756,8 @@ class WizardBody(BaseModel):
     goal: str = Field(default="", max_length=1000)
     run_id: str = Field(default="", max_length=80)
     ceiling: CeilingBounds | None = None
+    cost_cap_usd: float | None = Field(default=None, gt=0)
+    wall_clock_cap_h: float | None = Field(default=None, gt=0)
 
 
 def _wizard_paths(ctx: PerfContext) -> tuple[Path, Path, Path]:
@@ -1933,6 +1935,7 @@ async def perf_wizard_launch(body: WizardBody, request: Request):
                 state_dir=str(ctx.state), workspace=os.getenv("CRUCIBLE_WORKSPACE", ""),
                 approve="preapproved" if body.mode == "Fully Automated" else "file",
                 stakeholder_request=body.goal,
+                cost_cap=body.cost_cap_usd, wall_clock_cap=body.wall_clock_cap_h,
             )
     except ActionError as exc:
         raise HTTPException(422, f"the files were written, but the run could not start: {exc}") from exc
