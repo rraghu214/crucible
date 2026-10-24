@@ -345,16 +345,45 @@ async def fact(body: FactBody, request: Request):
         source_author=body.source_author, principal=Principal("gateway", "gateway"), supersedes_id=body.supersedes_id)
 
 
-@router.post("/documents")
+@router.post("/documents", status_code=202, dependencies=[Depends(require_control)])
 async def document(body: IndexBody, request: Request):
-    return request.app.state.runtime.index_document(text=body.text, source_uri=body.source_uri,
-                                                        scope=body.scope(), source_author=body.source_author)
+    """Queue a document into the ONE shared knowledge store; poll its id for the result.
+
+    Same store, same queue as the dashboard's upload (docs/KNOWLEDGE_STORE.md).
+    Needs the control token: what is indexed here reaches the operator's chat
+    and the AI suggestions.
+    """
+    from crucible.knowledge import UploadRefused
+
+    try:
+        upload = request.app.state.runtime.knowledge.submit_uri(
+            body.source_uri, body.text, body.source_author, body.scope())
+    except UploadRefused as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"id": upload.id, "status": upload.status, "source_uri": upload.source_uri,
+            "poll": f"/v1/agent/documents/{upload.id}"}
+
+
+@router.get("/documents")
+async def documents(request: Request, tenant_id: str = "default"):
+    import asyncio
+
+    knowledge = request.app.state.runtime.knowledge
+    return {"documents": await asyncio.to_thread(knowledge.documents, tenant_id), "uploads": knowledge.uploads()}
+
+
+@router.get("/documents/{upload_id}")
+async def document_status(upload_id: str, request: Request):
+    found = request.app.state.runtime.knowledge.upload(upload_id)
+    if found is None:
+        raise HTTPException(404, "no such upload in this server's lifetime")
+    return found
 
 
 @router.post("/memory/search")
 async def memory_search(body: SearchBody, request: Request):
-    hits = request.app.state.runtime.memory.recall(body.query, body.scope(),
-                                                       kinds=body.kinds, limit=body.limit)
+    hits = await request.app.state.runtime.recall_evidence(body.query, body.scope(),
+                                                           kinds=body.kinds, limit=body.limit)
     return {"query": body.query, "hits": [{"id": hit.id, "kind": hit.kind.value,
             "text": hit.text, "sources": [source.uri for source in hit.sources],
             "metadata": hit.metadata} for hit in hits]}

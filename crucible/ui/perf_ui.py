@@ -57,11 +57,11 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 from ..auth import require_control
+from ..knowledge import MAX_CHARS, KnowledgeBase, UploadRefused, default_embedder
 from . import actions as _actions
 from .actions import ActionError
 from .hitl import PendingAction, decide_resume
 from .jobs import Job, get_job, list_jobs, read_output, start_job
-from .knowledge import MAX_CHARS, KnowledgeBase, UploadRefused, default_embedder
 from .validator import validate_surface
 
 # ---------------------------------------------------------------------------
@@ -321,7 +321,7 @@ def _active_runs(ctx: PerfContext) -> list[dict[str, Any]]:
 
 def _knowledge_summary(ctx: PerfContext) -> str:
     # Listing makes no embed call, but the store must be opened with the corpus's
-    # own embedder: any other one marks every vector stale and empties memory.faiss.
+    # own embedder: any other one marks every vector stale and empties its index.
     documents = KnowledgeBase.under(ctx.state, default_embedder()).documents()
     if not documents:
         return "none indexed"
@@ -1582,9 +1582,12 @@ async def perf_decision(run_id: str, experiment: int, body: DecisionBody, reques
 
 
 def _knowledge(request: Request) -> KnowledgeBase:
+    # ONE instance per server: the agent runtime's, when it exists. A second
+    # instance would start a second worker -- a second writer to the same store.
     kb = getattr(request.app.state, "knowledge", None)
     if kb is None:
-        kb = KnowledgeBase.under(_context(request).state, default_embedder())
+        runtime = getattr(request.app.state, "runtime", None)
+        kb = getattr(runtime, "knowledge", None) or KnowledgeBase.under(_context(request).state, default_embedder())
         request.app.state.knowledge = kb
     return kb
 
@@ -1941,6 +1944,11 @@ async def perf_suggest(body: SuggestBody, request: Request):
     from ..gateway import GatewayClient
     from .suggest import SYSTEM, SuggestionRefused, build_prompt, parse
 
+    pending = _knowledge(request).pending()
+    if pending:
+        # A suggestion made now would miss a document the operator just uploaded.
+        raise HTTPException(409, f"waiting for {pending} document(s) to finish indexing; "
+                                 "suggestions use them, so try again once they show as indexed")
     hits, excerpts = await _retrieve(request, f"{body.goal} {body.endpoint}".strip() or body.kind)
     prompt = build_prompt(body.kind, goal=body.goal, endpoint=body.endpoint, mode=body.mode,
                           facts=_chat_facts(_context(request)), excerpts=excerpts)

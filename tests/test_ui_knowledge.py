@@ -29,8 +29,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from crucible.core.memory.embeddings import DeterministicEmbedder
+from crucible.knowledge import KnowledgeBase
 from crucible.ui import perf_ui
-from crucible.ui.knowledge import KnowledgeBase
 from crucible.ui.perf_ui import PerfContext
 
 TOKEN = "test-control-token"

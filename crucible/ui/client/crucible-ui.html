@@ -1881,6 +1881,9 @@ function renderDocs(){
     docState.documents.forEach(d=>list.appendChild(_docChip(d.filename,d.chunks+' chunks · v'+d.version,'ok',null)));
   }
   const busy=docState.uploads.filter(u=>u.status==='queued'||u.status==='indexing').length;
+  ['sla-suggest-btn','scen-suggest-btn'].forEach(id=>{const b=document.getElementById(id);if(!b)return;
+    b.disabled=!!busy;b.style.opacity=busy?'.5':'1';
+    b.title=busy?'Waiting for '+busy+' document(s) to finish indexing — suggestions use them':'';});
   const st=document.getElementById('docStatus');
   if(st) st.textContent=busy?('Indexing '+busy+' file'+(busy>1?'s':'')+'… the chat can use each one once it shows here as indexed.'):'';
   const rd=document.getElementById('rev-docs');

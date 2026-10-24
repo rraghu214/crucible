@@ -513,8 +513,21 @@ disk. The decisions, each with its reason:
   possible when the embedder changes, which the correction above requires.
 - **The index is its own store, not the agent runtime's `memory.sqlite`.**
   `MemoryStore` embeds inside its write transaction, which would hold the agent
-  memory's write lock for minutes. Every store in one directory also shares a
-  single `memory.faiss` sidecar.
+  memory's write lock for minutes.
+
+**One document store, two doors (operator decision, 24 October 2026).** The
+dashboard's upload and the agent API (`POST /v1/agent/documents`) now lead to the
+same queue and the same store. The chat, the AI suggestions and the S17 agent
+all search it. Before this, each door had its own store, so a document given
+through one was invisible to whatever read the other, and Box B held two copies
+of the same file.
+
+The agent door now needs the control token, because what it indexes reaches the
+operator's chat. It returns 202 and is polled for the result, because it no
+longer blocks the server while it indexes. The agent's own memory keeps what is
+genuinely its own: facts, episodes, playbooks and audit. Each store also has its
+own `.faiss` file named after its database, so two stores in one directory no
+longer overwrite each other's index. Full detail: `docs/KNOWLEDGE_STORE.md`.
 - **`.md` and `.txt` only.** An operator decision: no PDF or DOCX parsers as new
   dependencies.
 

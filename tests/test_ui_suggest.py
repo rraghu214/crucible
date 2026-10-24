@@ -24,8 +24,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from crucible.core.memory.embeddings import DeterministicEmbedder
+from crucible.knowledge import KnowledgeBase
 from crucible.ui import perf_ui
-from crucible.ui.knowledge import KnowledgeBase
 from crucible.ui.perf_ui import PerfContext
 from crucible.ui.suggest import SuggestionRefused, build_prompt, parse
 
@@ -145,6 +145,15 @@ class TestTheRoute:
     def test_a_wrong_token_is_refused_and_calls_no_model(self, app):
         client, _, _, calls = app
         assert _suggest(client, headers={"Authorization": "Bearer nope"}).status_code == 401
+        assert calls == []
+
+    def test_it_waits_while_a_document_is_still_indexing(self, app):
+        """A suggestion made mid-index would miss the document just uploaded."""
+        client, _, _, calls = app
+        kb = client.app.state.knowledge
+        kb.pending = lambda: 1
+        response = _suggest(client)
+        assert response.status_code == 409 and "indexing" in response.json()["detail"]
         assert calls == []
 
     def test_an_unknown_kind_is_refused(self, app):

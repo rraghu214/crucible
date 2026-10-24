@@ -5,6 +5,7 @@ carried-forward core components into the code path used by HTTP and channel mess
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -104,6 +105,11 @@ class AgentRuntime:
         glc_url = os.getenv("GLC_BASE_URL", "").strip().rstrip("/")
         embedder = GlcEmbedder(glc_url) if glc_url else OllamaNomicEmbedder()
         self.memory = MemoryStore(self.root / "memory.sqlite", embedder=embedder)
+        # Documents live in the ONE shared store the dashboard also writes and the
+        # Live AI chat reads; this memory keeps the agent's facts, episodes and
+        # audit (DESIGN.md §14, docs/KNOWLEDGE_STORE.md).
+        from crucible.knowledge import KnowledgeBase
+        self.knowledge = KnowledgeBase.under(self.root, embedder)
         self.graph = GraphStore(self.root / "graphs")
         self.outbox = ActionOutbox(self.root / "outbox")
         # One registry per runtime: the single source of truth for what a
@@ -484,22 +490,28 @@ class AgentRuntime:
         return {"id": record.id, "status": record.status, "sources": [source.uri for source in record.sources]}
 
     def index_document(self, *, text: str, source_uri: str, scope: MemoryScope, source_author: str) -> dict[str, Any]:
-        from crucible.core.memory.chunking import prepare_markdown, semantic_chunks
-        prepared, preprocessing = prepare_markdown(text)
-        chunks = semantic_chunks(prepared, self.memory.embedder, preprocess=False)
-        ingested = self.memory.ingest_document(source_text=text, prepared_text=prepared, chunks=chunks,
-            source_uri=source_uri, scope=scope, source_author=source_author, preprocessing=preprocessing)
-        manifest = [{"id": record_id, "ordinal": chunk.ordinal, "heading": chunk.heading,
-                     "words": len(chunk.text.split()), "text": chunk.text, "segmentation": chunk.segmentation,
-                     "source_start_char": chunk.source_start_char, "source_end_char": chunk.source_end_char,
-                     "source_start_word": chunk.source_start_word, "source_end_word": chunk.source_end_word}
-                    for record_id, chunk in zip(ingested["record_ids"], chunks)]
-        return {"source_uri": source_uri, "chunks": len(ingested["record_ids"]), "record_ids": ingested["record_ids"],
-                "document_id": ingested["document_id"], "document_version": ingested["version"],
-                "idempotent": ingested["idempotent"],
-                "preprocessing": preprocessing, "source_words": len(text.split()),
-                "indexed_words": len(prepared.split()),
-                "provenance": {"source_sha256": ingested["source_sha256"], "prepared_sha256": ingested["prepared_sha256"],
-                               "excluded_words": len(text.split()) - len(prepared.split()),
-                               "source_author": source_author},
-                "manifest": manifest}
+        """Index into the shared store and wait for the result (the agent's index skill).
+
+        Blocking by design -- the skill needs the manifest -- so async callers run
+        it in a thread. It goes through the shared queue, never straight to the
+        store, so the dashboard's uploads and this never write concurrently.
+        """
+        return self.knowledge.index_now(source_uri, text, source_author, scope)
+
+    async def recall_evidence(self, query: str, scope: MemoryScope, *, kinds: list[MemoryKind] | None = None,
+                              limit: int = 8) -> list[MemoryRecord]:
+        """The agent's own memory (facts, episodes, playbooks) plus documents from the shared store.
+
+        The agent's memory connection belongs to this thread, so it is read here;
+        the shared store opens its own connection, so its lookup (which may embed
+        the query over the network) runs in a worker thread.
+        """
+        wanted = list(kinds) if kinds else None
+        want_docs = wanted is None or MemoryKind.DOCUMENT_CHUNK in wanted
+        own_kinds = [k for k in wanted if k is not MemoryKind.DOCUMENT_CHUNK] if wanted else None
+        own = self.memory.recall(query, scope, kinds=own_kinds, limit=limit) if own_kinds is None or own_kinds else []
+        # Pre-24-October document chunks still in memory.sqlite are not evidence:
+        # documents are read from the shared store only.
+        own = [hit for hit in own if hit.kind is not MemoryKind.DOCUMENT_CHUNK]
+        docs = await asyncio.to_thread(self.knowledge.recall, query, scope, limit) if want_docs else []
+        return own + docs

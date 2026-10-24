@@ -3769,6 +3769,79 @@ points to Save.
 
 ---
 
+# GROUP 34 — One knowledge store, separate vector indexes, and a subscription that ends
+
+*Drafted 24 October 2026 by Claude Code. NOT YET REVIEWED. Fixes the three items
+of debt the operator asked for on 24 October 2026. Details:
+`docs/KNOWLEDGE_STORE.md`.*
+
+---
+
+### 34.1 Both doors lead to one store, and the agent door is guarded and queued
+
+**What it checks.** `POST /v1/agent/documents`:
+- refuses a wrong token with 401;
+- queues the document and returns 202 with a `poll` link;
+- the poll reports `indexed` with the chunk count;
+- the agent's `/v1/agent/memory/search` then finds the chunk, with its source
+  URI, in the shared store.
+
+The wizard's uploads use the same store (Group 29). The agent's index skill goes
+through the same queue (`index_now`). Pre-existing document chunks in
+`memory.sqlite` are no longer returned as evidence. Implemented in
+`tests/test_runtime.py::test_document_index_is_semantic_and_persistent_for_the_scope`.
+
+**Why it exists.** Two stores meant a document given through one door was
+invisible to whatever read the other, and Box B held two copies of one file.
+
+**For review:** this changes the agent API contract, from 200 with a manifest to
+202 plus polling, and adds the token. No other caller in this repository relies
+on the old form. Acceptable?
+
+---
+
+### 34.2 Suggestions wait for documents still indexing
+
+**What it checks.** While any upload is queued or indexing, `/v1/perf/suggest`
+answers 409 ("waiting for N document(s) to finish indexing") and calls no model.
+The two AI-suggestion buttons are disabled with the same reason.
+`tests/test_ui_suggest.py::test_it_waits_while_a_document_is_still_indexing`.
+
+**Why it exists.** Operator expectation: what you just uploaded is used, or you
+are told to wait. Never silently left out.
+
+---
+
+### 34.3 Each store has its own vector index file
+
+**What it checks.** Two stores in one directory (`memory.sqlite`, `memory.db`)
+write `memory.sqlite.faiss` and `memory.db.faiss`, and no shared
+`memory.faiss`. Reopening one store does not rewrite the other's index.
+`crucible/core/tests/test_memory.py::test_two_stores_in_one_directory_keep_separate_vector_indexes`.
+
+**Why it exists.** They shared one file and overwrote each other's index on every
+open. Search stayed correct, because it falls back to exact matching, but the
+index was rebuilt over and over.
+
+---
+
+### 34.4 A task subscription always ends with the task's final state
+
+**What it checks.** Twenty subscriptions in a row to a task that completes
+mid-stream each end with COMPLETED. The cancel test no longer races an 80 ms
+timer: the demo delay is a setting, and the test waits up to 10 s for
+registration.
+`crucible/core/a2a/tests/test_hardening.py::test_a_subscription_always_ends_with_the_tasks_final_state`.
+
+**Why it exists.** This was not contention. `SubscribeToTask` checked "is it
+finished?" *after* a yield. A task that completed while the stream was paused
+was never sent in its final state, so the subscriber's last message read
+WORKING. It failed about half the time even with the test file run alone, and
+9 of 12 direct probes showed it. The inherited S17 server had the bug; the test
+only exposed it.
+
+---
+
 # Review decisions — week 1
 
 Raised by Claude Code while implementing, decided by the operator on 10 September 2026.

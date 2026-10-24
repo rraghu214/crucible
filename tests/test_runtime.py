@@ -49,17 +49,26 @@ def test_agent_run_uses_memory_then_expands_to_a_grounded_answer(app_client, mon
 
 
 def test_document_index_is_semantic_and_persistent_for_the_scope(app_client):
-    app_client.app.state.runtime.memory.embedder = DeterministicEmbedder(256)
+    """Since 24 October 2026 the agent's door leads to the ONE shared knowledge
+    store (docs/KNOWLEDGE_STORE.md): queued, 202 with an id, the result on poll."""
+    from tests.conftest import CONTROL_TOKEN
+
+    runtime = app_client.app.state.runtime
+    runtime.memory.embedder = runtime.knowledge.embedder = DeterministicEmbedder(256)
     body = {"tenant_id": "acme", "project_id": "gateway", "user_id": "rohan",
             "source_uri": "file://capacity.md",
             "text": "# Capacity\nEach Gemini key has separate quota. A second key permits parallel workers."}
-    indexed = app_client.post("/v1/agent/documents", json=body)
-    assert indexed.status_code == 200
-    assert indexed.json()["chunks"] == 1
-    chunk = indexed.json()["manifest"][0]
-    assert chunk["text"] == body["text"]
-    assert chunk["segmentation"]["outcome"] == "below_semantic_floor"
-    assert indexed.json()["provenance"]["source_sha256"]
+    auth = {"Authorization": f"Bearer {CONTROL_TOKEN}"}
+    assert app_client.post("/v1/agent/documents", json=body, headers={"Authorization": "Bearer wrong"}).status_code == 401
+    queued = app_client.post("/v1/agent/documents", json=body, headers=auth)
+    assert queued.status_code == 202
+    runtime.knowledge.wait_idle()
+    status = app_client.get(queued.json()["poll"]).json()
+    assert status["status"] == "indexed" and status["chunks"] == 1
+    hits = app_client.post("/v1/agent/memory/search", json={
+        "tenant_id": "acme", "project_id": "gateway", "user_id": "rohan", "query": "separate quota per key"}).json()
+    assert [h["kind"] for h in hits["hits"]] == ["document_chunk"]
+    assert hits["hits"][0]["text"] == body["text"] and hits["hits"][0]["sources"] == ["file://capacity.md"]
 
 
 def test_explicit_remember_promotes_a_sourced_fact_and_recall_uses_it(app_client, monkeypatch):

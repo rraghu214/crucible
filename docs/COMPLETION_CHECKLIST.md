@@ -334,7 +334,7 @@ write.
 On Box B, the originals and the index are in separate folders:
 ```bash
 ls -lh ~/.crucible/knowledge/         # PERF_LAB_PRODUCT.md, as uploaded
-ls -lh ~/.crucible/knowledge-index/   # knowledge.sqlite and memory.faiss, both non-zero
+ls -lh ~/.crucible/knowledge-index/   # knowledge.sqlite and knowledge.sqlite.faiss, both non-zero (see docs/KNOWLEDGE_STORE.md)
 ```
 
 If an upload fails, the chip says `failed:` with the gateway's error. Most often

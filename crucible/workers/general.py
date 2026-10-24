@@ -89,8 +89,8 @@ async def run_write_file(ctx: RunContext, task: TaskSpec) -> dict[str, Any]:
 
 async def run_index(ctx: RunContext, task: TaskSpec) -> dict[str, Any]:
     path = sandbox_path(task.input["path"])
-    return ctx.runtime.index_document(text=path.read_text(encoding="utf-8"), source_uri=path.as_uri(),
-                                  scope=ctx.scope, source_author="local-indexer")
+    return await asyncio.to_thread(ctx.runtime.index_document, text=path.read_text(encoding="utf-8"),
+                                   source_uri=path.as_uri(), scope=ctx.scope, source_author="local-indexer")
 
 
 async def list_channels(ctx: RunContext, task: TaskSpec) -> dict[str, Any]:  # noqa: ARG001

@@ -82,7 +82,7 @@ async def run_role(ctx: RunContext, task: TaskSpec, *, initial_evidence: Any) ->
 
 
 async def recall(ctx: RunContext, task: TaskSpec, *, inbound_id: Any) -> dict[str, Any]:
-    hits = ctx.runtime.memory.recall(
+    hits = await ctx.runtime.recall_evidence(
         task.input["query"], ctx.scope, limit=24,
         kinds=[MemoryKind.FACT, MemoryKind.DOCUMENT_CHUNK, MemoryKind.PLAYBOOK, MemoryKind.EPISODE],
     )
