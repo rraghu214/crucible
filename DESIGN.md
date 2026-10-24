@@ -438,6 +438,17 @@ table and isn't comparable. Hooks are where reset-and-reseed, token refresh
 and log capture live. **A failing hook blocks the experiment** — a reset that
 silently did nothing would make every later measurement wrong.
 
+**Hooks are Python files (operator decision, 24 October 2026).** A hook is the
+plain name of a `.py` file uploaded into `<state>/hooks/`, declared in the SLA's
+`hooks:` block. It runs as `python -I <file>`: Crucible's own interpreter in
+isolated mode, with no shell, so there is never a question of which tools exist
+on the box. It runs in the target's workspace with a timeout. Its environment is
+an **allowlist**: basic OS variables, the names the operator lists in
+`pass_env`, and `CRUCIBLE_HOOK_STAGE`/`RUN_ID`/`EXPERIMENT`. Never Crucible's own
+variables, and never the control token. Running hooks as a low-privilege OS user
+with no read access to Crucible's code, state or reports is a documented
+deployment step (`docs/HOOKS.md`).
+
 ## 11 · Manual override
 
 Restart, revert, deploy and database reset can each be switched to manual

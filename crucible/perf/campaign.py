@@ -155,6 +155,9 @@ class Sla:
     #: Named load scenarios, run in order by ``crucible run --all-scenarios``,
     #: each as its own campaign with its own baseline. Empty means "at_load".
     scenarios: list[dict[str, Any]] = field(default_factory=list)
+    #: The collection's hooks (§10): uploaded .py files per stage, a timeout and
+    #: the variables explicitly passed through. Empty means no hooks.
+    hooks: dict[str, Any] = field(default_factory=dict)
     source_path: Path | None = None
 
     @classmethod
@@ -192,6 +195,7 @@ class Sla:
             cpu_steal_abort_pct=float(contention.get("cpu_steal_abort_pct", 5.0)),
             at_load=dict(objective.get("at_load") or {}),
             scenarios=_parse_scenarios(data.get("scenarios"), resolved),
+            hooks=_parse_hooks(data.get("hooks"), resolved),
             source_path=resolved,
         )
 
@@ -255,6 +259,32 @@ def _parse_scenarios(raw: Any, source: Path) -> list[dict[str, Any]]:
             entry["requests"] = _parse_requests(item["requests"], name, source)
             entry["data"] = _parse_data(item.get("data") or {}, entry["requests"], name, source)
         out.append(entry)
+    return out
+
+
+def _parse_hooks(raw: Any, source: Path) -> dict[str, Any]:
+    """The SLA's ``hooks:`` block, validated whole (Group 41)."""
+    from .hooks import STAGES, check_hook_name, check_pass_env  # noqa: PLC0415
+
+    if raw in (None, {}):
+        return {}
+    if not isinstance(raw, dict):
+        raise CampaignRefused(f"{source}: hooks must be a mapping")
+    unknown = set(raw) - {*STAGES, "timeout_s", "pass_env"}
+    if unknown:
+        raise CampaignRefused(f"{source}: unknown hooks keys {sorted(unknown)}")
+    out: dict[str, Any] = {}
+    try:
+        for stage in STAGES:
+            if raw.get(stage):
+                out[stage] = check_hook_name(str(raw[stage]))
+        timeout = float(raw.get("timeout_s", 60))
+        if not 0 < timeout <= 3600:
+            raise ValueError(f"timeout_s must be between 0 and 3600 seconds, got {timeout}")
+        out["timeout_s"] = timeout
+        out["pass_env"] = check_pass_env(list(raw.get("pass_env") or []))
+    except (TypeError, ValueError) as exc:
+        raise CampaignRefused(f"{source}: hooks: {exc}") from exc
     return out
 
 
@@ -1493,7 +1523,7 @@ class Campaign:
             return current_load, current_snapshot, ""
 
         changes: dict[str, Any] = {}
-        for key in ("p99_ms", "error_rate_pct", "endpoint", "at_load"):
+        for key in ("p99_ms", "error_rate_pct", "endpoint", "at_load", "hooks"):
             old, new = getattr(self.sla, key), getattr(new_sla, key)
             if old != new:
                 changes[key] = {"from": old, "to": new}
@@ -1530,6 +1560,11 @@ class Campaign:
 
         self.sla, self.profile = new_sla, new_profile
         self.applicator.profile = new_profile
+        if "hooks" in changes:
+            from .hooks import hooks_from_mapping  # noqa: PLC0415
+
+            self.hooks = hooks_from_mapping(new_sla.hooks, workspace=self.hooks.workspace,
+                                            hooks_dir=self.hooks.hooks_dir, run_id=self.run_id)
         if self.mix_targets and self.declared_scenario:
             # Endpoints without their own target inherit the objective's p99, so
             # a goal edit moves them too.

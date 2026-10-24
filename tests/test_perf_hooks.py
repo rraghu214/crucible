@@ -198,9 +198,9 @@ class TestHookSetHasHooks:
         assert not HookSet().has_hooks()
 
     def test_any_hook_configured_returns_true(self):
-        assert HookSet(before_each="echo hi").has_hooks()
+        assert HookSet(before_each="reset.py").has_hooks()
         assert HookSet(after_each=lambda: None).has_hooks()
-        assert HookSet(on_abort="echo bye").has_hooks()
+        assert HookSet(on_abort="dump.py").has_hooks()
 
 
 # ---------------------------------------------------------------------------
@@ -372,19 +372,20 @@ class TestHooksFromMapping:
         assert not hs.has_hooks()
 
     def test_mapping_populates_hooks(self):
+        # Python files since 24 October 2026 (Group 41); shell commands are refused.
         hs = hooks_from_mapping({
-            "before_each": "truncate orders",
-            "after_each": "curl /flush",
-            "on_abort": "cp /var/log/app.log /tmp/",
+            "before_each": "reset_db.py",
+            "after_each": "flush_cache.py",
+            "on_abort": "dump_logs.py",
             "timeout_s": 120,
         })
-        assert hs.before_each == "truncate orders"
-        assert hs.after_each == "curl /flush"
-        assert hs.on_abort == "cp /var/log/app.log /tmp/"
+        assert hs.before_each == "reset_db.py"
+        assert hs.after_each == "flush_cache.py"
+        assert hs.on_abort == "dump_logs.py"
         assert hs.timeout_s == 120.0
 
     def test_partial_mapping_leaves_missing_hooks_none(self):
-        hs = hooks_from_mapping({"before_each": "echo reset"})
-        assert hs.before_each == "echo reset"
+        hs = hooks_from_mapping({"before_each": "reset.py"})
+        assert hs.before_each == "reset.py"
         assert hs.after_each is None
         assert hs.on_abort is None

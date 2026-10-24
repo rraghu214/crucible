@@ -61,6 +61,8 @@ class WizardForm:
     spawn_rate: float | None = None
     #: Declared scenarios for slo.yaml; None leaves the file's list as it is.
     scenarios: list[dict[str, Any]] | None = None
+    #: The hooks block for slo.yaml; None leaves it as it is.
+    hooks: dict[str, Any] | None = None
 
 
 def _scalar(value: Any) -> str:
@@ -133,6 +135,7 @@ def current(sla_path: Path, profile_path: Path, locustfile: Path) -> dict[str, A
         "base_branch": profile.deploy.base_branch, "branch": profile.deploy.branch,
         "remote": profile.deploy.remote, "deploy_mode": profile.deploy.mode,
         "restart_command": list(profile.restart.command), "health_url": profile.restart.health_url,
+        "hooks": sla.hooks,
         "endpoints": [{"endpoint": t["endpoint"], "tag": t["tag"], "family": t["family"]}
                       for t in locust_tasks(locustfile) if t["endpoint"]],
     }
@@ -162,6 +165,8 @@ def render(form: WizardForm, sla_path: Path, profile_path: Path, locustfile: Pat
         new_sla = set_value(new_sla, ["objective", "at_load", "spawn_rate"], round(form.spawn_rate, 3))
     if form.scenarios is not None:
         new_sla = set_value(new_sla, ["scenarios"], form.scenarios)
+    if form.hooks is not None:
+        new_sla = set_value(new_sla, ["hooks"], form.hooks)
     new_sla = _stamp(new_sla, "objective:", note)
 
     old_profile = profile_path.read_text(encoding="utf-8")
@@ -202,6 +207,8 @@ def _validate(form: WizardForm, sla_text: str, profile_text: str, sla_path: Path
         read_back["spawn_rate"] = (sla.at_load or {}).get("spawn_rate")
     if form.scenarios is not None:
         read_back["scenarios"] = sla.scenarios
+    if form.hooks is not None:
+        read_back["hooks"] = sla.hooks
     for key, got in read_back.items():
         want = getattr(form, key)
         if key == "spawn_rate":

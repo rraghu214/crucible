@@ -850,24 +850,19 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
     <!-- Hooks -->
     <div class="card" style="margin-bottom:12px;">
       <div class="card-h">
-        <div><div class="card-title">Hooks <span class="pill idle">not configurable yet</span></div><div class="card-sub">Shell commands that run around each trial — database reset, OAuth refresh, log capture. <strong style="color:var(--warn);">The campaign can run hooks (a failing one blocks the trial), but nothing configures them yet: what you enter here is not sent at Launch.</strong></div></div>
-        <button class="btn btn-ghost btn-sm" onclick="addHook()">+ Add Hook</button>
+        <div><div class="card-title">Hooks <span style="font-size:11px;font-weight:400;color:var(--lo);">optional</span></div><div class="card-sub">Python files run around each experiment: database reset, token refresh, log capture. Run with Crucible's Python in isolated mode, in the target's workspace. A failing before/after hook blocks the experiment.</div></div>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('hookFile').click()">↑ Upload hook (.py)</button>
+        <input type="file" id="hookFile" accept=".py" multiple style="display:none" onchange="handleHookInput(this)">
       </div>
-      <div style="font-size:11px;color:var(--lo);margin-bottom:8px;">A failing hook blocks the trial — a reset that silently did nothing makes every later measurement wrong.</div>
-      <div id="hookList">
-        <div class="hook-row">
-          <span class="hook-type before">before_each</span>
-          <input value="psql -c 'TRUNCATE transfers; INSERT INTO transfers SELECT * FROM transfers_seed'" placeholder="shell command">
-          <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--mid);white-space:nowrap;"><input type="checkbox" checked style="width:auto;"> fail-block</div>
-          <button class="hook-rm" onclick="this.closest('.hook-row').remove()">✕</button>
-        </div>
-        <div class="hook-row">
-          <span class="hook-type after">after_each</span>
-          <input value="./scripts/collect-logs.sh ${trial_id}" placeholder="shell command">
-          <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--mid);white-space:nowrap;"><input type="checkbox" style="width:auto;"> fail-block</div>
-          <button class="hook-rm" onclick="this.closest('.hook-row').remove()">✕</button>
-        </div>
+      <div id="hookFileList" style="font-size:12px;color:var(--lo);margin-bottom:10px;">None uploaded.</div>
+      <div class="form-grid2">
+        <div class="form-row"><label class="form-label">before_each</label><select class="form-select" id="hook-before_each"></select></div>
+        <div class="form-row"><label class="form-label">after_each</label><select class="form-select" id="hook-after_each"></select></div>
+        <div class="form-row"><label class="form-label">on_abort</label><select class="form-select" id="hook-on_abort"></select></div>
+        <div class="form-row"><label class="form-label">Timeout (s)</label><input class="form-input" id="hook-timeout" type="number" min="1" max="3600" value="60"></div>
       </div>
+      <div class="form-row"><label class="form-label">Pass through environment variables</label><input class="form-input" id="hook-pass-env" placeholder="PGPASSWORD, PGHOST">
+        <div class="form-hint">A hook sees only basic OS variables, these names, and CRUCIBLE_HOOK_STAGE / RUN_ID / EXPERIMENT. Crucible's own variables (control token, API keys) are never passed.</div></div>
     </div>
 
     <!-- Input Data -->
@@ -1936,6 +1931,10 @@ async function loadWizard(){
     _setVal('sla-p99',c.p99_ms);_setVal('sla-err',c.error_rate_pct);_setVal('sla-users',c.users);
     _setVal('sla-noise',c.noise_p99_spread_pct+'% (measured '+c.noise_measured_on+')');
     _setVal('goal-text','Keep '+c.endpoint+' p99 under '+c.p99_ms+' ms at '+c.users+' users');
+    await loadHooks();
+    const hk=c.hooks||{};
+    ['before_each','after_each','on_abort'].forEach(st=>_setVal('hook-'+st,hk[st]||''));
+    _setVal('hook-timeout',hk.timeout_s||60);_setVal('hook-pass-env',(hk.pass_env||[]).join(', '));
   }catch(e){addChatMsg('ai','⚠ Could not load the wizard: '+escHtml(e.message));}
 }
 function _seconds(v){const m=String(v).trim().match(/^(\d+)\s*(s|m|h)?$/i);if(!m)return NaN;return parseInt(m[1])*({s:1,m:60,h:3600}[(m[2]||'s').toLowerCase()]);}
@@ -1956,6 +1955,7 @@ function wizardBody(){
     mode,scenarios:scen,goal:_wzVal('goal-text'),run_id:_wzVal('wz-run-id'),
     experiments:parseInt(_wzVal('wz-experiments'))||5,
     ..._requestsAndData(),
+    hooks:_hooksBody(),
     cost_cap_usd:_wzVal('wz-cost-cap')?Number(_wzVal('wz-cost-cap')):null,
     wall_clock_cap_h:_wzVal('wz-wall-cap')?Number(_wzVal('wz-wall-cap')):null};
   if(mode==='Ceiling Probe') body.ceiling={start_users:parseInt(_wzVal('ceil-start')),step:parseInt(_wzVal('ceil-step')),max_users:parseInt(_wzVal('ceil-max')),hold_s:parseInt(_wzVal('ceil-hold'))};
@@ -2191,23 +2191,6 @@ function dismissBanner(id){
 }
 
 /* ── Hooks ───────────────────────────────────────────────────────────── */
-function addHook(){
-  const list=document.getElementById('hookList');
-  if(!list) return;
-  const row=document.createElement('div');
-  row.className='hook-row';
-  row.innerHTML=`
-    <select class="form-input" style="font-size:11px;padding:4px 6px;">
-      <option>before_each</option><option>after_each</option><option>on_abort</option>
-    </select>
-    <input class="form-input" placeholder="shell command or script path" style="font-size:12px;">
-    <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--mid);white-space:nowrap;">
-      <input type="checkbox" checked> fail-block
-    </label>
-    <button onclick="this.closest('.hook-row').remove()" style="background:none;border:none;color:var(--lo);cursor:pointer;font-size:14px;line-height:1;">✕</button>
-  `;
-  list.appendChild(row);
-}
 
 /* ── Input data / variable mappings ──────────────────────────────────── */
 let dataFiles=[];
@@ -2227,6 +2210,32 @@ async function handleCsvInput(input){
     catch(e){addChatMsg('ai','⚠ '+escHtml(f.name)+' was not uploaded: '+escHtml(e.message));}
   }
   input.value='';loadDataFiles();
+let hookFiles=[];
+async function loadHooks(){
+  try{const r=await fetch('/v1/perf/hooks');if(r.ok) hookFiles=(await r.json()).files||[];}catch(e){}
+  const list=document.getElementById('hookFileList');
+  if(list){list.replaceChildren();if(!hookFiles.length)list.textContent='None uploaded.';
+    hookFiles.forEach(f=>list.appendChild(_el('div',{textContent:'🐍 '+f.name+' ('+f.bytes+' bytes)'})));}
+  ['before_each','after_each','on_abort'].forEach(stage=>{
+    const sel=document.getElementById('hook-'+stage);if(!sel)return;const v=sel.value;
+    sel.replaceChildren(_el('option',{value:'',textContent:'— none —'}));
+    hookFiles.forEach(f=>sel.appendChild(_el('option',{value:f.name,textContent:f.name})));
+    sel.value=hookFiles.some(f=>f.name===v)?v:'';
+  });
+}
+async function handleHookInput(input){
+  for(const f of Array.from(input.files||[])){
+    try{await apiPost('/v1/perf/hooks',{name:f.name,text:await f.text()});addChatMsg('ai','Uploaded hook <strong>'+escHtml(f.name)+'</strong> (syntax checked, not run).');}
+    catch(e){addChatMsg('ai','⚠ '+escHtml(f.name)+' was not uploaded: '+escHtml(e.message));}
+  }
+  input.value='';loadHooks();
+}
+function _hooksBody(){
+  const pick=id=>(document.getElementById(id)?.value||'').trim();
+  return {before_each:pick('hook-before_each'),after_each:pick('hook-after_each'),on_abort:pick('hook-on_abort'),
+    timeout_s:Number(pick('hook-timeout'))||60,pass_env:pick('hook-pass-env').split(',').map(x=>x.trim()).filter(Boolean)};
+}
+loadHooks();
 }
 function addRequestRow(endpoint,method,query,body,weight,p99){
   const row=_el('div',{className:'req-row'});

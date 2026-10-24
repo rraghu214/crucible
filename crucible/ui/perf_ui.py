@@ -1768,6 +1768,21 @@ class DataMapping(BaseModel):
     column: str = Field(min_length=1, max_length=200)
 
 
+class HooksConfig(BaseModel):
+    before_each: str = Field(default="", max_length=120)
+    after_each: str = Field(default="", max_length=120)
+    on_abort: str = Field(default="", max_length=120)
+    timeout_s: float = Field(default=60, gt=0, le=3600)
+    pass_env: list[str] = Field(default_factory=list, max_length=20)
+
+    def as_mapping(self) -> dict[str, Any]:
+        out: dict[str, Any] = {stage: getattr(self, stage) for stage in ("before_each", "after_each", "on_abort")
+                               if getattr(self, stage)}
+        out["timeout_s"] = float(self.timeout_s)
+        out["pass_env"] = list(self.pass_env)
+        return out
+
+
 class CeilingBounds(BaseModel):
     start_users: int = Field(ge=1, le=100_000)
     step: int = Field(ge=1, le=100_000)
@@ -1796,6 +1811,8 @@ class WizardBody(BaseModel):
     #: Templated requests and their data, applied to every scenario (Group 40).
     requests: list[RequestRow] = Field(default_factory=list, max_length=20)
     data: dict[str, DataMapping] = Field(default_factory=dict)
+    #: The collection's hooks (Group 41). None leaves slo.yaml's hooks as they are.
+    hooks: HooksConfig | None = None
 
 
 def _wizard_paths(ctx: PerfContext) -> tuple[Path, Path, Path]:
@@ -1816,7 +1833,8 @@ def _wizard_form(body: WizardBody, operator: str) -> Any:
                       users=body.users, config_file=body.config_file, base_branch=body.base_branch,
                       restart_command=command, health_url=body.health_url, operator=operator,
                       provenance=body.provenance, spawn_rate=_spawn_rate(body),
-                      scenarios=_declared_scenarios(body))
+                      scenarios=_declared_scenarios(body),
+                      hooks=None if body.hooks is None else body.hooks.as_mapping())
 
 
 def _declared_scenarios(body: WizardBody) -> list[dict[str, Any]] | None:
@@ -1841,7 +1859,12 @@ def _declared_scenarios(body: WizardBody) -> list[dict[str, Any]] | None:
 
 
 def _check_load_data(body: WizardBody, ctx: PerfContext) -> None:
-    """Every mapped data file must already be uploaded, with its column."""
+    """Every mapped data file, and every named hook, must already be uploaded."""
+    if body.hooks is not None:
+        for stage in ("before_each", "after_each", "on_abort"):
+            name = getattr(body.hooks, stage)
+            if name and not (_hooks_dir(ctx) / name).is_file():
+                raise HTTPException(409, f"hook {stage}: {name} has not been uploaded")
     if not body.requests:
         return
     from ..perf.loaddata import LoadDataError, resolve
@@ -2048,6 +2071,40 @@ async def perf_load_data_list(request: Request):
     from ..perf.loaddata import listing
 
     return {"files": await asyncio.to_thread(listing, _context(request).state)}
+
+
+class HookFileBody(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    text: str = Field(min_length=1, max_length=200_000)
+
+
+def _hooks_dir(ctx: PerfContext) -> Path:
+    return ctx.state / "hooks"
+
+
+@router.post("/v1/perf/hooks", dependencies=[Depends(require_control)])
+async def perf_hook_upload(body: HookFileBody, request: Request):
+    """Upload a hook (.py). Syntax-checked, never executed here (Group 41)."""
+    from ..perf.hooks import check_hook_name
+
+    try:
+        check_hook_name(body.name)
+        compile(body.text, body.name, "exec")
+    except (ValueError, SyntaxError) as exc:
+        raise HTTPException(422, f"{body.name}: {exc}") from exc
+    folder = _hooks_dir(_context(request))
+    folder.mkdir(parents=True, exist_ok=True)
+    partial = folder / f".{body.name}.partial"
+    partial.write_text(body.text, encoding="utf-8", newline="")
+    partial.replace(folder / body.name)
+    return {"name": body.name, "bytes": len(body.text.encode("utf-8"))}
+
+
+@router.get("/v1/perf/hooks")
+async def perf_hook_list(request: Request):
+    folder = _hooks_dir(_context(request))
+    files = sorted(p for p in folder.glob("*.py") if p.is_file()) if folder.exists() else []
+    return {"files": [{"name": p.name, "bytes": p.stat().st_size} for p in files]}
 
 
 class SuggestBody(BaseModel):

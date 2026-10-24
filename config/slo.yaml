@@ -61,6 +61,17 @@ objective:
 # spawn_rate (users started per second; default at_load.spawn_rate).
 scenarios: []
 
+# --- Hooks (DESIGN.md section 10) -------------------------------------------
+#
+# Plain names of Python files uploaded from the wizard into <state>/hooks/,
+# run as `python -I <file>` in the target's workspace before/after each
+# experiment and on abort. A failing before_each/after_each blocks the
+# experiment. The hook's environment is an allowlist: basic OS variables, the
+# names in pass_env, and CRUCIBLE_HOOK_STAGE/RUN_ID/EXPERIMENT -- never
+# Crucible's own secrets. Example:
+#   hooks: {"before_each": "reset_db.py", "timeout_s": 120, "pass_env": ["PGPASSWORD"]}
+hooks: {}
+
 # --- What counts as a real change -----------------------------------------
 #
 # Measured on this environment, not assumed. The baseline p99 spread across

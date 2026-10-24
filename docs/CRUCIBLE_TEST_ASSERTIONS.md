@@ -4241,6 +4241,90 @@ anything is written or started.
 
 ---
 
+# GROUP 41 — Python hooks: isolated, allowlisted, configurable
+
+*Drafted 24 October 2026 by Claude Code. NOT YET REVIEWED. Implemented in
+`tests/test_perf_python_hooks.py` (19). Three tests in `tests/test_perf_hooks.py`
+(Group 10 hooks, previously approved) were **changed** from shell strings to
+`.py` names, as the operator's Python-only decision requires; please re-confirm
+them. Code: `crucible/perf/hooks.py`, `_parse_hooks` in `campaign.py`, the
+`/v1/perf/hooks` routes, the wizard's Hooks card. Guide: `docs/HOOKS.md`.*
+
+*Operator decisions, 24 October 2026: a hook is a Python file, and it must not be
+able to reach Crucible or its reports. The engine existed, but ran hooks as
+command lines carrying Crucible's **whole environment** (control token and API
+keys included), and nothing let an operator configure one.*
+
+---
+
+### 41.1 A hook is an uploaded .py file, run as `python -I`
+
+**What it checks.**
+- **How it runs:** the hook runs in the target's workspace, under Crucible's own
+  interpreter in isolated mode, so a `PYTHONPATH` pointing at a poisoned
+  `json.py` is ignored.
+- **What's refused:** a shell command (`psql -c ...`), `../reset.py` and
+  `reset.sh`. These are refused both in the SLA and at run time.
+
+---
+
+### 41.2 Its environment is an allowlist
+
+**What it checks.** With `CRUCIBLE_CONTROL_TOKEN` and `GEMINI_API_KEY` set in
+Crucible's environment, the hook sees neither. It sees `PGPASSWORD` only because
+the operator listed it in `pass_env`, plus `CRUCIBLE_HOOK_STAGE`, `RUN_ID` and
+`EXPERIMENT`. A `pass_env` entry starting `CRUCIBLE_` is refused.
+
+**Why it exists.** DESIGN.md §12: allowlist, never blocklist. The control token
+is the key to the whole control plane.
+
+**For review:** isolation from Crucible's *files* is a deployment step (a
+low-privilege user, `docs/HOOKS.md`), not enforced in code. Running hooks as
+that user (`sudo -u`) is not wired in yet. OK as a documented step for now (your
+"use it as is")?
+
+---
+
+### 41.3 A failing or overrunning hook blocks the experiment
+
+**What it checks.**
+- **A non-zero exit** raises `HookFailed`, and the message includes the end of
+  the hook's output.
+- **A timeout** kills the hook and blocks.
+- **A hook file that was never uploaded** blocks.
+- **`on_abort` failures** are recorded but never raised.
+
+---
+
+### 41.4 The SLA's hooks block is validated whole and builds the campaign's hooks
+
+**What it checks.** `hooks: {"before_each": "reset.py", "pass_env": [...]}` is
+normalised; an unknown key, a non-`.py` name, a timeout of 0, or a `CRUCIBLE_`
+pass-through is refused. `build_campaign` builds the hook set from the SLA, with
+`<state>/hooks` as the hooks folder and the target's workspace as the working
+directory. A mid-run edit to `hooks` is an amendment taken at the next boundary
+(Group 33).
+
+---
+
+### 41.5 Upload: token, syntax-checked, never run
+
+**What it checks.** `POST /v1/perf/hooks` refuses a request without the token
+and refuses a syntax error (422, nothing saved). An uploaded hook that would
+write a marker file when run leaves no marker: compiling a hook is not running
+it.
+
+---
+
+### 41.6 The wizard writes the hooks block and refuses a hook not yet uploaded
+
+**What it checks.** Save with `before_each: reset.py` before uploading it is
+refused (409) and writes nothing. After the upload, Save writes the block into
+`slo.yaml`, and the wizard opens with it next time, so a later Save can't clear
+hooks someone added by hand.
+
+---
+
 # Review decisions — week 1
 
 Raised by Claude Code while implementing, decided by the operator on 10 September 2026.

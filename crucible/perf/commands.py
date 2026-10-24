@@ -53,6 +53,7 @@ from .campaign import (
     request_pause,
 )
 from .deploy import GitPushDeployer, ManualDeployer, read_running_commit
+from .hooks import hooks_from_mapping
 from .loadprofile import tag_for_endpoint
 from .profile import TargetProfile
 
@@ -1195,6 +1196,10 @@ def build_campaign(
         warm_up_gateway=gateway_client.warm_up,
         stakeholder_request=stakeholder_request,
         guarded_files=tuple(p for p in (sla.source_path, profile.source_path) if p),
+        # §10 hooks: uploaded .py files in <state>/hooks, run in the target's
+        # workspace with an allowlisted environment (Group 41).
+        hooks=hooks_from_mapping(sla.hooks, workspace=workspace or None,
+                                 hooks_dir=str(Path(state_dir) / "hooks"), run_id=run_id),
         confirm_config_changes=approve_mode == "file" and not advisory,
         advisory=advisory,
         mix_targets=mix_targets,
