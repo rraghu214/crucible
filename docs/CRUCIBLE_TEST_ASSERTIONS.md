@@ -3632,8 +3632,10 @@ person would type.
   the authority). Right, or should the goal not reach the model at all?
 
 **Amended 24 October 2026 (Group 33):** Launch is also refused while a campaign is
-*paused*. Pausing releases the lock, but the campaign has not stopped, and
-`resume` reloads these files. `test_while_a_campaign_is_paused`.
+*paused*, because it would start a second campaign
+(`test_while_a_campaign_is_paused`). To change a running or paused campaign's
+goal or load, the wizard's **Save changes** writes the files without launching
+(33.6).
 
 ---
 
@@ -3660,68 +3662,110 @@ shown as a number would be a claim nobody measured.
 
 ---
 
-# GROUP 33 — The SLA and profile cannot change under a campaign that has not stopped
+# GROUP 33 — Operator edits to the SLA and profile mid-campaign
 
-*Drafted 24 October 2026 by Claude Code. NOT YET REVIEWED. Implemented in
-`tests/test_perf_file_guard.py` (7), plus one test in `tests/test_ui_wizard.py`.
-Code: `fingerprint_files`, `changed_files` and `Campaign._check_guarded` in
-`crucible/perf/campaign.py`.*
+*Drafted 24 October 2026 by Claude Code. REVIEWED AND APPROVED by the operator, 24 October 2026. Implemented in
+`tests/test_perf_file_guard.py` (11), plus two tests in `tests/test_ui_wizard.py`.
+Code: `fingerprint_files`, `changed_files` and `Campaign._absorb_operator_edits`
+in `crucible/perf/campaign.py`, and `/v1/perf/wizard/save`.*
 
-*Operator decision, 24 October 2026: the SLA and profile may be edited only once
-a campaign has stopped. A running campaign keeps both in memory, so an edit
-cannot change how *it* judges. What an edit can do:*
-- *make the record lie, because the manifest's goal no longer matches the file
-  beside it;*
-- *more seriously, change the goal under a **paused** campaign, because `resume`
-  reloads both files from disk.*
+*Operator decisions, 24 October 2026:*
+- *The SLA and profile may change mid-run. Examples: a 2 s goal found to be fine
+  at 4 s, or a 900 tpm, 15-minute load found unnecessary. The campaign honours
+  the change at its next experiment boundary.*
+- *Semi-Automated pauses to confirm. Fully Automated, Advisory and the ceiling
+  probe take the change without pausing, as each mode already behaves.*
+- *A load change starts the rest of the run like a new test case, with its own
+  baseline. A verdict compares two measurements at the same load; comparing a
+  "before" at 900 tpm with an "after" at 300 tpm would credit the change with the
+  drop in traffic.*
+- *The agent still cannot write either file (§4.4). This is the human's path,
+  and every edit is recorded.*
+
+*This replaces the first cut, which aborted on any change.*
 
 ---
 
-### 33.1 Both files are fingerprinted on the manifest at start
+### 33.1 Both files are fingerprinted on the manifest
 
 **What it checks.** `guarded_files` on the manifest is `{path: sha256}` for the
-SLA and profile the campaign actually loaded. `build_campaign` passes exactly
-those two paths.
-
-**Why it exists.** It lets a later reader prove which configuration produced
-the verdicts, rather than assume it.
+SLA and profile in force. `build_campaign` passes exactly the two files it
+loaded. Only Semi-Automated (`--approve file`) sets `confirm_config_changes`.
 
 ---
 
-### 33.2 An edit aborts the run at the next check, names the file, and gives no verdict
+### 33.2 A goal edit is taken at the next boundary and judged against from then on
 
-**What it checks.** Checks run after the baseline, before each experiment, and
-right before each verdict. Each case below aborts the campaign and names the
-file:
-- an SLA edit during an experiment's measurement: that experiment is recorded
-  `NOT_MEASURED`, and its reason names the file;
-- a profile edit during the baseline: no experiment starts;
-- a deleted file: counts as a change.
+**What it checks.** The p99 goal is relaxed from 120 to 400 ms during experiment
+1. At experiment 2 the campaign records an amendment
+(`p99_ms: 120 -> 400`, "accepted automatically"). A later p99 of 250 ms then
+*meets* the SLA, which proves the new goal was used. There is no re-baseline. A
+comment-only edit changes the file's fingerprint but no value, so no amendment
+is recorded.
 
-Rewriting identical bytes does **not** count as a change. The abort takes the
-normal abort path, including §19.9's redeploy of the last good commit.
+**Why it exists.** Verdicts compare before against after, which the goal does not
+affect. The goal decides "is the SLA met?" and when to stop.
 
-**Why it exists.** A verdict judged under a goal that changed partway through
-belongs to neither goal.
-
-**For review:**
-- Is abort the right response, or should the campaign *pause* and ask instead?
-  Abort matches your rule ("only after stopping"); pause would let someone undo
-  an accidental edit and continue.
-- The check is a content hash, so whitespace or comment-only edits also abort.
-  Too strict?
+**For review:** an experiment already in flight when the edit lands finishes
+under the old goal. Changes apply only at boundaries, never mid-experiment.
+Agreed?
 
 ---
 
-### 33.3 A paused campaign whose files changed refuses to resume
+### 33.3 A load edit re-measures the baseline before the next verdict
 
-**What it checks.** The pause state carries the fingerprints. `resume` compares
-them with the files now on disk and refuses, naming each changed file and
-saying to start a new campaign. Launch from the wizard is also refused while any
-campaign is paused (32.3, amended).
+**What it checks.** Users are changed from 50 to 20 mid-run. Before experiment 2
+the campaign measures `<run>-rebaseline-02` at 20 users, records it on the
+amendment, and experiment 2's "before" is that new measurement. If the new
+baseline already meets the goal, the campaign stops and says so. `at_load` may
+also carry `spawn_rate`, `warmup_s` and `measure_s`; an edit to any of them
+counts as a load change. An endpoint change also re-tags the load (Group 31) and
+re-baselines.
 
-**Why it exists.** This is the case where an edit really would change how a
-campaign is judged: resume reloads the SLA from disk.
+**Why it exists.** Without the re-measure, the drop in traffic would be scored as
+the change's improvement.
+
+**For review:** the re-baseline costs one extra measurement window of wall
+clock. Should the Budget step show that possibility?
+
+---
+
+### 33.4 Semi-Automated pauses on an edit and takes it on resume
+
+**What it checks.** In Semi-Automated, an edit pauses the campaign at the next
+boundary, naming what changed, and records nothing yet. `crucible resume` is the
+confirmation: the amendment is then recorded as "operator resume" and judged
+against. Resume compares with the configuration the campaign had **when it
+paused** (carried in the pause state), not with what the resuming process just
+loaded, so edits made while paused are recorded too.
+
+**For review:** a profile edited while paused is recorded as "profile file
+edited", without a field-by-field diff (the pause state carries the SLA's values,
+not the profile's). Enough?
+
+---
+
+### 33.5 Edits that would not load, would move the deploy branch, or would reach production are not applied
+
+**What it checks.**
+- **An edit that does not load** (`p99_ms: fast`): recorded as rejected, and the
+  run continues on the previous configuration.
+- **An environment changed to `production`:** rejected the same way.
+- **A deploy branch change in the profile:** not applied mid-run, because the
+  campaign holds the lock on the old branch. The rest of the profile edit applies.
+
+**Why it exists.** §8 and §19.1 (production is always refused) and §19.10 (one
+campaign per deploy branch, held by a lock).
+
+---
+
+### 33.6 The wizard can save mid-campaign, but cannot launch a second one
+
+**What it checks.** `POST /v1/perf/wizard/save` writes both files while a
+campaign holds the lock, says which campaign will take the change, needs the
+control token, and starts nothing. Launch is still refused while a campaign is
+running or paused (32.3), because it would start a second campaign. Its refusal
+points to Save.
 
 ---
 

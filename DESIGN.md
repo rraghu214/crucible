@@ -131,17 +131,27 @@ kind the agent has no write permission for. A file guard can be bypassed if
 config moves; a memory permission cannot. The same protection covers the load
 profile — fewer users is not a fix, and it destroys comparability too.
 
-**The files cannot change under a campaign that has not stopped (24 October
-2026).** The two locks above stop the *agent* from moving the goal. This stops a
-*person* from moving it mid-run. A campaign fingerprints the SLA and profile at
-start and records the fingerprints on the manifest. It re-checks them after the
-baseline, before each experiment and before each verdict, and an edit aborts the
-run, naming the file.
+**The operator may change the goal or the load mid-run, and every change is
+recorded (operator decisions, 24 October 2026).** The two locks above stop the
+*agent* moving the goal. A *person* realising mid-campaign that 4 s is acceptable
+where 2 s was asked, or that a 900 tpm load is unnecessary, should be able to say
+so without throwing the run away. So:
 
-The real danger is a paused campaign, because `resume` reloads both files. A
-resume against changed files is therefore refused, and the wizard refuses to
-write while any campaign is running or paused. Edit once it has finished or been
-aborted.
+- the campaign fingerprints the SLA and profile and records them on the manifest;
+- an edit is taken at the next experiment boundary, never mid-experiment;
+- Semi-Automated pauses to confirm (resume is the confirmation); Fully
+  Automated, Advisory and the ceiling probe take the edit without pausing;
+- every edit becomes an `amendment` on the manifest: when, from → to, and how it
+  was accepted;
+- **a load change re-measures the baseline first.** A verdict compares two
+  measurements at the same load, so the rest of the run starts like a new test
+  case. Otherwise the drop in traffic would be scored as the change's
+  improvement;
+- an edit that does not load, reaches `production`, or moves the deploy branch
+  is recorded and not applied.
+
+The wizard writes mid-run through **Save changes**. **Launch** still refuses while
+a campaign has not stopped, because it would start a second one.
 
 **4.5 The verdict uses measured values, never predictions.** The agent
 predicted 140 ms and measured 93 ms after the K3 pool-size fix — conservative

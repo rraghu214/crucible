@@ -194,6 +194,20 @@ class TestNothingIsWritten:
         self._unchanged(root, before)
         assert started == []
 
+    def test_save_is_allowed_mid_campaign_and_starts_nothing(self, client, root):
+        """Operator decision, 24 October 2026: edits may land mid-run; the
+        campaign takes them at its next boundary (Group 33). Launch would start a
+        second campaign and stays refused; Save only writes."""
+        tc, started = client
+        lock = root / "state" / "locks" / "perftest_sandbox.lock"
+        lock.mkdir(parents=True)
+        (lock / "holder.json").write_text('{"run_id": "live-7"}', encoding="utf-8")
+        response = tc.post("/v1/perf/wizard/save", json=_body(p99_ms=400), headers=AUTH)
+        assert response.status_code == 200 and "live-7" in response.json()["note"]
+        assert Sla.load(_paths(root)[0]).p99_ms == 400
+        assert started == []
+        assert tc.post("/v1/perf/wizard/save", json=_body(), headers={}).status_code == 401
+
     def test_while_a_campaign_is_paused(self, client, root):
         """Pausing releases the lock but has not stopped the campaign; resume
         reloads these files, so they stay frozen until it ends (Group 33)."""

@@ -1130,6 +1130,7 @@ def build_campaign(
         warm_up_gateway=gateway_client.warm_up,
         stakeholder_request=stakeholder_request,
         guarded_files=tuple(p for p in (sla.source_path, profile.source_path) if p),
+        confirm_config_changes=approve_mode == "file",
     )
 
 

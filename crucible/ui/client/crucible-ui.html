@@ -963,7 +963,10 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
     <div class="wz-nav">
       <button class="btn btn-ghost" onclick="wzGo(3)">← Back</button>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
-        <button class="btn btn-primary" onclick="launchRun()">🚀 Launch Test Run</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+          <button class="btn btn-ghost" onclick="saveWizard()" title="Write slo.yaml and the profile without starting a run. A running campaign takes the change at its next experiment.">💾 Save changes</button>
+          <button class="btn btn-primary" onclick="launchRun()">🚀 Launch Test Run</button>
+        </div>
         <div class="cli-twin" id="rev-cli">crucible run --sla config/slo.yaml</div>
       </div>
     </div>
@@ -2150,6 +2153,13 @@ async function confirmPause(){
 }
 
 /* ── Launch ──────────────────────────────────────────────────────────── */
+async function saveWizard(){
+  try{
+    const d=await apiPost('/v1/perf/wizard/save',wizardBody());
+    addChatMsg('ai','Saved slo.yaml and the profile. '+escHtml(d.note)+' Semi-Automated pauses to confirm the change; a load change re-measures the baseline first.');
+    renderReview();loadWizard();
+  }catch(e){addChatMsg('ai','⚠ Save refused: '+escHtml(e.message));}
+}
 async function launchRun(){
   const body=wizardBody();
   if(!body.run_id) body.run_id='run-'+Date.now();

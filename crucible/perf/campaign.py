@@ -611,8 +611,11 @@ class CampaignResult:
     models_used: list[str] = field(default_factory=list)
     started_at_epoch_s: float = field(default_factory=time.time)
     finished_at_epoch_s: float | None = None
-    #: ``{path: sha256}`` of the SLA and profile as this campaign started.
+    #: ``{path: sha256}`` of the SLA and profile as currently in force.
     guarded_files: dict[str, str] = field(default_factory=dict)
+    #: Every operator edit taken mid-run: when, what changed (from -> to), how it
+    #: was accepted, and the re-measured baseline when the load moved.
+    amendments: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def spans_multiple_models(self) -> bool:
@@ -650,6 +653,7 @@ class CampaignResult:
             "started_at_epoch_s": self.started_at_epoch_s,
             "finished_at_epoch_s": self.finished_at_epoch_s,
             "guarded_files": self.guarded_files,
+            "amendments": self.amendments,
         }
 
     def write(self, directory: Path) -> Path:
@@ -751,6 +755,10 @@ class Campaign:
     #: may be edited only once the campaign has stopped). Empty skips the guard,
     #: which only a test with in-memory configuration should do.
     guarded_files: tuple[Path, ...] = ()
+    #: Semi-Automated pauses on an operator's mid-run edit and takes it on resume;
+    #: the other modes take it at the next boundary without pausing.
+    confirm_config_changes: bool = False
+    _edits_confirmed: bool = field(default=False, init=False, repr=False)
     #: Per-experiment hooks (§10). before_each and after_each gate each
     #: experiment; on_abort fires when the campaign is cut short. A failing
     #: before_each or after_each raises HookFailed, which becomes a
@@ -878,16 +886,15 @@ class Campaign:
                 f"expected {state_file}. Has this run been paused?"
             )
         resume_state: dict[str, Any] = json.loads(state_file.read_text(encoding="utf-8"))
-        # Resume reloads the SLA and profile from disk. Edited while paused, they
-        # would judge the rest of this campaign against a goal it did not start
-        # with; a paused campaign has not stopped, so the edit was not allowed.
-        moved = changed_files(resume_state.get("guarded_files") or {})
-        if moved:
-            raise CampaignRefused(
-                f"cannot resume {self.run_id!r}: {', '.join(moved)} changed while it was paused. "
-                "Its experiments were judged against the original; start a new campaign "
-                "for the edited configuration."
-            )
+        # The operator running `resume` is the confirmation Semi-Automated pauses
+        # for. Edits made while paused are taken at the first boundary like any
+        # other (re-baselined if the load moved), against the configuration the
+        # campaign had when it paused -- not the one this process just loaded.
+        self._edits_confirmed = True
+        if resume_state.get("sla_object"):
+            self.sla = Sla(**{**resume_state["sla_object"],
+                              "source_path": Path(resume_state["sla_object"]["source_path"])
+                              if resume_state["sla_object"].get("source_path") else None})
         # Remove the pause marker so the loop does not immediately re-pause.
         _pm = pause_marker_path(self.state_dir, self.run_id)
         if _pm.exists():
@@ -978,7 +985,6 @@ class Campaign:
                     f"the baseline measurement was aborted before it completed: "
                     f"{baseline_load.abort_reason}"
                 )
-            self._check_guarded(result, "after the baseline")
             result.baseline = {
                 "load": baseline_load.as_load_summary(),
                 "snapshot": baseline_snapshot,
@@ -1034,7 +1040,17 @@ class Campaign:
             reason = abort_requested(self.state_dir, self.run_id)
             if reason:
                 raise CampaignAborted(f"aborted by operator before experiment {number}: {reason}")
-            self._check_guarded(result, f"before experiment {number}")
+            current_load, current_snapshot, stop = self._absorb_operator_edits(
+                result, number, current_load, current_snapshot,
+                lambda: self._pause_state(
+                    result, reason="configuration changed", number_prev=number - 1,
+                    charged_prev=charged - 1, consecutive_refusals=consecutive_refusals,
+                    current_snapshot=current_snapshot, current_load=current_load, pending=pending,
+                ),
+            )
+            if stop:
+                result.stopped_reason = stop
+                return
             pause_reason = pause_requested(self.state_dir, self.run_id)
             if pause_reason:
                 # Undo the pre-increment so that resume re-enters the loop at
@@ -1201,16 +1217,101 @@ class Campaign:
             "started_at_epoch_s": result.started_at_epoch_s,
             "pending_manifest": pending.as_dict() if pending is not None else None,
             "guarded_files": dict(result.guarded_files),
+            "sla_object": self.sla.as_dict(),
         }
 
-    def _check_guarded(self, result: CampaignResult, where: str) -> None:
-        moved = changed_files(result.guarded_files)
-        if moved:
-            raise CampaignAborted(
-                f"{', '.join(moved)} changed during the campaign ({where}). The SLA and "
-                "profile may be edited only once a campaign has stopped; this run's "
-                "verdicts belong to the configuration it started with."
+    def _absorb_operator_edits(
+        self, result: CampaignResult, number: int, current_load: LoadResult,
+        current_snapshot: dict[str, Any], pause_state: Any,
+    ) -> tuple[LoadResult, dict[str, Any], str]:
+        """Take an operator's mid-run edit to the SLA or profile at an experiment boundary.
+
+        Operator decision, 24 October 2026: the files may change mid-run (a goal
+        relaxed from 2 s to 4 s, a 900 tpm load found unnecessary) and the
+        campaign honours it. The agent still cannot write either file (§4.4);
+        this is the human's path. Returns the possibly re-measured current state,
+        and a stop reason when the new baseline already meets the goal.
+        """
+        if not changed_files(result.guarded_files):
+            return current_load, current_snapshot, ""
+        sla_path = self.guarded_files[0] if self.guarded_files else None
+        profile_path = self.guarded_files[1] if len(self.guarded_files) > 1 else None
+        try:
+            new_sla = Sla.load(sla_path) if sla_path else self.sla
+            check_environment(new_sla)
+            new_profile = TargetProfile.load(profile_path) if profile_path else self.profile
+        except Exception as exc:  # noqa: BLE001 - recorded, and the run keeps the configuration it had
+            result.amendments.append({
+                "at_experiment": number,
+                "rejected": f"the edited files do not load ({type(exc).__name__}: {exc}); "
+                            "the campaign continues on the previous configuration",
+            })
+            result.guarded_files = fingerprint_files(self.guarded_files)
+            return current_load, current_snapshot, ""
+
+        changes: dict[str, Any] = {}
+        for key in ("p99_ms", "error_rate_pct", "endpoint", "at_load"):
+            old, new = getattr(self.sla, key), getattr(new_sla, key)
+            if old != new:
+                changes[key] = {"from": old, "to": new}
+        notes: list[str] = []
+        old_deploy, new_deploy = self.profile.deploy, new_profile.deploy
+        if (old_deploy.branch, old_deploy.remote) != (new_deploy.branch, new_deploy.remote):
+            notes.append("deploy branch/remote edits are not applied mid-run: this campaign holds "
+                         f"the lock on {old_deploy.branch!r}")
+            new_profile = replace(new_profile, deploy=old_deploy)
+        profile_moved = profile_path is not None and str(profile_path) in changed_files(result.guarded_files)
+        if new_profile != self.profile or profile_moved:
+            changes["profile"] = {"from": self.profile.name, "to": new_profile.name, "note": "profile file edited"}
+        if not changes:
+            result.guarded_files = fingerprint_files(self.guarded_files)
+            return current_load, current_snapshot, ""
+
+        if self.confirm_config_changes and not self._edits_confirmed:
+            summary = "; ".join(f"{k}: {v.get('from')} -> {v.get('to')}" for k, v in changes.items())
+            raise CampaignPaused(
+                f"the configuration changed before experiment {number} ({summary}). Semi-Automated "
+                f"pauses to confirm: `crucible resume {self.run_id}` accepts it.",
+                pause_state(),
             )
+
+        self.sla, self.profile = new_sla, new_profile
+        self.applicator.profile = new_profile
+        rebaselined = None
+        if "at_load" in changes or "endpoint" in changes:
+            from .loadprofile import tag_for_endpoint  # noqa: PLC0415
+
+            load = new_sla.at_load or {}
+            self.scenario = replace(
+                self.scenario,
+                users=int(load.get("users", self.scenario.users)),
+                spawn_rate=float(load.get("spawn_rate", self.scenario.spawn_rate)),
+                warmup_s=float(load.get("warmup_s", self.scenario.warmup_s)),
+                measure_s=float(load.get("measure_s", self.scenario.measure_s)),
+                tags=(tag_for_endpoint(new_sla.endpoint),) if "endpoint" in changes else self.scenario.tags,
+            )
+            # A verdict compares two measurements at the same load. After a load
+            # change the old "before" was taken under different traffic, so the
+            # rest of the run starts like a new test case: with its own baseline.
+            current_load, current_snapshot = self.measure(self.scenario, f"{self.run_id}-rebaseline-{number:02d}")
+            if current_load.aborted:
+                raise CampaignAborted(f"the re-baseline after the operator's edit was aborted: "
+                                      f"{current_load.abort_reason}")
+            rebaselined = current_load.as_load_summary()
+        result.amendments.append({
+            "at_experiment": number, "by": "operator (file edit)", "changes": changes, "notes": notes,
+            "accepted": "operator resume" if self._edits_confirmed else "automatically (mode does not pause)",
+            "rebaselined": rebaselined,
+        })
+        result.sla = new_sla.as_dict()
+        result.guarded_files = fingerprint_files(self.guarded_files)
+        self._edits_confirmed = False
+        self._emit("amended", experiment=number, changes=list(changes))
+        if rebaselined is not None and new_sla.met_by(current_load.p99_ms, current_load.error_rate_pct):
+            return current_load, current_snapshot, (
+                f"after the operator's edit before experiment {number}, the new baseline already meets "
+                f"the SLA (p99 {current_load.p99_ms:.0f} ms <= {new_sla.p99_ms:.0f} ms)")
+        return current_load, current_snapshot, ""
 
     async def _one_experiment(
         self,
@@ -1451,11 +1552,6 @@ class Campaign:
         manifest.after = {"load": after_load.as_load_summary(), "snapshot": after_snapshot}
         if after_load.watchdog:
             manifest.watchdog = after_load.watchdog
-        try:
-            self._check_guarded(result, f"before the verdict on experiment {manifest.experiment}")
-        except CampaignAborted as moved:
-            manifest.verdict, manifest.verdict_reason = NOT_MEASURED, str(moved)
-            raise
         manifest.sla_met_after = self.sla.met_by(after_load.p99_ms, after_load.error_rate_pct)
 
         before_p99 = manifest.before.get("load", {}).get("p99_ms")

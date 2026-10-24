@@ -1863,6 +1863,29 @@ def _launch_notes(body: WizardBody) -> list[str]:
     return notes
 
 
+@router.post("/v1/perf/wizard/save", dependencies=[Depends(require_control)])
+async def perf_wizard_save(body: WizardBody, request: Request):
+    """Write the operator's values without starting a run -- allowed mid-campaign.
+
+    Operator decision, 24 October 2026: the SLA and profile may change mid-run.
+    A running campaign takes the edit at its next experiment boundary
+    (Semi-Automated pauses to confirm; a load change re-measures the baseline).
+    """
+    from .wizard import WizardRefused, render, write
+
+    ctx = _context(request)
+    sla_path, profile_path, locustfile = _wizard_paths(ctx)
+    try:
+        rendered = render(_wizard_form(body, "operator:ui"), sla_path, profile_path, locustfile)
+        write(rendered, sla_path, profile_path, [])
+    except WizardRefused as exc:
+        raise HTTPException(409, str(exc)) from exc
+    running = [str(r.get("run_id")) for r in _active_runs(ctx)]
+    note = (f"Campaign {', '.join(running)} takes this at its next experiment boundary." if running
+            else "No campaign is running; the next one starts with these values.")
+    return {"sla_diff": rendered["sla_diff"], "profile_diff": rendered["profile_diff"], "note": note}
+
+
 @router.post("/v1/perf/wizard/launch", dependencies=[Depends(require_control)])
 async def perf_wizard_launch(body: WizardBody, request: Request):
     """Write the operator's SLA and deploy settings, then start the run as a CLI job."""
