@@ -233,7 +233,9 @@ Nothing is written until you paste real output. No estimated numbers.
 
 ---
 
-## Step 8 — Test assertion review (operator task) 🔧
+## Step 8 — Test assertion review (operator task) ✅
+
+**Done.** Groups 19 and 25–28 were approved on 16 October 2026, and every group through 43 is now approved (25 October 2026). The table below is kept for the record.
 
 Open [docs/CRUCIBLE_TEST_ASSERTIONS.md](CRUCIBLE_TEST_ASSERTIONS.md).
 For each group below, read the assertions and mark each one:
