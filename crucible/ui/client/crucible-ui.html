@@ -2175,6 +2175,9 @@ async function saveWizard(){
   }catch(e){addChatMsg('ai','⚠ Save refused: '+escHtml(e.message));}
 }
 let capOverrunAccepted=false;
+// The run on screen, for the chat: set on launch, by the live view and by a
+// report. A run id typed in the message wins; blank means the latest run.
+let chatRunId='';
 async function launchRun(){
   const body=wizardBody();
   body.accept_cap_overrun=capOverrunAccepted;
@@ -2183,6 +2186,7 @@ async function launchRun(){
   try{
     const d=await apiPost('/v1/perf/wizard/launch',body);
     _activeRunId=body.run_id;
+    chatRunId=body.run_id;
     go('jobs');
     const notes=(d.notes||[]).map(n=>'<br>• '+escHtml(n)).join('');
     addChatMsg('ai',escHtml(body.run_id)+' launched — job <code>'+escHtml(d.job.id)+'</code>. The SLA and profile on disk now hold your values.'+notes+' <a href="#" onclick="go(\'active\')">Watch live →</a>');
@@ -2496,7 +2500,7 @@ async function _sendChatLive(text){
     const res=await fetch('/v1/perf/chat',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({message:text, screen:currentPage})
+      body:JSON.stringify({message:text, screen:currentPage, run_id:(typeof chatRunId==='string'?chatRunId:'')})
     });
     t.remove();
     if(!res.ok){
@@ -2685,6 +2689,7 @@ async function renderLiveActive(data){
 
   // Update run id state so approve/abort use the real id
   _activeRunId=data.run_id||_activeRunId;
+  if(data.run_id) chatRunId=data.run_id;
 
   // Header fields
   const elRunId=document.getElementById('live-run-id');
@@ -2768,6 +2773,7 @@ async function loadResults(runId){
   const sub=document.getElementById('results-sub');
   const pill=document.getElementById('results-outcome-pill');
   if(title) title.textContent=(report.run_id||runId)+' · '+(report.headline||'');
+  if(report.run_id) chatRunId=report.run_id;
   if(sub){
     const m=report.measurement||{};
     const note=[];

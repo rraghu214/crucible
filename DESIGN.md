@@ -592,6 +592,16 @@ longer overwrite each other's index. Full detail: `docs/KNOWLEDGE_STORE.md`.
 - **`.md` and `.txt` only.** An operator decision: no PDF or DOCX parsers as new
   dependencies.
 
+**The chat can discuss any run (25 October 2026).** Every turn carries an
+index of the runs on disk (measured campaigns, Advisory runs and ceiling probes)
+and one of them in detail: the run named in the message, else the one on the
+operator's screen, else the latest, and the chat says which. A measured run
+brings each experiment's change, prediction, measured before and after, verdict
+and whether it was kept. An Advisory run brings its ranked alternatives or the
+guard's refusals. A ceiling probe brings its steps and knee. The system prompt
+keeps measured values apart from predictions (§4.5) and a ceiling apart from a
+verdict (§20.6). The chat explains; it applies and approves nothing.
+
 The reply is HTML-escaped except for a short allowlist of attribute-free tags,
 because uploaded text now reaches the prompt, and the operator's browser holds
 the control token.

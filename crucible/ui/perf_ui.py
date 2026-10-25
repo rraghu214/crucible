@@ -1616,10 +1616,228 @@ async def perf_knowledge_list(request: Request):
 class ChatBody(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     screen: str = Field(default="overview", max_length=64)
+    #: The run on the operator's screen; a run id typed in the message wins, and
+    #: blank means the latest run (Group 43).
+    run_id: str = Field(default="", max_length=120)
+
+
+_EVIDENCE_CHARS = 1500
+
+
+def _alternative_changes(experiment: dict[str, Any], alternative: dict[str, Any]) -> list[dict[str, Any]]:
+    """An alternative's changes: the previewed ones, else (refused) the proposal's own."""
+    if alternative.get("changes"):
+        return alternative["changes"]
+    source = experiment.get("proposal") if alternative.get("rank") == 1 else \
+        (alternative.get("diagnosis") or {}).get("proposal")
+    return (source or {}).get("changes") or []
+
+
+def _change_text(changes: Any) -> str:
+    parts = []
+    for c in changes or []:
+        before = c.get("from")
+        after = c.get("to", c.get("value"))
+        parts.append(f"{c.get('prop')} {'?' if before is None else before} -> {after}")
+    return ", ".join(parts) or "(none)"
+
+
+_RUN_INDEX_SIZE = 10
+
+
+def _ceilings(ctx: PerfContext) -> list[dict[str, Any]]:
+    """Ceiling-probe results in ``results/`` (``<run>.ceiling.json``), oldest first."""
+    loaded = []
+    for path in sorted(ctx.path(ctx.results_dir).glob("*.ceiling.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(data, dict) and data.get("kind") == "ceiling":
+            loaded.append(data)
+    return loaded
+
+
+def _run_kind(run: dict[str, Any]) -> str:
+    if run.get("kind") == "ceiling":
+        return "ceiling probe"
+    if any((e.get("advisory") or {}) for e in run.get("experiments") or []):
+        return "advisory"
+    return "measured campaign"
+
+
+def _all_runs(ctx: PerfContext) -> list[dict[str, Any]]:
+    campaigns, _skipped = _campaigns(ctx)
+    runs = campaigns + _ceilings(ctx)
+    runs.sort(key=lambda r: float(r.get("started_at_epoch_s") or 0.0))
+    return runs
+
+
+#: A word that looks like a run id: letters and digits joined by hyphens, with a digit in it.
+_RUN_ID_LIKE = re.compile(r"(?<![\w-])(?=[\w.-]*\d)(?=[\w.-]*[a-z])[a-z0-9][\w.]*(?:-[\w.]+)+(?![\w-])", re.I)
+_KIND_PHRASE = re.compile(r"\b(?:last|latest|recent|previous|newest)\s+(advisory|ceiling|measured)", re.I)
+_KIND_WORDS = {"advisory": "advisory", "ceiling": "ceiling probe", "measured": "measured campaign"}
+_FUZZY_CUTOFF = 0.75
+
+
+def _mentioned_run(message: str, runs: list[dict[str, Any]]) -> tuple[dict[str, Any] | None, str, list[str]]:
+    """The run the message names, how it was matched, and the ids it asked for that are not on disk.
+
+    Exact id first (case aside; the longest wins, so ``a-1`` never shadows
+    ``a-12``). Then each id-like word is matched to the closest id on disk; then
+    "latest advisory / ceiling / measured". An id-like word that matches nothing
+    is returned as missing, so the chat can say so instead of answering about
+    another run.
+    """
+    import difflib  # noqa: PLC0415
+
+    text = message.lower()
+    ids = {str(r["run_id"]).lower(): r for r in runs if r.get("run_id")}
+    named = [r for key, r in ids.items() if re.search(rf"(?<![\w-]){re.escape(key)}(?![\w-])", text)]
+    exact = {str(r["run_id"]).lower() for r in named}
+    missing: list[str] = []
+    fuzzy: tuple[dict[str, Any], str] | None = None
+    for word in _RUN_ID_LIKE.findall(message):
+        if word.lower() in exact or any(word.lower() in key for key in exact):
+            continue
+        close = difflib.get_close_matches(word.lower(), list(ids), n=1, cutoff=_FUZZY_CUTOFF)
+        if close:
+            fuzzy = fuzzy or (ids[close[0]], f"closest match on disk to '{word}', which is not an exact id")
+        else:
+            missing.append(word)
+    if named:
+        return max(named, key=lambda r: len(str(r["run_id"]))), "named in the message", missing
+    if fuzzy:
+        return fuzzy[0], fuzzy[1], missing
+    phrase = _KIND_PHRASE.search(message)
+    if phrase:
+        kind = _KIND_WORDS[phrase.group(1).lower()]
+        of_kind = [r for r in runs if _run_kind(r) == kind]
+        if of_kind:
+            return of_kind[-1], f"the latest {kind}, as asked", missing
+    return None, "", missing
+
+
+def _run_outcome(run: dict[str, Any]) -> str:
+    if run.get("kind") == "ceiling":
+        return (f"met the SLA up to {run.get('last_passing_users')} users, "
+                f"missed at {run.get('first_failing_users')}")
+    experiments = run.get("experiments") or []
+    kept = sum(1 for e in experiments if e.get("kept"))
+    state = "paused" if run.get("paused") else "aborted" if run.get("aborted") else "finished"
+    return f"{state}; {len(experiments)} experiment(s), {kept} kept"
+
+
+def _endpoint_text(per_endpoint: dict[str, Any]) -> str:
+    return "; ".join(f"{ep} {v.get('verdict')} {v.get('before_p99_ms')} -> {v.get('after_p99_ms')} ms "
+                     f"(target {v.get('target_p99_ms')})" for ep, v in per_endpoint.items() if isinstance(v, dict))
+
+
+def _campaign_detail(run: dict[str, Any]) -> list[str]:
+    baseline = run.get("baseline") or {}
+    load = baseline.get("load") or {}
+    lines = [f"Scenario {run.get('scenario')}; stopped: {run.get('stopped_reason') or '--'}",
+             f"Baseline (measured): p99 {load.get('p99_ms')} ms, errors {load.get('error_rate_pct')}%, "
+             f"SLA met: {baseline.get('sla_met')}"]
+    evidence = json.dumps(baseline.get("snapshot") or {}, default=str)
+    lines.append(f"Baseline evidence (truncated): {evidence[:_EVIDENCE_CHARS]}")
+    if run.get("ruled_out"):
+        lines.append(f"Ruled out: {'; '.join(map(str, run['ruled_out']))}")
+    if run.get("paused"):
+        lines.append(f"Paused: {run.get('pause_reason') or '--'}")
+    if run.get("aborted"):
+        lines.append(f"Aborted: {run.get('abort_reason') or '--'}")
+    if run.get("cap_hit"):
+        lines.append(f"Cap reached: {run['cap_hit']} (caps {run.get('caps')})")
+    for amendment in run.get("amendments") or []:
+        lines.append(f"Operator edit mid-run: {json.dumps(amendment, default=str)}")
+    if run.get("series"):
+        lines.append(f"Part of series: {json.dumps(run['series'], default=str)}")
+    for experiment in run.get("experiments") or []:
+        alternatives = (experiment.get("advisory") or {}).get("alternatives")
+        number = experiment.get("experiment")
+        if alternatives:
+            lines.append(f"Experiment {number} -- Advisory, NOT applied or measured; "
+                         f"{len(alternatives)} ranked proposal(s):")
+            for a in alternatives:
+                changes = _change_text(_alternative_changes(experiment, a))
+                head = (f"  #{a.get('rank')} cause {a.get('cause_family')}; change {changes}; "
+                        f"confidence {a.get('confidence')}; predicted p99 {a.get('predicted_p99_ms')} ms")
+                lines.append(head + (f"; REFUSED by the guard: {a['refused']}" if a.get("refused") else ""))
+                lines.append(f"     reasoning: {a.get('reasoning')}")
+                if a.get("diff"):
+                    lines.append("     diff: " + " | ".join(a["diff"].splitlines()[2:8]))
+                elif a.get("note"):
+                    lines.append(f"     note: {a['note']}")
+            continue
+        proposal = experiment.get("proposal") or {}
+        if experiment.get("refused_by_guard"):
+            lines.append(f"Experiment {number}: REFUSED by the guard, not applied: "
+                         f"{_change_text(proposal.get('changes'))}; {experiment.get('verdict_reason')}")
+            continue
+        if not proposal or proposal.get("abstained"):
+            lines.append(f"Experiment {number}: no change proposed; {experiment.get('verdict_reason') or '--'}")
+            continue
+        before = ((experiment.get("before") or {}).get("load") or {}).get("p99_ms")
+        after = ((experiment.get("after") or {}).get("load") or {}).get("p99_ms")
+        lines.append(f"Experiment {number}: cause {proposal.get('cause_family')}; change "
+                     f"{_change_text(proposal.get('changes'))}; predicted p99 {experiment.get('predicted_p99_ms')} ms; "
+                     f"MEASURED p99 {before} -> {after} ms; verdict {experiment.get('verdict')} "
+                     f"({experiment.get('verdict_reason') or '--'}); "
+                     f"{'kept' if experiment.get('kept') else 'reverted'}")
+        lines.append(f"     reasoning: {proposal.get('reasoning')}")
+        if experiment.get("per_endpoint"):
+            lines.append(f"     per endpoint: {_endpoint_text(experiment['per_endpoint'])}")
+    return lines
+
+
+def _ceiling_detail(run: dict[str, Any]) -> list[str]:
+    lines = [f"Scenario {run.get('scenario_name')}; users {run.get('min_users')}..{run.get('max_users')} "
+             f"in steps of {run.get('step_size')}; stopped: {run.get('stopped_reason') or '--'}",
+             "This characterises the service as it stands; nothing was changed, so it is not a verdict "
+             "on any change (DESIGN.md 20.6)."]
+    for step in run.get("steps") or []:
+        load = step.get("load") or {}
+        trip = f"; watchdog: {step.get('watchdog_reason')}" if step.get("watchdog_tripped") else ""
+        lines.append(f"  {step.get('users')} users: p99 {load.get('p99_ms')} ms (limit {step.get('sla_p99_ms')}), "
+                     f"errors {load.get('error_rate_pct')}%, SLA met: {step.get('sla_met')}{trip}")
+    lines.append(f"Knee: last level that met the SLA {run.get('last_passing_users')} users; "
+                 f"first that did not {run.get('first_failing_users')} users")
+    for amendment in run.get("amendments") or []:
+        lines.append(f"Operator edit mid-run: {json.dumps(amendment, default=str)}")
+    return lines
+
+
+def _run_context(ctx: PerfContext, message: str = "", run_id: str = "") -> str:
+    """The runs on disk, and the one under discussion in detail (operator, 25 October 2026).
+
+    Any run type: a measured campaign, an Advisory run or a ceiling probe. The
+    run is the one named in the message, else the one on the operator's screen,
+    else the latest. Read from the manifests on disk, like the other facts.
+    """
+    runs = _all_runs(ctx)
+    chosen, why, missing = _mentioned_run(message, runs)
+    not_found = [f"NOT ON DISK: the message asks about '{word}', and no run with that id is on disk. Say so "
+                 "plainly; do not answer about a different run as though it were that one." for word in missing]
+    if not runs:
+        return "\n".join(["(no run on disk yet)", *not_found])
+    lines = [f"Runs on disk, newest first (up to {_RUN_INDEX_SIZE}):"]
+    for run in reversed(runs[-_RUN_INDEX_SIZE:]):
+        lines.append(f"- {run.get('run_id')}: {_run_kind(run)}, {_when(run.get('started_at_epoch_s'))}, {_run_outcome(run)}")
+    if not_found:
+        lines += ["", *not_found]
+    if chosen is None and run_id:
+        chosen, why = next((r for r in runs if r.get("run_id") == run_id), None), "the run on the operator's screen"
+    if chosen is None:
+        chosen, why = runs[-1], "the latest run (none was named)"
+    lines.append("")
+    lines.append(f"Run under discussion: {chosen.get('run_id')} ({_run_kind(chosen)}; {why})")
+    lines += _ceiling_detail(chosen) if chosen.get("kind") == "ceiling" else _campaign_detail(chosen)
+    return "\n".join(lines)
 
 
 _SCREEN_HINTS: dict[str, str] = {
-    "history":    "The user is on the History & Diff screen, which shows past campaign runs in a table with outcome pills (IMPROVED / REVERTED / BASELINE MET) and p99 before/after columns. They may ask about specific run IDs like TR-001, TR-002, TR-003.",
+    "history":    "The user is on the History & Diff screen, which shows past campaign runs in a table with outcome pills (IMPROVED / REVERTED / BASELINE MET) and p99 before/after columns. They may ask about a specific run by its id.",
     "active":     "The user is watching an active campaign in progress. The screen shows real-time logs and the current PDMA loop phase.",
     "results":    "The user is on the Results screen for a completed campaign run.",
     "guardrails": "The user is on the Guardrails screen, which shows which properties the agent may change and within what bounds.",
@@ -1633,7 +1851,7 @@ _CHAT_SYSTEM = """You are the Crucible AI assistant embedded in the Crucible per
 
 Crucible is an autonomous performance engineer: it runs load experiments against a target service, diagnoses bottlenecks from its telemetry, proposes bounded config changes under human approval, and verifies every change with a fresh measurement.
 
-The facts below are read from the operator's configuration and campaign manifests on disk. Knowledge excerpts come from documents the operator uploaded. Prefer both over general knowledge. When you use an excerpt, name its file. If neither the facts nor the excerpts cover the question, say so instead of guessing.
+The facts below are read from the operator's configuration and campaign manifests on disk. "Runs" lists the runs on disk and details one of them: answer questions about any run (what it proposed and why, the trade-offs between alternatives, what was measured, why it stopped) from that block and the evidence in it. Start every answer about a run by naming the run you are discussing. If the operator asks about a run that is not listed, say it is not on disk. Only MEASURED values are results: a predicted p99, and every Advisory proposal, has NOT been applied or measured, so never present it as a result. A ceiling probe describes the service as it stands, never a verdict on a change. When a change was refused by the guard, quote the guard's reason exactly; if the operator asks about applying it by hand, say plainly that it lies outside the bounds the target profile allows the agent, that doing it is the operator's own decision, and that any result would only count once measured. Knowledge excerpts come from documents the operator uploaded. Prefer both over general knowledge. When you use an excerpt, name its file. If neither the facts nor the excerpts cover the question, say so instead of guessing.
 
 Answer concisely. You may use only these HTML tags: <strong>, <code>, <em>, <br>, <ul>, <li>, <p>. Stay factual: only claim things that were measured or are written in the facts or excerpts."""
 
@@ -1694,6 +1912,7 @@ async def perf_chat(body: ChatBody, request: Request):
     screen_hint = _SCREEN_HINTS.get(body.screen, f"The user is on the '{body.screen}' screen.")
     hits, excerpts = await _retrieve(request, body.message)
     prompt = (f"[Context: {screen_hint}]\n\nFacts:\n{_chat_facts(ctx)}\n\n"
+              f"Runs:\n{_run_context(ctx, body.message, body.run_id)}\n\n"
               f"Knowledge excerpts:\n{excerpts}\n\nUser: {body.message}")
     try:
         result = await GatewayClient().chat(

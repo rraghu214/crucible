@@ -4418,6 +4418,163 @@ SLA. Delete them, or keep them?
 
 ---
 
+# GROUP 43 — The chat can discuss any run
+
+*Drafted 25 October 2026 by Claude Code. REVIEWED AND APPROVED by the operator, 25 October 2026. Implemented in
+`tests/test_ui_chat_context.py` (18). Code: `_run_context` and its helpers (`_all_runs`, `_ceilings`,
+`_mentioned_run`, `_campaign_detail`, `_ceiling_detail`) in `crucible/ui/perf_ui.py`; `ChatBody.run_id`;
+`chatRunId` in `crucible-ui.html`.*
+
+*Operator requests, 25 October 2026. First: "In advisory mode, when AI suggests
+us the next step, I hope we can chat through to ask about the suggestions, get
+clarifications etc." Then, widening it: "shouldn't the chat feature be able to
+answer my questions about any of the run types irrespective of advisory mode on
+my screen or give the run number and talk about it?"*
+
+*Until now the chat's facts listed each campaign's verdicts and nothing more. It
+could not see what a run proposed, what was measured, or why it stopped. Ceiling
+probes were invisible, because their file has a different shape. Every chat turn
+now carries a "Runs" block, read from the files in `results/` like the other
+facts.*
+
+---
+
+### 43.1 An index of every run on disk, newest first
+
+**What it checks.** With a measured campaign, an Advisory run and a ceiling
+probe on disk, the index lists all three, newest first. Each line gives the id,
+the type, the start time and a one-line outcome: paused/aborted/finished with
+the experiment count and how many were kept, or the knee for a ceiling probe.
+At most 10 runs are listed.
+
+**Why it exists.** "Which runs do I have?" is the first question, and it is also
+what lets the operator then name one.
+
+**DECIDED, operator, 25 October 2026: 10 is good enough for now.**
+
+---
+
+### 43.2 Which run: named in the message, else on screen, else the latest
+
+**What it checks.**
+- **Nothing named:** with no id in the message and none from the screen, the
+  latest run is discussed. The block says "the latest run (none was named)".
+- **On screen:** the run from the screen beats the latest. The UI sends it from
+  launch, the live view and a loaded report.
+- **Named in the message:** a run id typed in the message beats the screen,
+  ignoring case ("RUN-12").
+- **Exact match only:** `run-1` is not matched inside `run-12`. The longest id
+  that matches wins.
+
+In each case the block states the run and why it was chosen. The system prompt
+tells the model to start every answer by naming the run.
+
+**Why it exists.** The wrong run, answered fluently, is worse than no answer.
+Saying which one, and why, lets the operator catch it at once.
+
+**DECIDED, operator, 25 October 2026: fuzzy matching, and call out a missing id.**
+- **Exact id first:** case aside, the longest match wins.
+- **Then the closest id:** each word in the message that looks like a run id
+  (letters and digits joined by hyphens, with a digit in it) is matched to the
+  closest id on disk, at a similarity of at least 0.75. The block says it was
+  the closest match and not an exact one, for example
+  `sb-pool3` -> `sb-pool-3`.
+- **Then "latest advisory / ceiling / measured":** a phrase like "the latest
+  advisory run" picks the newest run of that type.
+- **A missing id is called out:** an id-like word that matches nothing on disk
+  gets a `NOT ON DISK: the message asks about '<id>'` line, even when there
+  are no runs at all. The model is told to say so, not to answer about a
+  different run as though it were that one.
+- **Ordinary words are left alone:** "semi-automated" or "pool-size" has no
+  digit, so it is never taken for a run id.
+
+Tests: `TestFuzzyAndMissing` (5).
+
+---
+
+### 43.3 A measured campaign carries what was measured
+
+**What it checks.**
+- **Per experiment:** cause; change; predicted p99; **MEASURED** p99 before ->
+  after; verdict and its reason; kept or reverted; reasoning; per-endpoint
+  verdicts for a mix.
+- **Guard-refused experiment:** shown as refused and not applied, with the
+  change it asked for.
+- **Abstained experiment:** shown as no change proposed.
+- **Per run:** pause and abort reasons, the cap that was hit, each operator edit
+  made mid-run (amendment), and the series entry.
+
+**Why it exists.** "Why was experiment 1 reverted?" is answered by the verdict
+reason and the two measurements. Labelling the measured pair MEASURED, next to
+the prediction, keeps the two from being confused (§4.5).
+
+**DECIDED, operator, 25 October 2026: full context.** Amendments and the
+series entry are carried as their whole JSON, not cut down. They are small
+records, so the cost is small. The whole manifest is not sent raw: its
+snapshots run to many kilobytes per experiment and would crowd out the question,
+so the per-experiment lines above carry its fields, and the baseline snapshot is
+bounded (43.6). Test: `test_amendments_are_carried_whole`.
+
+---
+
+### 43.4 An Advisory run carries its alternatives, and says none was measured
+
+**What it checks.**
+- **Each ranked alternative:** cause, change (`from -> to`), confidence,
+  predicted p99, reasoning, and up to six diff lines.
+- **A guard-refused alternative:** its refusal and the value it asked for. That
+  value is taken from its own diagnosis, or from the experiment's proposal for
+  rank 1, because a refused alternative has no preview. `?` means the previous
+  value was never read.
+- **The label:** the experiment is marked "NOT applied or measured".
+
+**DECIDED, operator, 25 October 2026: allowed, and transparent.** The system
+prompt tells the model to:
+- quote the guard's reason exactly;
+- if asked about applying a refused change by hand, say that it lies outside the
+  bounds the target profile allows the agent;
+- say that doing so is the operator's own decision, and that a result counts
+  only once measured.
+
+Test: `test_the_system_prompt_is_transparent_about_guard_refusals`.
+
+---
+
+### 43.5 A ceiling probe carries its steps and knee, and is no verdict
+
+**What it checks.**
+- `<run>.ceiling.json` files are read, which the campaign loader skips.
+- **Each step:** users; p99 against the limit it was judged by; errors; SLA met;
+  any watchdog trip.
+- **The knee:** given as a pair.
+- **The label:** "characterises the service as it stands … not a verdict on any
+  change (DESIGN.md 20.6)".
+
+---
+
+### 43.6 Evidence is bounded; nothing on disk is said plainly
+
+**What it checks.**
+- **Evidence:** the baseline snapshot is cut to `_EVIDENCE_CHARS` (1500)
+  characters, and the ruled-out list is shown.
+- **No runs:** with nothing on disk, the block reads exactly
+  `(no run on disk yet)`.
+
+**DECIDED, operator, 25 October 2026: fine for now.**
+
+---
+
+### 43.7 The system prompt separates measured values from predictions
+
+**What it checks.** The system prompt says:
+- only MEASURED values are results;
+- a predicted p99, and every Advisory proposal, has not been applied or
+  measured;
+- a ceiling probe is never a verdict on a change;
+- every answer starts by naming the run under discussion.
+
+---
+
 # Review decisions — week 1
 
 Raised by Claude Code while implementing, decided by the operator on 10 September 2026.

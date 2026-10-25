@@ -420,6 +420,7 @@ pkill -f "crucible serve"; nohup uv run crucible serve > ~/crucible-serve.log 2>
 
 **Runs.**
 - [ ] **Advisory first:** the job runs `crucible run --advisory --all-scenarios`. The manifest has `advisory.alternatives` (up to three, ranked, each with a diff) and verdict NOT_MEASURED, and `perftest_sandbox` is not pushed.
+- [ ] **Chat about runs:** after the Advisory run, ask "why did you rank #1 above #2?". The answer names the run, quotes the cause, the change (`from -> to`) and the baseline evidence, and calls the predicted p99 a *prediction*. After the Semi-Automated run, ask "why was experiment 1 reverted?" with its run id in the message: the answer quotes the measured before and after and the verdict reason. Ask "which runs do I have?": it lists them, ceiling probes included.
 - [ ] **Semi-Automated** (pool=2 on Box A), approved from the UI: the manifest has `series`, `per_endpoint`, `caps` and `guarded_files`.
 - [ ] **Mid-run edit:** while it runs, raise p99 in the wizard and click **💾 Save changes**. The campaign pauses at the next experiment, and resuming records an `amendments` entry.
 - [ ] **Cap:** with a small cost cap the run pauses at the cap. `crucible resume <run> --cost-cap 1` continues; `crucible abort <run>` finishes it as aborted, and `crucible report --run <run>` works.
