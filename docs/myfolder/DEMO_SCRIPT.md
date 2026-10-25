@@ -1,45 +1,63 @@
 # Crucible — End-to-End Demo Script
 
+*Updated 25 October 2026 for the Part B changes and the chat that discusses runs.
+Practise it once end to end (Part P) before recording.*
+
 ---
 
-## How to use these three documents together
+## How to use these documents together
 
 | Document | When to open | Purpose |
 |---|---|---|
-| **[crucible-product-doc.html](crucible-product-doc.html)** | **Share with trainer/audience the day before** | Pre-demo product brief — problem, architecture, five principles, NFR table, memory taxonomy, design concepts. Trainer reads it before the session; you don't need to explain all of it on screen. |
-| **[DemoExecutionGuide.md](DemoExecutionGuide.md)** | 30 min before recording + keep open during | Backstage operator manual — Box B prep, GLC v5 warmup, reset commands, emergency troubleshooting. |
-| **This file** | During recording | The script — exactly what to say, what to click, what to expect at each step. Follow it top to bottom. |
+| **[crucible-product-doc.html](crucible-product-doc.html)** | **Share with trainer/audience the day before** | Pre-demo product brief: problem, architecture, five principles, NFR table, memory taxonomy, design concepts. |
+| **[DemoExecutionGuide.md](DemoExecutionGuide.md)** | 30 min before recording, and keep it open | Backstage manual: Box A/B state, resets, troubleshooting. |
+| **[COMPLETION_CHECKLIST.md](../COMPLETION_CHECKLIST.md) step 9** | The day before | The one-time dry run. **9g** covers everything changed on 24–25 October. |
+| **This file** | Practice run, then recording | Part 0 = prep, Part P = practice run, Steps 1–16 = what to say and click. |
 
 ---
 
-## Part 0 — Prep commands (run before recording)
+## Part 0 — Prep commands (run before practice AND before recording)
 
-> Run these on **Box B** over SSH. Each step is checked; don't skip.
+> Run these on **Box B** over SSH. Use `nohup`, not tmux. Always source `.env` first.
 
-### 0.1 Pull latest code and restart the UI
+### 0.1 Pull latest code (first time after 25 October: follow checklist 9g)
 
 ```bash
 ssh -i "C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-1\ssh-key-2026-09-12.key" ubuntu@150.136.143.227
 
 cd ~/crucible
+git status --short
+# Launch rewrites config/slo.yaml and the profile. If either is listed as modified, stash it first:
+git stash push config/slo.yaml config/profiles/spring-boot.yaml
 git pull origin capstone/perf-agent
-uv sync
-sudo systemctl restart crucible-ui
-systemctl status crucible-ui           # must show: active (running)
+uv sync --group load
+
+# One time only, after the 24 October changes (checklist 9g):
+rm -f ~/.crucible/memory.faiss ~/.crucible/memory.faiss.ids.json
+rm -f ~/.crucible/memory.db ~/.crucible/memory.db.faiss ~/.crucible/memory.db.faiss.ids.json
+
+# Restart the UI server
+pkill -f "crucible serve"
+set -a; . ./.env; set +a
+export GLC_BASE_URL=https://glc-v5-rraghu214.onrender.com
+nohup uv run crucible serve > ~/crucible-serve.log 2>&1 &
+curl -s http://127.0.0.1:8113/healthz        # {"ok":true,...}
 ```
+
+> If Box B runs the UI as the `crucible-ui` systemd service instead, use
+> `sudo systemctl restart crucible-ui` and `systemctl status crucible-ui`, not
+> the nohup lines. Don't run both.
 
 ### 0.2 Verify Box A is reachable and pool=2
 
 ```bash
-# Health check
 curl -s http://10.0.0.79:8080/actuator/health \
   | python3 -c "import json,sys; print(json.load(sys.stdin)['status'])"
 # Expected: UP
 
-# Confirm pool size is 2 (the broken state the demo fixes)
 curl -s http://10.0.0.79:8080/actuator/metrics/hikaricp.connections.max \
   | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['measurements'][0]['value'])"
-# Expected: 2.0  — if 20.0, see §0.3
+# Expected: 2.0 (the broken state the demo fixes). If 20.0, see 0.3
 ```
 
 ### 0.3 Reset Box A to pool=2 (only if needed)
@@ -52,69 +70,86 @@ nano src/main/resources/application.properties
 git add src/main/resources/application.properties
 git commit -m "reset: pool=2 for demo baseline"
 git push origin perftest_sandbox
-# Wait ~90 s for post-receive hook, then re-verify §0.2
+# Wait ~90 s for the post-receive hook, then re-check 0.2
 ```
 
-### 0.4 Warm up GLC v5 gateway
+### 0.4 Warm up the GLC v5 gateway
 
 ```bash
-# Burns off the Render cold start (up to 60 s on first call)
-curl -s -X POST https://glc-v5-rraghu214.onrender.com/v1/chat/completions \
+curl -s -X POST https://glc-v5-rraghu214.onrender.com/v1/chat \
   -H "Content-Type: application/json" \
-  -d '{"model":"gemini-2.5-flash","messages":[{"role":"user","content":"ping"}]}' \
-  | python3 -c "import json,sys; print(json.load(sys.stdin)['choices'][0]['message']['content'][:60])"
-# If this takes >30 s, wait and run it again — subsequent calls are fast
+  -d '{"model":"gemini-2.5-flash","messages":[{"role":"user","content":"ping"}]}' | head -c 200; echo
+# Burns off the Render cold start (up to 60 s). If it took >30 s, run it again.
 ```
 
-### 0.5 Pre-index a knowledge document for the RAG demo
+### 0.5 Knowledge document: upload it from the UI
 
+Upload it from the wizard (Step 2 of the script), not with curl: that is the
+path being demonstrated. To have it ready before recording, upload it during
+the practice run. The store keeps it, and identical text is not re-embedded.
+
+Check on Box B:
 ```bash
-# Upload and index the Spring Boot architecture doc so Step 3 chat reflects its content
-# Option A — via CLI (add to a running crucible serve session):
-curl -s -X POST http://127.0.0.1:8113/documents \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $CRUCIBLE_CONTROL_TOKEN" \
-  -d "{\"text\":\"$(cat docs/perf-lab-architecture.md | python3 -c \"import sys,json; print(json.dumps(sys.stdin.read()))\" | tr -d '\"')\",\"source_uri\":\"file://docs/perf-lab-architecture.md\",\"scope\":\"project\",\"source_author\":\"raghu\"}" \
-  | python3 -m json.tool | grep -E "chunks|source_uri"
-# Expected: "chunks": N  (number of semantic chunks indexed)
-
-# Option B — if the above is tricky, upload via the New Test Run wizard in the UI
-# Step 2 of this script shows this exact UI path
+ls -lh ~/.crucible/knowledge/          # PERF_LAB_PRODUCT.md, the original as uploaded
+ls -lh ~/.crucible/knowledge-index/    # knowledge.sqlite + knowledge.sqlite.faiss, both non-zero
 ```
+*(The agent API door, `POST /v1/agent/documents`, feeds the same store and
+needs the control token. See `docs/KNOWLEDGE_STORE.md`.)*
 
-### 0.6 Confirm RAG index exists on Box B
-
-```bash
-ls -la ~/.crucible/knowledge-index/
-# Should show: knowledge.sqlite  knowledge.sqlite.faiss  knowledge.sqlite.faiss.ids.json
-# The ONE document index (gemini-embedding-001 at 768d via GLC v5), see docs/KNOWLEDGE_STORE.md
-```
-
-### 0.7 Confirm SPA endpoints
+### 0.6 Confirm the UI endpoints
 
 ```bash
-curl -s http://127.0.0.1:8113/v1/perf/jobs | python3 -m json.tool
+curl -s http://127.0.0.1:8113/v1/perf/jobs | python3 -m json.tool | head
 curl -s http://127.0.0.1:8113/v1/perf/campaign/active | python3 -m json.tool
 # Expected: {"active": false, ...}
-curl -s http://127.0.0.1:8113/v1/perf/runs/latest/report \
-  | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('run_id','(no run yet)'), d.get('outcome',''))"
+curl -s http://127.0.0.1:8113/v1/perf/runs | python3 -m json.tool | head -20
+# The run ids on disk: note two of them for Step 13
+ls ~/crucible/results/                  # manifests: <run>.json, ceiling probes <run>.ceiling.json
 ```
 
-### 0.8 Open tunnel and browser
+### 0.7 Open the tunnel and browser
 
 ```powershell
-# Windows laptop — keep this terminal open throughout
+# Windows laptop. Keep this terminal open throughout
 ssh -i "C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-1\ssh-key-2026-09-12.key" `
     -L 9113:127.0.0.1:8113 `
     ubuntu@150.136.143.227
-# 9113 = SPA demo UI
-# Note: Crucible runs Locust with --headless; no Locust web UI on port 8089.
+# Locust runs --headless: there is no Locust web UI and no port 8089 to forward.
 ```
 
 Open **http://localhost:9113/dashboard**, then:
-1. **Settings → Control token** → paste `CRUCIBLE_CONTROL_TOKEN` → Save
-2. Navigate to **Results** → confirm chart and real KPIs load
-3. Navigate to **Active** → confirm TR-004 demo view (no live banner)
+1. **Settings → Control token** → paste `CRUCIBLE_CONTROL_TOKEN` (`grep CRUCIBLE_CONTROL_TOKEN ~/crucible/.env`) → Save
+2. **Results** → a real run loads (chart and experiment table)
+3. **Active** → TR-004 demo view (no live banner) when nothing is running
+
+---
+
+## Part P — Practice run (do this once, a day before recording)
+
+Run the whole flow once for real, so that recording only replays things you
+have already seen work. Times are approximate.
+
+| # | Do | Pass when |
+|---|---|---|
+| P1 | Part 0 complete | healthz ok, pool=2, gateway warm, token saved |
+| P2 | Wizard → Target & Repo → **Knowledge Docs**: drop `PERF_LAB_PRODUCT.md` → **Upload & index** | Chip goes queued → indexing… → chat says "indexed — N chunks" (a few minutes). The ✨ buttons stay disabled while indexing |
+| P3 | Live AI **ON**, ask: *How many requests must Micrometer meters be initialised within, and how long may PerfLab take to start?* | Reply says **10 requests** and **60 seconds**, with a "Sources: PERF_LAB_PRODUCT.md" line |
+| P4 | Goal & SLA → **✨ AI suggestion** | Fills p99/error budget from the model; noise stays read-only at 2.08% |
+| P5 | Scenarios → choose **Advisory** | Scenarios fill automatically; edit one (users / duration / ramp) |
+| P6 | Budget | Rows follow mode, experiments and scenarios; a wall-clock cap below the baselines shows ⚠ |
+| P7 | Review | Preflight list includes "load profile drives the SLA endpoint ✓"; the diff box shows exactly what Launch writes |
+| P8 | **🚀 Launch** (Advisory) | Jobs shows `crucible run --advisory --all-scenarios`; finishes with verdict NOT_MEASURED and up to 3 ranked alternatives, each with a diff; nothing pushed to `perftest_sandbox` |
+| P9 | Chat (Live AI ON): *why did you rank #1 above #2?* | Names the run, quotes cause, `from -> to` change and baseline evidence (pending connections), calls 140 ms a *prediction* |
+| P10 | Back to wizard → **Semi-Automated** → Launch | Active tab shows the live overlay within ~5 s; the approval gate shows the exact diff |
+| P11 | While it runs: raise p99 in the wizard → **💾 Save changes** | The campaign pauses at the next experiment; Resume records an `amendments` entry |
+| P12 | **Approve** in the UI | Gate → "Change applied — measuring now"; after the window, verdict + kept/reverted |
+| P13 | Results → ↺ | Real Before/After chart for this run |
+| P14 | Chat: *why was experiment 1 kept? <run-id>* (paste the real id) | Quotes the MEASURED before → after and the verdict reason |
+| P15 | Chat: *which runs do I have?* and *tell me about zz-run-77* | Lists the runs on disk (ceiling probes included); says zz-run-77 is **not on disk** |
+| P16 | History & Diff | Both runs appear |
+
+If any line fails, stop and fix it, or drop that step from the recording.
+Don't record a step you haven't seen pass.
 
 ---
 
@@ -122,191 +157,171 @@ Open **http://localhost:9113/dashboard**, then:
 
 ```
 Pre-read : crucible-product-doc.html sent to trainer
-Box B    : crucible-ui.service active (running) on port 8113
-Tunnel   : 9113 (SPA) + 8089 (Locust) forwarded
+Box B    : crucible serve running on 8113 (healthz ok)
+Tunnel   : 9113 forwarded (no 8089: Locust is headless)
 Box A    : pool_size = 2.0 confirmed
-GLC v5   : warmed (§0.4 — first call fast)
-RAG index: memory.faiss present on Box B (§0.6)
+GLC v5   : warmed (0.4)
+Knowledge: PERF_LAB_PRODUCT.md listed as indexed; knowledge-index/ non-empty (0.5)
 Token    : saved in Settings
 Results  : real KPIs + chart visible
 Active   : TR-004 demo view (no live overlay)
+Run ids  : two real run ids noted for Step 13 (0.6)
+Practice : Part P passed
 ```
 
 ---
 
 ## The story in one sentence
 
-*"I deployed a Spring Boot service, pointed Crucible at it, and it found, fixed, and proved a connection-pool bottleneck — autonomously, with a full audit trail."*
+*"I deployed a Spring Boot service, pointed Crucible at it, and it found, fixed, and proved a connection-pool bottleneck, with me approving the one change and every number measured."*
 
 ---
 
 ## Step 1 — Problem statement + architecture (2 min) [EXPLAIN]
 
-**Say:**  
-"Performance engineering today is manual — load test, open Grafana, form a guess,
-apply a change, re-test. That loop takes hours, requires three tooling contexts,
-and falls apart when the person who knows the tool isn't the person who owns
-the service.
+**Say:**
+"Performance engineering today is manual: load test, open Grafana, form a guess,
+apply a change, re-test. That loop takes hours, needs three tools, and falls
+apart when the person who knows the tools isn't the person who owns the service.
 
 Crucible closes that loop. It runs its own experiments, diagnoses from the
 telemetry it can actually reach, proposes a bounded change, waits for your
-approval, applies it, and measures again. Every claim is a measurement —
-nothing is asserted."
+approval, applies it, and measures again. Every claim is a measurement."
 
-**Show:** `localhost:9113/dashboard` — point at four KPIs.
+**Show:** `localhost:9113/dashboard`, the overview.
 
 **Say:**
-"Three boxes. Box A is the Spring Boot service on Oracle Cloud — PerfLab, running
-Postgres, Redis, Prometheus, and Jaeger alongside the app. Box B — this machine —
-runs Crucible and the Locust load generator. GLC v5, hosted on Render, is the
-LLM gateway. Crucible never holds model keys; the gateway owns key rotation.
-The architecture brief I shared before this session covers this in detail."
+"Three pieces. Box A is the Spring Boot service on Oracle Cloud, PerfLab, with
+Postgres, Redis, Prometheus and Jaeger. Box B, this machine, runs Crucible and
+the Locust load generator. GLC v5, hosted on Render, is the LLM gateway.
+Crucible never holds model keys; the gateway rotates them."
 
 ---
 
-## Step 2 — Knowledge RAG: upload + chunking (2 min) [LIVE]
+## Step 2 — Knowledge RAG: upload and index (2 min) [LIVE]
 
-**Navigate to:** New Test Run → Step 1 Target & Repo.
-
-Point at the doc drop zone.
+**Navigate to:** New Test Run → **1 Target & Repo** → **Knowledge Docs**.
 
 **Say:**
-"Before a campaign starts, I can upload any architecture document, runbook, or
-post-mortem here. Crucible chunks it semantically — at topic boundaries, not
-fixed character counts. Each chunk is embedded using Gemini embedding-001 at
-768 dimensions, called directly via the Gemini API — same keys already in
-your `.env`, not via GLC v5. Those vectors are stored in a local FAISS index
-on Box B.
+"Before a campaign, I can give Crucible the service's own documents: architecture,
+runbooks, post-mortems. Markdown or text."
 
-When the agent diagnoses a failing run, it queries this index first. That means
-it won't blame the application for an API-gateway throttle that a runbook
-already described — it surfaces the relevant context from your documentation
-into the diagnosis prompt."
+**Action:** drop `PERF_LAB_PRODUCT.md` on the zone. It becomes a chip reading
+"ready to upload". Click **Upload & index**.
 
-**Action:** Drag the Spring Boot architecture doc onto the drop zone. Its name
-appears as a chip. In the background, `POST /documents` fires against the API.
+**Say:**
+"Dropping only lists it. Upload sends it. The server keeps the original in
+`~/.crucible/knowledge/`, queues it, and returns at once. One background worker
+indexes it, so the server never blocks. Each chunk is embedded with Gemini
+embedding-001 at 768 dimensions through the gateway, into its own FAISS index in
+`knowledge-index/`. The same store feeds the chat, the AI suggestions and the
+agent API.
 
-**Show on Box B (second terminal):**
+The embedder is pinned, like the model. Two different embedding models at 768
+dimensions produce incomparable vectors, so changing the embedder means
+re-indexing, never querying across the two. We keep the originals for exactly
+that reason."
+
+*(If it was already uploaded in practice, the chip reports "unchanged since
+last upload". Say "identical text is never re-embedded" and move on.)*
+
+**Show on Box B (optional):**
 ```bash
-ls -la ~/.crucible/memory/
-# memory.faiss grows as chunks are indexed
+ls -lh ~/.crucible/knowledge/ ~/.crucible/knowledge-index/
 ```
 
+---
+
+## Step 3 — Grounded chat (1.5 min) [LIVE]
+
+**Toggle Live AI ON.** Type:
+`How many requests must Micrometer meters be initialised within, and how long may PerfLab take to start?`
+
+→ The reply says 10 requests and 60 seconds, with **Sources: PERF_LAB_PRODUCT.md**.
+
 **Say:**
-"The index file on disk — FAISS with inner-product similarity, L2-normalised.
-The embedder is pinned per campaign, same as the LLM model is pinned. Two
-different embedding models at 768 dimensions produce incomparable vector spaces;
-changing the embedder requires re-indexing the whole corpus, never querying
-across two. The same principle that says a changed collector invalidates old
-snapshots — it applies to memory too."
+"That answer exists only in the document I just uploaded. Every chat turn searches
+the knowledge store and cites the file it used. Its SLA and profile facts are read
+from the YAML files on disk, not from a prompt someone wrote once. The reply is
+HTML-escaped, because uploaded text reaches the prompt and this browser holds the
+control token."
+
+*(Leave Live AI ON. The rest of the demo uses it. If the gateway is slow, see
+Emergency fallbacks.)*
 
 ---
 
-## Step 3 — Onboarding chat — curated questions (1.5 min) [SCRIPTED / LIVE]
+## Step 4 — Input data + request templates (1 min) [UI]
 
-The chat pane is open on the right.
+Wizard step **3 Scenarios**, then the **Input Data & Request Templates** card.
+
+**Action:** upload a small CSV (e.g. `sizes.csv` with a `size` column). It shows
+its row count and columns. Add a request row: `/api/orders`, query `size=${size}`,
+then map `size` → `sizes.csv` / `size`.
 
 **Say:**
-"The chat is screen-aware — the system prompt changes depending on which tab
-is open. With the knowledge doc indexed, questions about this service get
-answers grounded in what I just uploaded, not generic responses."
+"Realistic load needs realistic inputs. A request is a path on the target, never
+another host. Each `${var}` must be mapped to an uploaded file and column, and
+that is checked before anything runs. Rows are cycled. Templated endpoints are
+judged one endpoint at a time."
 
-**Type in chat (Scripted mode — instant):**  
-`What SLA should I set for /api/db at 50 users?`
-
-→ Scripted answer appears.
-
-**Toggle Live AI ON.** Type:  
-`What cause families does this Spring Boot runtime declare, and which one is most relevant at 50 concurrent users with a small pool?`
-
-→ Real GLC v5 call. The system prompt carries the full memory taxonomy, the
-uploaded doc context, and the screen hint. Wait for the response — it should
-reference pool exhaustion as the most likely candidate given 50 users.
-
-**Toggle back to Scripted** for the rest of the demo (avoids cold-start delays).
+*(Remove the request row again before launching, unless you want the
+demo run to use it.)*
 
 ---
 
-## Step 4 — users.csv + POST body template (1 min) [EXPLAIN]
+## Step 5 — Goal & SLA (1 min) [LIVE]
 
-Still on wizard Step 1.
+Wizard step **2 Goal & SLA**. It opens with `slo.yaml`'s real values: `/api/db`,
+120 ms, 50 users.
 
-**Say:**
-"The load generator needs a user pool for realistic traffic. This CSV is not
-chunked into the RAG — it's raw file data, row by row. Each column maps to a
-variable in the Locust POST body template."
-
-Point at the users.csv chip and the variable mappings (`{{username}}`, `{{password}}`).
+Click **✨ AI suggestion**. The model proposes the SLA from the goal and the
+documents. Every value is bounds-checked before it fills the form.
 
 **Say:**
-"Authenticated user flows instead of synthetic anonymous load. The difference
-matters when your auth middleware adds 40 ms per request — anonymous load
-would mask it entirely."
+"The noise floor, 2.08%, is read-only. It was measured on this box by running the
+same load three times with nothing changed. A change smaller than that is
+inconclusive and is reverted, because it can't be told apart from noise."
 
 ---
 
-## Step 5 — Goal & SLA + Scenarios (1.5 min) [UI]
+## Step 6 — Mode, scenarios, hooks, budget, review (2.5 min) [LIVE]
 
-Click **Next: Goal & SLA**.
+Wizard step **3 Scenarios**. Click each **Test mode** card:
 
-Fill in: `Reduce /api/db p99 below 120 ms at 50 users`  
-Click **✨ Let AI suggest SLA** — fills p99 = 120 ms, error budget = 1%, noise = 2.08%.
+- **Advisory**: "AI diagnoses and suggests up to three ranked changes, each with
+  its exact diff. Nothing is applied. No repository or deploy pipeline needed."
+  Scenarios fill automatically.
+- **Semi-Automated**: "You approve each diff. The approval is bound to the exact
+  change: you can't approve one thing and deploy another."
+- **Fully Automated**: "No approval prompts, but the agent's authority is the
+  property list and bounds in `profile.yaml`. The guardrails make this safe, not
+  trust in the model. It still stops after three misses in a row."
+- **Ceiling Probe**: "A different question: how much headroom do I have? Load
+  rises in steps up to bounds I set, until the SLA is first missed. Only an
+  operator can start it, because it changes the load profile, which the agent is
+  forbidden to touch."
 
-**Say:**
-"The noise floor — 2.08% — was measured on this specific box by running the
-same load three times with nothing changed. On a Windows laptop with co-located
-Locust it was 14.3%. A change that moves p99 less than 2.08% is reported as
-inconclusive and reverted, because it can't be distinguished from normal
-run-to-run variation."
+Point at the scenario rows (users, duration, **ramp**, **Mix**):
+"Ramp sets Locust's spawn rate. A mix such as `/api/db=60, /api/orders=40` runs
+several endpoints and judges each against its own target. A change that speeds
+one endpoint while slowing another is WORSE, unless I tick **Accept trade-offs**
+and the slower one is still within its target."
 
-Click **Next: Scenarios**.
-
-**Say:** "Two scenarios: steady_50u at normal load, burst_100u at 2× spike."
-
----
-
-## Step 6 — Mode selection + Budget + YAML review (2 min) [LIVE]
+Point at **Hooks**: "before_each, after_each, on_abort: Python files, run
+isolated with an allowlisted environment. Never the control token. A failing hook
+blocks the experiment."
 
 Click **Next: Budget**.
+"The table is computed from the mode, the experiment count and the scenarios.
+Wall clock is the real budget, not dollars. The caps pause the run, they never
+throw work away. I resume with a higher cap or abort to get the report. If a cap
+can't even fit the baselines, it warns me here."
 
-Click each mode card:
-
-- **Advisory** — "AI diagnoses and suggests. You apply manually. No deploy hook needed."  
-  → Budget: ~2.5 h · ~3 LLM calls · ~$0.006
-
-- **Semi-Automated** — "You approve each diff. AI deploys and measures. The approval
-  is bound to the exact diff — you can't approve one thing and deploy another."  
-  → Budget: ~3.5 h · ~8 calls · ~$0.016
-
-- **Fully Automated** — "The mode that most directly reflects an idea Andrej Karpathy
-  described for AI-driven research pipelines — an AI scientist that can propose
-  experiments, run them unattended, and iterate on evidence. Crucible applies this
-  to performance engineering: every experiment is bounded by `profile.yaml`, every
-  result is a manifest file, and the watchdog runs arithmetic health checks every
-  5 minutes. There are no approval prompts — but the agent's authority is bounded
-  by the property list and ranges you set in advance. The guardrails are what make
-  this safe, not trust in the model."  
-  → Budget: ~5 h · ~14 calls · ~$0.028
-
-- **Ceiling Probe** — "A different question: not 'what is broken?' but 'how much
-  headroom do I have?' Load escalates in steps until the SLA is first missed.
-  Only an operator can start this — the agent can never initiate it because it
-  changes the load profile, which the agent is explicitly forbidden from touching."  
-  → Budget: ~1.5 h · ~2 calls · ~$0.004
-
-**Say:**  
-"Wall clock is the real budget. Adding a third scenario costs cents but adds
-40 minutes — that's what matters. Budget UI foregrounds time, not dollars."
-
-Set back to **Semi-Automated** → click **Next: Review**.
-
-**Show Review step.** Point at the full YAML summary.
-
-**Say:**
-"Every YAML value participating in this run is shown here before anything starts:
-the SLA target, the noise threshold, the load profile, the allowed properties with
-their current bounds, the sandbox branch, the deploy mode. This is what `crucible plan`
-also prints on the command line — same data, same source."
+Set mode back to **Semi-Automated** → **Next: Review**.
+"This is the exact diff Launch will write to `slo.yaml` and the target profile,
+and the preflight checks, including that the load script actually drives the SLA
+endpoint. That is what `crucible plan` prints, from the same source."
 
 ---
 
@@ -314,285 +329,209 @@ also prints on the command line — same data, same source."
 
 **Navigate to:** Guardrails tab.
 
-**Say:**
-"Two lists. The green 'Always enforced' rules cannot be toggled."
+"Two lists. The core protections cannot be disabled."
 
-Point at Policy memory row:
-"The SLA lives in Policy memory — the agent has no write permission for it, ever.
-Two independent enforcements: a protected path in the file guard, and a Policy
-memory kind. A single enforcement point can be bypassed if configuration moves;
-two independent mechanisms both have to fail."
+Policy row: "The SLA is Policy memory. The agent has no write permission for it,
+ever. Two independent locks: a protected path in the file guard, and the Policy
+memory kind. Both would have to fail. The operator can still change it, mid-run
+too, and every such edit is recorded on the manifest as an amendment."
 
-Point at sandbox branch row:
-"Crucible writes to exactly one branch — `perftest_sandbox` on the PerfLab repo.
-The workspace lives at `~/perf-lab` on Box B. Each experiment is one commit:
-`git add` for one file, `git commit` for one file, `git push` to one branch.
-The post-receive hook on Box A picks it up and rebuilds."
+Sandbox row: "Crucible writes to exactly one branch, `perftest_sandbox`, on the
+PerfLab repo, never its base branch. Each experiment is one commit of one file,
+pushed to that branch. The post-receive hook on Box A rebuilds."
 
-Point at allowed properties:
-"SKILL.md tells the model how this runtime fails and what signals mean. It goes
-into the model prompt and nowhere else — it never grants permission to change
-anything. `profile.yaml` is what grants authority. They are deliberately separate
-files, so a SKILL.md that says 'you may raise pool size to 10,000' has zero effect."
+Allowed properties: "SKILL.md tells the model how this runtime fails. It goes
+into the prompt and grants nothing. `profile.yaml` grants authority. A SKILL.md
+saying 'raise the pool to 10,000' has zero effect."
 
 ---
 
-## Step 8 — Preflight (1.5 min) [EXPLAIN + CLI]
+## Step 8 — Preflight (1.5 min) [LIVE]
 
-**Navigate to:** Preflight tab.
+**Navigate to:** Preflight → **Run checks** (read-only).
 
-**Say:**
-"Preflight exercises the full loop once, cheaply, before committing to an
-8-trial campaign. It connects to Box A, deploys a no-op change, confirms the
-property is live by reading `/actuator/env`, reverts, and confirms the revert
-is live. These exact four steps — deploy, read-back, revert, read-back — run
-before every experiment in a real campaign. Preflight runs them once so if
-something is broken, it fails in 5 minutes, not 40."
+"Preflight exercises the loop once, cheaply, before an eight-experiment campaign.
+With the apply probe it deploys a no-op change, reads the property back from the
+target, reverts, and reads it back again: the same steps every experiment runs.
+If the key, the hook or the config path is wrong, it fails in five minutes, not
+forty."
 
-```bash
-crucible preflight --apply-probe
-```
-
-"If the SSH key is wrong, the post-receive hook is missing, or the config file
-is in the wrong location — it fails here, not mid-campaign."
+*(The apply probe restarts Box A. The UI asks for confirmation naming the target.
+Run it in practice, not necessarily on camera.)*
 
 ---
 
-## Step 9 — Active campaign: PDMA loop + live overlay (3 min) [LIVE when running / DEMO when idle]
+## Step 9 — Live campaign: launch, approve, edit (3 min) [LIVE]
 
-**Navigate to:** Active tab.
+**Launch** from Review (Semi-Automated), or have one already running from just
+before recording. First proposal in ~7 minutes.
 
-**Two modes:**
-- **No live campaign:** TR-004 demo screen (pool=2, 43 pending threads).
-- **Live campaign:** green ● LIVE overlay appears within 5 s, polling every 5 s.
+**Navigate to:** Active. A green ● LIVE overlay appears within 5 s.
 
-> **To launch a real campaign** (start during a natural pause — it runs
-> in the background, first results in ~7 minutes):
-> ```bash
-> # Box B — second SSH terminal
-> cd ~/crucible && source .env
-> uv run crucible run --run-id demo-live-1 --workspace ~/perf-lab \
->     --provider gemini --model gemini-2.5-flash --experiments 3
-> ```
-> Or click **New Test Run → Launch** in the SPA (token must be saved).
+"The baseline measured p99 above the 120 ms SLA. The pool is 2 of 2, saturated,
+with 43 requests waiting at peak."
 
-**What to say (demo mode):**
+PDMA graph: "Perception: the collector read HikariCP metrics, converted
+Micrometer's seconds to milliseconds before the model saw them, and sampled the
+pending gauge during load, so we have the peak, not the post-run zero. Memory:
+the journal was searched, so a disproven hypothesis isn't proposed again."
 
-"The metric band shows live readings: p99 is 312 ms — above 120 ms SLA. Pool
-active is 2 out of 2 — fully saturated. Pending: 43 threads waiting."
+Approval gate: "The proposal is pool 2 → 20, and this exact diff is what I
+approve. Then Crucible commits that one file, pushes, waits until the target
+itself reports the new value, and only then runs a fresh measurement window."
 
-Point at the PDMA graph:
-"The campaign follows a Perception → Memory → Decision → Action loop. Each
-completed node is what just ran. The yellow node is where we're paused — the
-approval gate. Perception already fired: the collector read HikariCP metrics
-from `/actuator/metrics`, converted Micrometer seconds to milliseconds before
-the model saw them, and sampled the `pending` gauge mid-run so we captured
-peak value, not the post-run zero. Memory fired: the Journal RAG was queried —
-'has this hypothesis been tried and disproven on this service?' — filtering on
-structured fields before using vectors."
+**Click Approve.**
 
-Point at the approval gate:
-"The proposal: maximum-pool-size 2 → 20. The evidence: 43 waiters, 2406 ms max
-acquire time, pool always at 100% utilisation. GC overhead 4% — healthy. CPU
-28% — healthy. Only the pool is saturated.
+**Optional, mid-run edit (30 s):** "I can change the goal mid-run." Raise p99 in
+the wizard → **💾 Save changes**. "It is taken at the next experiment boundary,
+recorded as an amendment, and in Semi-Automated it pauses for me to confirm."
 
-The exact diff is what you approve. After approval, Crucible commits that one
-file, pushes to `perftest_sandbox`, waits for `/actuator/env` to confirm the
-property is live — not '/actuator/health' which proves the process started, but
-the actual property value — then runs a fresh 300-second measurement window."
-
-**Click Approve.** → gate animates to "Change applied — measuring now."
-
-**Point at CLI twins:** "Every button has a CLI equivalent. Headless operation
-in CI works identically."
+"Every button has a CLI twin, so headless operation in CI works the same way."
 
 ---
 
 ## Step 10 — Load generator: headless Locust (1 min) [EXPLAIN]
 
-**Say:**
-"Crucible drives Locust headless — no browser UI, no web port open. The load
-generator is a subprocess: Crucible spawns it with `--headless`, waits for the
-measurement window, then reads the CSV it writes on exit.
+"Crucible drives Locust headless: no web UI, no port. It is a subprocess that
+sends requests at the scenario's users and spawn rate, then writes its CSV.
+A web UI would compete with the load generator for Box B's single CPU.
 
-This is intentional. A web UI means Locust holds an extra thread and HTTP
-server, which contends with the load generator on a single OCPU. Crucible
-owns the measurement; Locust is just a subprocess that sends requests and
-writes numbers to disk.
-
-The metrics you care about come from the server side — Actuator's
-`hikaricp.connections.pending`, `http.server.requests` p99 — not from Locust's
-client-side latency. Client and server measure different things: Locust sees
-what left the load generator, Actuator sees what the JVM processed."
+The diagnosis uses server-side metrics, Actuator's `hikaricp.connections.pending`
+and the server's p99, not just Locust's client view. They measure different
+things."
 
 ---
 
-## Step 11 — Results: outcome + live report + chart (1.5 min) [LIVE]
+## Step 11 — Results (1.5 min) [LIVE]
 
-**Navigate to:** Results tab (auto-loads from API on open).
+**Navigate to:** Results → ↺.
 
-**Say:**
-"The Results tab fetches the latest run from the API — what you see is from the
-actual manifest file on Box B, not hardcoded data."
+"This comes from the manifest file on Box B, not hardcoded data."
 
-Point at the Before/After bar chart:
-"Before: p99 1206 ms at pool=2. After: 58 ms at pool=20. A 95.2% improvement.
-The chart shows three percentiles: p50, p95, p99. This is not a prediction —
-these are two measured windows, identical load, the only difference is the pool
-size between them."
+Before/After chart: "Two measured windows, identical load. The only difference
+is the pool size."
 
-Point at trial breakdown:
-"Pool active dropped from 2/2 to 4/20. Pending threads dropped from 43 to 0.
-The agent's predicted p99 was 140 ms — it got 58. The prediction is tracked as
-a calibration signal, but the verdict uses the measurement, not the prediction."
+Trials: "The agent predicted 140 ms. The prediction is tracked as calibration,
+but the verdict uses only the measurement."
 
-**Show on Box B (second terminal):**
+**Show on Box B:**
 ```bash
-ls ~/.crucible/results/
-cat ~/.crucible/results/demo-live-1.json | python3 -m json.tool | head -40
+ls ~/crucible/results/
+python3 -m json.tool ~/crucible/results/<run-id>.json | head -40
 ```
 
-**Say:**
-"Every result is a JSON manifest on disk. Not a database row — a file. It
-records the commit SHA that was running when measured, the model that ran
-the diagnosis, the environment, the collector version, every approval with
-a timestamp, and the exact evidence the agent cited. Reproducible by construction."
+"Every result is a JSON file. It records the commit that was running, the model
+that actually served the diagnosis, the environment, the collector version, each
+approval, the caps and any mid-run edits. Reproducible by construction."
 
 ---
 
-## Step 12 — Datadog metrics during/after the run (1 min) [EXPLAIN]
+## Step 12 — Datadog + CI/CD (1 min) [EXPLAIN]
 
-**Say (verbal — switch to Datadog tab in browser if available):**
-"Crucible integrates three metrics backends: Actuator (direct from the JVM,
-one instance), Prometheus/PromQL (service-wide histograms via PromQL), and
-Datadog (via the Datadog adapter). For this demo Box A pushes metrics to
-Datadog via `micrometer-registry-datadog`.
+"Three metrics backends: Actuator direct from the JVM, Prometheus via PromQL,
+and Datadog. In Datadog you'd see `hikaricp.connections.pending` spike during
+the pool=2 baseline and flatten after the fix: the same numbers the agent used.
 
-In the Datadog dashboard you'd see `hikaricp.connections.pending` spiking to
-43 during the pool=2 baseline, then flat zero after the fix — the same numbers
-the agent used for its diagnosis, pulled via the Datadog API. The agent and
-the dashboard are reading the same source.
-
-Crucible also integrates with the CI/CD pipeline: the deploy step pushes to
-`perftest_sandbox`, the post-receive hook on Box A builds and restarts. In a
-Jenkins or GitHub Actions setup that same push would trigger the pipeline — the
-sandbox branch is the interface."
+The deploy interface is the sandbox branch. Here a post-receive hook builds and
+restarts. In Jenkins or GitHub Actions, the same push would trigger the pipeline."
 
 ---
 
-## Step 13 — History & Diff: live data + comparison (2 min) [LIVE]
+## Step 13 — History + chat about runs (2.5 min) [LIVE]
 
-**Navigate to:** History & Diff tab (live API fetch).
+**Navigate to:** History & Diff. The run table is live from Box B.
 
-Point at run rows and outcome pills.
+Live AI ON. Type, with a **real run id** from 0.6:
+`Tell me about <advisory-run-id>: why did you rank #1 above #2?`
 
-**Toggle Live AI ON.** Type:  
-`What does the diff between TR-002 and TR-003 reveal, based on what you see on this screen?`
+→ The answer names the run, the cause, the change (`2 -> 20`) and the evidence
+(43 pending), and calls the predicted p99 a prediction.
 
-→ Wait for GLC v5 reply. The system prompt tells the model which screen is open.
-The response should reference the specific run IDs visible in the table.
-
-**Say:**
-"The system prompt carries the screen context — which tab is open and the
-campaign data loaded in it. That's what makes the answer specific rather than
-generic. When I was on a different screen and asked the same question without
-that context, the response was about connection pools in general rather than
-about the specific runs shown. Context precision matters."
-
-**Toggle Live AI OFF.** Show Compare: select two rows, click Diff.
+Then: `Why was experiment 1 kept in <semi-auto-run-id>?`
+→ It quotes the measured before → after and the verdict reason.
 
 **Say:**
-"The comparability check is automatic. If two runs used different models or
-different environments, the comparison is flagged rather than silently presented
-as equivalent. Same model, same box, same scenario — only then does a number-
-to-number comparison mean anything."
+"The chat reads the run files on disk. Measured runs, Advisory runs and ceiling
+probes. It picks the run I name, even with a typo, or the one on screen, and
+says which. If I name a run that doesn't exist, it says so, rather than answering
+about a different one. And it never presents a prediction as a result."
 
-**Mention ceiling probe:**
-"Ceiling probe is a fourth campaign type — not on the history table because it
-never changes configuration. It escalates load in steps until the SLA is first
-missed. The result is a pair: last passing level and first failing level, with
-both measurements. At pool=20, Box A has so much headroom that a ceiling probe
-finds the limit is the load generator itself, not the service."
+*(Optional: `which runs do I have?` lists them.)*
+
+**Do not ask about TR-002/TR-003.** Those are the static demo rows. The chat
+will correctly say they are not on disk. The **Diff** card is also static demo
+content. Show it as "what a comparison looks like", or compare two real rows.
+
+"Comparability is automatic. Two runs on different models or environments are
+flagged, not silently compared."
+
+**Ceiling probe:** "A ceiling result is a pair: the last level that met the SLA
+and the first that didn't, both measured. It describes the service, so it is
+never shown as a verdict on a change."
 
 ---
 
-## Step 14 — Benchmarks: harness depth + LUCKY quadrant (2 min) [UI]
+## Step 14 — Benchmarks + the LUCKY quadrant (2 min) [UI]
 
-**Navigate to:** Benchmarks tab.
+**Navigate to:** Benchmarks (static content from the real fixture runs).
 
-"94.6% accuracy across 20 fixtures and 9 cause families. The replay split is
-what makes this affordable: diagnosis against a captured snapshot takes 2 seconds
-and $0.002. A live campaign takes 15 minutes. I can iterate hundreds of diagnosis
-tests overnight against captured fixtures without running a single load test."
+"Diagnosis is replayed against captured snapshots: two seconds and a fraction of
+a cent each, against fifteen minutes for a live campaign. So I can run hundreds
+of diagnosis tests without one load test."
 
-Expand **connection_pool_exhaustion** row:  
-"Three fixtures at different severity levels, each captured against three providers
-— Actuator, PromQL, Datadog — so the same diagnosis question gets asked of three
-telemetry backends."
+Scoring grid: "Six dimensions. The LUCKY quadrant matters most: wrong diagnosis,
+fix worked anyway. Counting that as success fails the next look-alike fixture.
+Scoring diagnosis separately from outcome is what catches it."
 
-Point at scoring grid:
-"Six dimensions: outcome, diagnosis quality, integrity, comparability, efficiency,
-calibration. The LUCKY quadrant is the important one — wrong diagnosis, fix worked
-anyway by coincidence. An agent that counts this as a success will fail on the
-next fixture with a similar-looking signal but a different root cause. Scoring
-diagnosis separately from outcome is what surfaces this."
-
-**Say on evaluation:**
-"34 draft test assertions across 8 groups in `docs/CRUCIBLE_TEST_ASSERTIONS.md`:
-measurement integrity, collector correctness, guard and safety, approval binding,
-deploy and verification, diagnosis quality, scorer, watchdog. Every assertion is
-reviewed before it's committed — the reasoning is checked against the actual
-failure mode it tests for."
+**On evaluation:**
+"Every test assertion is drafted with its reasoning and reviewed by me before
+it's committed, more than 40 groups in `docs/CRUCIBLE_TEST_ASSERTIONS.md`. The
+review asks whether the reasoning matches the failure it tests for."
 
 ---
 
 ## Step 15 — Memory taxonomy + backend files (2 min) [EXPLAIN]
 
-**Say:**
-"Seven memory kinds, each with a different lifetime and write authority.
+"Seven memory kinds, each with its own lifetime and write authority.
 
-**Working** — current hypothesis and in-flight snapshot. Dies with the run.  
-**Episode** — experiment manifests and the journal. Append-only, survives crashes.  
-**Fact** — confirmed operational knowledge: 'this app resets by truncate+reseed.'  
-**Playbook** — cause signatures that worked, service-scoped until a human
-promotes them globally. One app's quirk never becomes everyone's false positive.  
-**Policy** — the SLA lives here. Agent has no write permission, ever.  
-**Audit** — every guard refusal, every approval. Append-only, tamper-evident.  
-**Document chunk** — the Knowledge RAG corpus, embedded at 768d."
+**Working**: current hypothesis, in-flight snapshot. Dies with the run.
+**Episode**: experiment manifests and the journal.
+**Fact**: confirmed operational knowledge.
+**Playbook**: cause signatures that worked, service-scoped until a human promotes them.
+**Policy**: the SLA. The agent can never write it.
+**Audit**: every refusal and approval. Append-only.
+**Document chunk**: the knowledge corpus, in its own store."
 
 **Show on Box B:**
 ```bash
-# The memory store: the agent's facts/episodes AND each campaign's SLA Policy record
 ls ~/.crucible/
-# memory.sqlite         -- Working/Episode/Fact/Playbook/Policy/Audit (one store since 24 Oct 2026)
-# memory.sqlite.faiss   -- vectors for the agent's facts/episodes (Policy and Audit are never embedded)
-# knowledge-index/      -- the document store (see docs/KNOWLEDGE_STORE.md)
-
-# Read the audit log and the SLA lock records
+# memory.sqlite        the agent's memory, plus each campaign's SLA Policy record and audit entries
+# memory.sqlite.faiss  vectors for facts/episodes (Policy and Audit are never embedded)
+# knowledge/           uploaded originals
+# knowledge-index/     the document store (knowledge.sqlite + its own .faiss)
 sqlite3 ~/.crucible/memory.sqlite \
   "SELECT created_at, kind, substr(text,1,80) FROM records WHERE kind IN ('policy','audit') ORDER BY created_at DESC LIMIT 5;"
 ```
 
-**Say:**
-"Policy memory is where the choice of memory kind becomes a security decision.
-An agent that can overwrite its own SLA is not safe to run autonomously. The
-memory kind is the mechanism — not a policy rule, a structural constraint."
+"Choosing the memory kind is a security decision. An agent that can overwrite
+its SLA is not safe to run autonomously. Here it is a structural constraint,
+not a rule someone has to remember."
 
 ---
 
-## Step 16 — CLI parity + headless mode (1 min) [EXPLAIN]
+## Step 16 — CLI parity (1 min) [EXPLAIN]
 
-Point at any CLI twin label in the UI.
-
-"Every button calls the same function as the CLI command — same guard, same
-approval binding, same deploy logic. The UI is not a shortcut. An engineer
-whose CI/CD pipeline has no browser runs this entirely headless:"
+"Every button calls the same function as its CLI command: same guard, same
+approval binding. The UI is not a shortcut."
 
 ```bash
-crucible run --scenario steady_50u --sla config/slo.yaml &
+crucible plan
+crucible run --all-scenarios --advisory
+crucible run --cost-cap 0.05 --wall-clock-cap 2
 crucible status <run_id>
-crucible approve <run_id> 1 --as raghu
-crucible score <run_id>
+crucible approve <run_id> --experiment 1 --as raghu
+crucible resume <run_id> --cost-cap 1
+crucible report --run <run_id>
 crucible diff <run_id_a> <run_id_b>
 crucible bench --replay
 ```
@@ -602,33 +541,33 @@ crucible bench --replay
 ## Closing line (30 sec)
 
 "The loop is complete: instrument, load, diagnose, propose, approve, deploy,
-verify, record. Every step is measurable and every result is a file on disk.
-Nothing is claimed that wasn't measured."
+verify, record. Every result is a file on disk, and nothing is claimed that
+wasn't measured."
 
 ---
 
-## Total estimated recording time: ~28–30 minutes
+## Total estimated recording time: ~29 minutes
 
 | Section | Time |
 |---|---|
 | Intro + architecture | 2 min |
-| Knowledge RAG + embedder | 2 min |
-| Onboarding chat | 1.5 min |
-| users.csv | 1 min |
-| Goal + Scenarios | 1.5 min |
-| Mode + Budget + YAML review | 2 min |
-| Guardrails + sandbox structure | 2 min |
+| Knowledge upload + index | 2 min |
+| Grounded chat | 1.5 min |
+| Input data + templates | 1 min |
+| Goal & SLA | 1 min |
+| Mode, scenarios, hooks, budget, review | 2.5 min |
+| Guardrails | 2 min |
 | Preflight | 1.5 min |
-| Active campaign + PDMA + Approval | 3 min |
-| Locust web UI | 1 min |
-| Results + backend files | 1.5 min |
+| Live campaign + approval (+ edit) | 3 min |
+| Headless Locust | 1 min |
+| Results + manifest | 1.5 min |
 | Datadog + CI/CD | 1 min |
-| History & Diff | 2 min |
-| Benchmarks + evals | 2 min |
-| Memory taxonomy + backend files | 2 min |
+| History + chat about runs | 2.5 min |
+| Benchmarks | 2 min |
+| Memory taxonomy | 2 min |
 | CLI parity | 1 min |
 | Closing | 0.5 min |
-| **Total** | **~28 min** |
+| **Total** | **~29 min** |
 
 ---
 
@@ -636,27 +575,28 @@ Nothing is claimed that wasn't measured."
 
 | Screen / Feature | Status | Notes |
 |---|---|---|
-| History & Diff table | **LIVE** | Fetches `/v1/perf/screens/17` from Box B |
-| Chat with Live AI ON | **LIVE** | POSTs to `/v1/perf/chat` → GLC v5 with screen context |
-| Budget table by mode | **LIVE** | JS calculates from mode selection |
-| Jobs tab | **LIVE** | Fetches `/v1/perf/jobs`; badge polls every 10 s |
-| Launch Test Run | **LIVE** | POSTs `/v1/perf/jobs/run` — token required |
-| Preflight "Run checks" | **LIVE** | POSTs `/v1/perf/jobs/preflight` — token required |
-| Ceiling Probe launch | **LIVE** | POSTs `/v1/perf/jobs/ceiling` — token required |
-| Approve / Reject | **LIVE** | POSTs `/v1/perf/runs/{id}/experiments/{n}/decision` |
-| Pause | **LIVE** | POSTs `/v1/perf/campaign/{id}/pause` — token required |
-| Abort | **LIVE** | POSTs `/v1/perf/campaign/{id}/abort` — token required |
-| Active tab — live campaign | **LIVE** | Polls `GET /v1/perf/campaign/active` every 5 s; real run-id, status, elapsed, approval gate, job log |
-| Active tab — no campaign | **DEMO** | TR-004 pre-loaded; approval animates locally |
-| Results tab | **LIVE** | Fetches `GET /v1/perf/runs/latest/report`; Chart.js Before/After chart + real experiment table |
-| Locust | **N/A** | Crucible runs Locust `--headless`; no web UI, no port 8089 |
-| Datadog dashboard | **LIVE** | app.datadoghq.com — real metrics from Box A during/after run |
-| Chat with Live AI OFF | **SCRIPTED** | Keyword-matched, instant, no network |
-| Active demo charts | **SCRIPTED** | Pre-loaded TR-004 p99/RPS data |
-| Benchmarks tab | **SCRIPTED** | Accurate data from real fixtures; no backend call |
-| Guardrails tab | **SCRIPTED** | Static content from profile.yaml values |
-| Doc upload chip | **SCRIPTED** | Chip added to UI; indexing via `POST /documents` |
-| Overview KPIs | **SCRIPTED** | Hardcoded to match real run data |
+| Wizard values | **LIVE** | `GET /v1/perf/wizard` reads `slo.yaml` and the profile |
+| Knowledge upload + index | **LIVE** | `POST /v1/perf/knowledge/documents` (token); background indexing |
+| ✨ AI suggestions | **LIVE** | `POST /v1/perf/suggest` (token); disabled while a document is indexing |
+| Input data / hooks upload | **LIVE** | `/v1/perf/load-data`, `/v1/perf/hooks` (token) |
+| Budget table | **LIVE** | `POST /v1/perf/wizard/budget`, computed from mode + scenarios |
+| Review diff + checks | **LIVE** | `/v1/perf/wizard/preview`, `/v1/perf/wizard/check` |
+| Save changes | **LIVE** | `POST /v1/perf/wizard/save` (token); allowed mid-run |
+| Launch | **LIVE** | `POST /v1/perf/wizard/launch` (token); refused while a campaign is running or paused |
+| Chat, Live AI ON | **LIVE** | `/v1/perf/chat`: knowledge excerpts, facts from disk, run under discussion |
+| Chat, Live AI OFF | **SCRIPTED** | Keyword-matched canned answers |
+| Jobs tab | **LIVE** | `/v1/perf/jobs`; badge polls every 10 s |
+| Preflight / Ceiling launch | **LIVE** | `/v1/perf/jobs/preflight`, `/v1/perf/jobs/ceiling` (token) |
+| Approve / Reject | **LIVE** | `/v1/perf/runs/{id}/experiments/{n}/decision` |
+| Pause / Resume / Abort | **LIVE** | `/v1/perf/campaign/{id}/pause|resume|abort` (token) |
+| Active tab, live campaign | **LIVE** | Polls `/v1/perf/campaign/active` every 5 s |
+| Active tab, no campaign | **DEMO** | TR-004 pre-loaded; approval animates locally |
+| Results tab | **LIVE** | `/v1/perf/runs/{id}/report` + Chart.js |
+| History table | **LIVE** | `/v1/perf/screens/17` |
+| History Diff card, ceiling card, Playbooks | **SCRIPTED** | Static TR-002/TR-003/CP-001 content |
+| Overview KPIs, Benchmarks, Guardrails | **SCRIPTED** | Static, matching real runs and `profile.yaml` |
+| Locust | **N/A** | `--headless`; no web UI |
+| Datadog dashboard | **LIVE** | app.datadoghq.com |
 
 ---
 
@@ -664,13 +604,17 @@ Nothing is claimed that wasn't measured."
 
 | Problem | Fallback |
 |---|---|
-| GLC v5 cold start (>30 s delay) | Toggle Live AI OFF; scripted answers are accurate |
-| Box B unreachable | History tab shows "Could not load history" — explain the API call; all other tabs are self-contained |
-| Approval gate already dismissed | Refresh the page — demo screen resets on load |
-| Write action returns 401 | Token not saved — Settings → Control token → paste → Save |
-| Write action returns 503 | `CRUCIBLE_CONTROL_TOKEN` missing from Box B `.env` — add it and `sudo systemctl restart crucible-ui` |
-| Active tab not showing live overlay | Check `curl 127.0.0.1:8113/v1/perf/campaign/active` on Box B — campaign state file may not be created yet |
-| Results tab showing TR-003 demo data | No completed run yet — check `curl .../v1/perf/runs`; run a campaign first |
-| Results chart absent | Chart.js CDN blocked — reload; KPI strip still shows numbers |
-| RAG doc not indexed (empty memory.faiss) | Run `§0.5` curl command on Box B before continuing |
-| Gemini embedding fails (GLC v5 Render) | Check that `GEMINI_API_KEY` is set in Render env vars; embedder falls back gracefully |
+| GLC v5 cold start (>30 s) | Re-run 0.4; or toggle Live AI OFF for that question (scripted answers) |
+| ✨ buttons greyed out | A document is still indexing: wait for "indexed — N chunks" |
+| Upload chip says `failed:` | Usually the embed cooldown 503. Click Upload & index again; identical text isn't re-embedded |
+| Chat answer has no Sources line | Retrieval found nothing: check `~/.crucible/knowledge-index/` is non-empty |
+| Chat says a run is "not on disk" | The id is wrong or a static demo id (TR-…): use an id from `ls ~/crucible/results/` |
+| Launch refused (409) | A campaign is running or paused: finish it, or `crucible abort <run>` |
+| Launch refused: cap overrun | The cap can't fit the baselines: raise it, or confirm the overrun in the dialog |
+| Run paused at a cap | `crucible resume <run> --cost-cap <higher>` or abort, then `crucible report --run <run>` |
+| Box B unreachable | History shows "Could not load history": explain the API call; static tabs still work |
+| Approval gate already dismissed | Refresh: the demo screen resets on load |
+| Write action returns 401 | Token not saved: Settings → Control token → Save |
+| Write action returns 503 | `CRUCIBLE_CONTROL_TOKEN` missing from Box B `.env`: add it, restart serve (0.1) |
+| Active tab shows no live overlay | `curl 127.0.0.1:8113/v1/perf/campaign/active` on Box B; the state file may not exist yet |
+| Results chart absent | Chart.js CDN blocked: reload; the KPI strip still shows numbers |

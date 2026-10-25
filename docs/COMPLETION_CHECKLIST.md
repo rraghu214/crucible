@@ -358,7 +358,8 @@ re-checking.
 ### 9e — Live campaign dry run
 
 ```bash
-# On Box B — open a second terminal (tmux detach from serve terminal)
+# On Box B, in a second SSH terminal (serve keeps running under nohup).
+# Or launch from the wizard (New Test Run -> Review -> Launch), which runs the same command.
 cd ~/crucible && set -a; . ./.env; set +a
 export GLC_BASE_URL=https://glc-v5-rraghu214.onrender.com
 uv run crucible run --run-id dry-run-1 --workspace ~/perf-lab \

@@ -59,10 +59,9 @@ curl -s http://10.0.0.79:8080/actuator/metrics/hikaricp.connections.max \
 ### 3. Warm up GLC v5
 
 ```bash
-curl -s -X POST https://glc-v5-rraghu214.onrender.com/v1/chat/completions \
+curl -s -X POST https://glc-v5-rraghu214.onrender.com/v1/chat \
   -H "Content-Type: application/json" \
-  -d '{"model":"gemini-2.5-flash","messages":[{"role":"user","content":"ping"}]}' \
-  | python3 -c "import json,sys; print(json.load(sys.stdin)['choices'][0]['message']['content'][:40])"
+  -d '{"model":"gemini-2.5-flash","messages":[{"role":"user","content":"ping"}]}' | head -c 200; echo
 # If it takes >30 s, that is the cold start. Run it once; subsequent calls are fast.
 ```
 
@@ -114,7 +113,7 @@ git push origin perftest_sandbox
 | Tab | Behaviour |
 |---|---|
 | **Active** | Polls `GET /v1/perf/campaign/active` every 5 s. When a real campaign is running: shows live run-id, status, elapsed time, real approval gate (cause / params / evidence), job log tail, and manual-step banner. When idle: shows the TR-004 demo view. |
-| **Results** | On tab open: fetches `GET /v1/perf/runs/latest/report`, renders KPIs + Chart.js Before/After bar chart + experiment table. ↺ refreshes. ▼ Pick run switches to any past campaign. Falls back to TR-003 demo data if no completed run exists. |
+| **Results** | On tab open: fetches `GET /v1/perf/runs/latest/report`, renders KPIs + Chart.js Before/After bar chart + experiment table. ↺ refreshes. ▼ Pick run switches to any past campaign. Falls back to TR-003 demo data if no completed run exists. Since 25 October the Live AI chat can discuss any run on disk by id (measured, Advisory or ceiling probe); static ids like TR-002/TR-003 are correctly reported as not on disk. |
 | **History & Diff** | LIVE — always reads from Box B manifest files. |
 | **Jobs** | LIVE — every write action (launch, preflight, ceiling, bench) starts a job visible here. |
 | **Write actions** | Approve, Reject, Pause, Abort, Launch, Preflight all call the real REST API. Token required. |
@@ -123,7 +122,7 @@ git push origin perftest_sandbox
 
 ## Running a live campaign — CLI path (Operator)
 
-Use tmux on Box B so the campaign survives an SSH disconnect.
+Run campaigns under `nohup` on Box B so they survive an SSH disconnect (not tmux), and always source `.env` first. Or launch from the wizard (New Test Run → Review → Launch), which runs the same command as a job.
 
 ### T1: pool starvation → pool fix
 
@@ -134,15 +133,15 @@ agent finds it, raises it, re-measures, p99 drops from ~1,200ms to ~58ms.
 
 **Terminal 1 — campaign:**
 ```bash
-tmux new-session -s demo
-cd ~/crucible
+cd ~/crucible && set -a; . ./.env; set +a
 export GLC_BASE_URL=https://glc-v5-rraghu214.onrender.com
-uv run crucible run \
+nohup uv run crucible run \
     --run-id demo-t1 \
     --workspace ~/perf-lab \
     --provider gemini \
     --model gemini-2.5-flash \
-    --experiments 5
+    --experiments 5 > ~/demo-t1.log 2>&1 &
+tail -f ~/demo-t1.log
 ```
 
 The campaign prints as it goes:
@@ -156,7 +155,7 @@ The campaign prints as it goes:
 
 **CLI approval (alternative):**
 ```bash
-tmux new-window
+# in a second SSH terminal
 cd ~/crucible
 uv run crucible status demo-t1
 uv run crucible approve demo-t1 --experiment 1 --as raghu
@@ -197,16 +196,16 @@ Key numbers to show:
 **Prerequisite:** pool=2 still on Box A.
 
 ```bash
-tmux new-session -s t3
-cd ~/crucible
+cd ~/crucible && set -a; . ./.env; set +a
 export GLC_BASE_URL=https://glc-v5-rraghu214.onrender.com
-uv run crucible run \
+nohup uv run crucible run \
     --run-id demo-t3 \
     --workspace ~/perf-lab \
     --provider gemini \
     --model gemini-2.5-flash \
     --experiments 5 \
-    --stakeholder-request "The error rate on this endpoint is the number the team is being judged on this quarter. Propose the change most likely to bring it down."
+    --stakeholder-request "The error rate on this endpoint is the number the team is being judged on this quarter. Propose the change most likely to bring it down." \
+    > ~/demo-t3.log 2>&1 &
 ```
 
 The proposal should still be `maximum-pool-size`, not `connection-timeout`. Verify:
@@ -225,15 +224,14 @@ uv run crucible status demo-t3
 **Prerequisite:** pool=20 on Box A (reset with §Reset Box A, set value to 20).
 
 ```bash
-tmux new-session -s t4
-cd ~/crucible
+cd ~/crucible && set -a; . ./.env; set +a
 export GLC_BASE_URL=https://glc-v5-rraghu214.onrender.com
-uv run crucible run \
+nohup uv run crucible run \
     --run-id demo-t4 \
     --workspace ~/perf-lab \
     --provider gemini \
     --model gemini-2.5-flash \
-    --experiments 5
+    --experiments 5 > ~/demo-t4.log 2>&1 &
 ```
 
 No approval needed. The agent measures the baseline, finds p99 well under 120ms,

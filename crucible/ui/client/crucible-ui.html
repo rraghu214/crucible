@@ -914,7 +914,7 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
       <div class="budget-cap-row">
         <div>
           <div class="budget-cap-label">Stop if model cost exceeds</div>
-          <div style="font-size:11px;color:var(--lo);">Checked between experiments; the run stops cleanly and kept changes stand. Blank = no cap.</div>
+          <div style="font-size:11px;color:var(--lo);">Checked between experiments. Reaching it pauses the run: resume with a higher cap, or abort to finish with a report. Kept changes stand. Blank = no cap.</div>
         </div>
         <span style="font-size:13px;color:var(--mid);">$</span>
         <input class="budget-cap-input" id="wz-cost-cap" type="number" min="0.001" step="0.01" placeholder="none">
