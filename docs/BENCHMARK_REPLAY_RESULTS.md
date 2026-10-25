@@ -9,7 +9,7 @@
 | Harness | `crucible@77c78f3` |
 | Model | `gemini-3.5-flash-lite` pinned, served by `gemini_1` throughout |
 | Failover | disabled (`CRUCIBLE_GATEWAY_FALLBACK_PROVIDERS` empty) |
-| Gateway | hosted `glc_v5` (https://glc-v5-rraghu214.onrender.com) |
+| Gateway | hosted `glc_v5` (https://<your-gateway>.onrender.com) |
 | Tasks | 18 (T1–T17 + T3b), all five classes A–E |
 | Fixtures | 16 of 20 captured (Actuator); `perflab_gc_pressure` and `perflab_downstream_latency_severe` not yet captured — skipped via `--skip-missing-fixtures` |
 | Multi-provider | `perflab_pool_starved`: Actuator + PromQL + Datadog captured |
@@ -77,7 +77,7 @@ them.
 | Harness | `crucible@4b8b8de` (includes the bench event-loop fix, §5.1) |
 | Model | `gemini-3.5-flash-lite` pinned, served by `gemini_1` on all 15 cases |
 | Failover | disabled (`CRUCIBLE_GATEWAY_FALLBACK_PROVIDERS` empty) |
-| Gateway | hosted `glc_v5` (https://glc-v5-rraghu214.onrender.com) |
+| Gateway | hosted `glc_v5` (https://<your-gateway>.onrender.com) |
 | Tasks | T1 (A), T3 (C), T4 (D) |
 | Fixtures | `perflab_pool_starved`, `perflab_pool_starved_mild`, `perflab_healthy`, all Actuator and all collector `1.1.0` |
 | Profile | `spring-boot` |

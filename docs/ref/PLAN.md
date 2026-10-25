@@ -1,4 +1,4 @@
-# Crucible — what's left, how long, what's waiting on Raghu (revised 3 Oct 2026, updated)
+# Crucible — what's left, how long, what's waiting on the operator (revised 3 Oct 2026, updated)
 
 **Date correction:** Sat = 3 Oct, Sun = 4 Oct, Mon = 5 Oct, Tue = 6 Oct, Thu = 8 Oct, Fri = 9–10 Oct.
 
@@ -50,7 +50,7 @@
 | Jaeger findings into the snapshot (spans, not just flags) | §4.3, §5 | 3 h | medium |
 | k6 runner, a second LoadRunner | §5 | 5 h | medium: proves the interface |
 
-**Raghu's decisions, 3 Oct:**
+**The operator's decisions, 3 Oct:**
 - All four feature groups are in.
 - Benchmark: ~40 fixtures and ~20 tasks.
 - One approved overnight capture sweep.
@@ -86,8 +86,8 @@
 - Everything not picked goes into the claim as "not built", by name.
 
 ## Context
-- **Deadline:** 10 Oct, set by Raghu on 3 Oct. SCOPE_FALLBACK.md §1: a confirmed extension means *restore full scope*.
-- **Why the UI decision changed:** Raghu found the existing 19-screen A2UI UI unacceptable. The NiceGUI design (`docs/ref/crucible-nicegui-screens.html`) is the target.
+- **Deadline:** 10 Oct, set by the operator on 3 Oct. SCOPE_FALLBACK.md §1: a confirmed extension means *restore full scope*.
+- **Why the UI decision changed:** the operator found the existing 19-screen A2UI UI unacceptable. The NiceGUI design (`docs/ref/crucible-nicegui-screens.html`) is the target.
 - **Datadog:** kept.
 - **State:** nothing in either repo has changed since 26 Sep (last commit `a5515e7`).
 - **Source:** findings come from a full scan of `crucible/`, `config/`, `docs/`, `tests/` and perf-lab.
@@ -140,7 +140,7 @@
 ## 2 · My take on the week (ordered by risk, not by brief part)
 The long pole is **box wall-clock time**, not code. B5 bumps the collector, which makes every existing snapshot stale, so all fixtures must be recaptured. Captures and live campaigns can't be sped up. So benchmark code goes first and box sessions start early, while the UI is built alongside.
 
-| Date | Me | Raghu | Gate at end of day |
+| Date | Me | The operator | Gate at end of day |
 |---|---|---|---|
 | **Fri 3 Oct** ✅ | B5 thread meters + collector 1.2.0; B6 task set v2; B7 fixtures; B8 `/api/slow`; test suite green | NSG fix; Datadog account + keys; answer the 5 decisions | SSH to both boxes works |
 | **Sat 4 Oct** | integrity gaps (watchdog, Policy SLA, Datadog 403 + headers, manual-deploy pause); B3; read-back rung + `runtime_config` via allowlist; gateway token; deployer commit on manifest. **Box 1:** Prometheus, Datadog check, deploy, **K1 re-check** | approve box commands; push perf-lab | K1 spread <20% on collector 1.2.0, or stop |
@@ -168,25 +168,25 @@ The long pole is **box wall-clock time**, not code. B5 bumps the collector, whic
 
 **Cut order if time runs out** (never touching Tier 1): k6 → Jaeger spans → playbooks → stretch rows → palette and g-chords → Graph tab → hooks → Quick/Standard/Thorough plans. **Never cut:** integrity gaps, the sweep, live campaigns, provider agreement, NiceGUI campaign path, the README claim.
 
-## 3 · Hard dependencies on Raghu
+## 3 · Hard dependencies on the operator
 
 ### ✅ Done
-- NSG rules are correct: TCP 22 from `49.37.241.32/32`, TCP 8080 and 9090 from `10.0.0.8/32`. Verified 3 Oct.
+- NSG rules are correct: TCP 22 from `<operator-ip>/32`, TCP 8080 and 9090 from `10.0.0.8/32`. Verified 3 Oct.
 - NiceGUI design approved. A "Crucible" wordmark/logo in the top-left of every screen links back to Home (Chivo typography, per the design file).
 
 ### Immediate (today, Fri 3 Oct)
 1. **Lock the key file and run SSH tests.** Run these in PowerShell in order — read-only, print hostname only:
    ```powershell
-   $k="C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-1\ssh-key-2026-09-12.key"
+   $k="<path-to-ssh-key>"
    icacls $k /inheritance:r; icacls $k /grant:r "$($env:USERNAME):(R)"
    ```
    Then Box A:
    ```powershell
-   ssh -i "C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-1\ssh-key-2026-09-12.key" -o IdentitiesOnly=yes -o ConnectTimeout=10 ubuntu@129.213.121.108 hostname
+   ssh -i "<path-to-ssh-key>" -o IdentitiesOnly=yes -o ConnectTimeout=10 ubuntu@<box-a-ip> hostname
    ```
    Then Box B:
    ```powershell
-   ssh -i "C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-1\ssh-key-2026-09-12.key" -o IdentitiesOnly=yes -o ConnectTimeout=10 ubuntu@150.136.143.227 hostname
+   ssh -i "<path-to-ssh-key>" -o IdentitiesOnly=yes -o ConnectTimeout=10 ubuntu@<box-b-ip> hostname
    ```
    Expected: each prints a hostname in <5 s. A timeout = NSG IP mismatch. "Permission denied" = wrong key.
 
@@ -200,7 +200,7 @@ The long pole is **box wall-clock time**, not code. B5 bumps the collector, whic
    | D3 | T6 class-E grading | ✅ PASS only if agent shows a number (p99 vs SLA) — "looks fine" fails |
    | D4 | gc_and_pool ground truth | ✅ gc_pressure primary; pool starvation secondary note |
    | D5 | `/api/slow` in locustfile.py | ✅ Approved — endpoint simulates slow business-logic code (sleep/CPU burn), no DB/pool involved; needed for `perflab_code_latency` fixture |
-   | D6 | Uncommitted files | Review, update, then push (Raghu to do when ready) |
+   | D6 | Uncommitted files | Review, update, then push (the operator to do when ready) |
 
 3. **Datadog signup — Sun 4 Oct afternoon**, after major code tasks done.
    - Sign up at https://www.datadoghq.com/ (no credit card required for 14-day trial).
@@ -268,8 +268,8 @@ Both boxes use the NSG `ig-quick-action-NSG`. Its rule is TCP 22 from `<home IP>
 4. Same NSG → Add Rule: Ingress, CIDR `10.0.0.8/32`, TCP, destination port **9090**, described `prometheus from box-b`. I'll add the matching Box A iptables rule over SSH (`sudo iptables -I INPUT 5 -p tcp -s 10.0.0.8/32 --dport 9090 -m state --state NEW -j ACCEPT` and `sudo netfilter-persistent save`).
 5. Check that both instances list this NSG: Compute → Instances → Attached VNICs.
 6. Lock down the key file for Windows OpenSSH, in PowerShell:
-   `$k="C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-1\ssh-key-2026-09-12.key"; icacls $k /inheritance:r; icacls $k /grant:r "$($env:USERNAME):(R)"`
-7. **I then run, with your approval:** `ssh -i <key> -o IdentitiesOnly=yes -o ConnectTimeout=10 ubuntu@129.213.121.108 hostname` (Box A), and the same for `150.136.143.227` (Box B).
+   `$k="<path-to-ssh-key>"; icacls $k /inheritance:r; icacls $k /grant:r "$($env:USERNAME):(R)"`
+7. **I then run, with your approval:** `ssh -i <key> -o IdentitiesOnly=yes -o ConnectTimeout=10 ubuntu@<box-a-ip> hostname` (Box A), and the same for `<box-b-ip>` (Box B).
    - A timeout means the NSG rule or the IP is wrong.
    - "Permission denied (publickey)" means the wrong key.
    - If SSH starts timing out later, your home IP has probably changed; redo step 3.
@@ -282,7 +282,7 @@ Open `docs\ref\crucible-nicegui-screens.html` in a browser (double-click it, or 
 - I can publish it as a private Artifact link once we're out of plan mode.
 
 ## Verification
-- `uv run pytest -q && uv run ruff check .` before every commit; one logical unit per commit; nothing pushed without Raghu.
+- `uv run pytest -q && uv run ruff check .` before every commit; one logical unit per commit; nothing pushed without the operator.
 - `crucible capture --plan` lists exactly the intended ~16 snapshots.
 - `crucible bench` refuses the stale 1.1.0 snapshots by name after B5.
 - `crucible serve`, then click through all six areas against real `results/` and `fixtures/`. Each empty state names the command that fills it.

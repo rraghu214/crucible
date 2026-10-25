@@ -37,7 +37,7 @@ Contents:
 | A way for the service to **say which commit is running** (or to read the changed setting back) | Crucible will not measure until it can prove the change is live. | `GET /api/version` returns `{"commit": "<sha>"}` |
 | **Metrics** Crucible can read | Diagnosis needs evidence. | Spring Boot Actuator (also Prometheus or Datadog) |
 | A **machine to run Crucible and the load generator**, close to the service | Load must come from somewhere stable, and not from the service's own box. | Box B |
-| Access to a **model gateway** | Diagnosis is the one step that uses a language model. | `glc_v5` at `https://glc-v5-rraghu214.onrender.com` |
+| Access to a **model gateway** | Diagnosis is the one step that uses a language model. | `glc_v5` at `https://<your-gateway>.onrender.com` |
 
 Crucible currently understands two kinds of service: **Spring Boot**
 (`config/profiles/spring-boot.yaml`) and **FastAPI** (`config/profiles/fastapi.yaml`;
@@ -129,7 +129,7 @@ It goes into the model's instructions as background, and it grants nothing.
 Put this in `~/crucible/.env`:
 
 ```bash
-GLC_BASE_URL=https://glc-v5-rraghu214.onrender.com
+GLC_BASE_URL=https://<your-gateway>.onrender.com
 ```
 
 Optional, only if you'll use them:

@@ -9,7 +9,7 @@ Status legend: ✅ done · ⬜ to do · 🔧 in progress
 Every session on Box B starts here.
 
 ```bash
-# On Box B (150.136.143.227)
+# On Box B (<box-b-ip>)
 cd ~/crucible
 git pull origin capstone/perf-agent
 uv sync --group load    # installs locust; required for live campaigns
@@ -48,7 +48,7 @@ using the OCI key).
 
 ```bash
 # From your laptop:
-ssh -i "C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-1\ssh-key-2026-09-12.key" ubuntu@129.213.121.108
+ssh -i "<path-to-ssh-key>" ubuntu@<box-a-ip>
 ```
 
 Once on Box A:
@@ -71,7 +71,7 @@ grep "maximum-pool-size" src/main/resources/application.properties
 
 # Commit and push (hook fires automatically)
 git config user.email "raghu@crucible"
-git config user.name "Raghu"
+git config user.name "<your-name>"
 git add src/main/resources/application.properties
 git commit -m "fixture: pool=2 for T1/T3 starved baseline"
 git push origin perftest_sandbox
@@ -106,7 +106,7 @@ Run inside tmux so SSH disconnects don't kill the campaign.
 ```bash
 tmux new-session -s t1
 cd ~/crucible
-export GLC_BASE_URL=https://glc-v5-rraghu214.onrender.com
+export GLC_BASE_URL=https://<your-gateway>.onrender.com
 uv run crucible run \
     --run-id bench-t1d \
     --workspace ~/perf-lab \
@@ -145,7 +145,7 @@ no state change needed.
 # Terminal 1
 tmux new-session -s t3
 cd ~/crucible
-export GLC_BASE_URL=https://glc-v5-rraghu214.onrender.com
+export GLC_BASE_URL=https://<your-gateway>.onrender.com
 uv run crucible run \
     --run-id bench-t3 \
     --workspace ~/perf-lab \
@@ -198,7 +198,7 @@ No approval needed.
 ```bash
 tmux new-session -s t4
 cd ~/crucible
-export GLC_BASE_URL=https://glc-v5-rraghu214.onrender.com
+export GLC_BASE_URL=https://<your-gateway>.onrender.com
 uv run crucible run \
     --run-id bench-t4 \
     --workspace ~/perf-lab \
@@ -261,7 +261,7 @@ Do this once before recording to confirm all UI paths work end-to-end.
 
 **Box A** (SSH from laptop):
 ```bash
-ssh -i "C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-1\ssh-key-2026-09-12.key" ubuntu@129.213.121.108
+ssh -i "<path-to-ssh-key>" ubuntu@<box-a-ip>
 cd ~/perf-lab && ./mvnw spring-boot:run -Dspring-boot.run.profiles=lab &
 # Wait ~45s, then:
 curl -s http://localhost:8080/actuator/health | python3 -c "import json,sys; print(json.load(sys.stdin)['status'])"
@@ -273,7 +273,7 @@ curl -s http://localhost:8080/actuator/metrics/hikaricp.connections.max \
 
 **Box B** (SSH from laptop, separate terminal):
 ```bash
-ssh -i "C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-1\ssh-key-2026-09-12.key" ubuntu@150.136.143.227
+ssh -i "<path-to-ssh-key>" ubuntu@<box-b-ip>
 cd ~/crucible
 git pull origin capstone/perf-agent
 uv sync --group load
@@ -282,21 +282,21 @@ echo "PID: $!"
 curl -s http://127.0.0.1:8113/healthz   # confirm: {"ok":true,...}
 
 # One-time: if GLC_BASE_URL in .env still points to 127.0.0.1:8111, fix it:
-#   sed -i 's|GLC_BASE_URL=.*|GLC_BASE_URL=https://glc-v5-rraghu214.onrender.com|' ~/crucible/.env
+#   sed -i 's|GLC_BASE_URL=.*|GLC_BASE_URL=https://<your-gateway>.onrender.com|' ~/crucible/.env
 ```
 
 **SSH tunnel** (PowerShell on laptop):
 ```powershell
-ssh -i "C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-1\ssh-key-2026-09-12.key" `
+ssh -i "<path-to-ssh-key>" `
     -L 9113:127.0.0.1:8113 `
-    ubuntu@150.136.143.227
+    ubuntu@<box-b-ip>
 ```
 Open `http://localhost:9113/dashboard`.
 
 **Warm GLC v5** (PowerShell on laptop — one call before anything else):
 ```powershell
 $body = '{"model":"gemini-2.5-flash","messages":[{"role":"user","content":"ping"}]}'
-(Invoke-RestMethod -Uri "https://glc-v5-rraghu214.onrender.com/v1/chat" -Method Post -ContentType "application/json" -Body $body).text
+(Invoke-RestMethod -Uri "https://<your-gateway>.onrender.com/v1/chat" -Method Post -ContentType "application/json" -Body $body).text
 # Expected: any response (burns Render cold start)
 ```
 
@@ -361,7 +361,7 @@ re-checking.
 # On Box B, in a second SSH terminal (serve keeps running under nohup).
 # Or launch from the wizard (New Test Run -> Review -> Launch), which runs the same command.
 cd ~/crucible && set -a; . ./.env; set +a
-export GLC_BASE_URL=https://glc-v5-rraghu214.onrender.com
+export GLC_BASE_URL=https://<your-gateway>.onrender.com
 uv run crucible run --run-id dry-run-1 --workspace ~/perf-lab \
     --provider gemini --model gemini-2.5-flash --experiments 2
 ```
@@ -449,7 +449,7 @@ nohup uv run crucible serve > ~/crucible-serve.log 2>&1 &   # SPA demo UI on por
 
 **SSH tunnel from your laptop:**
 ```powershell
-ssh -i "C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-2\ssh-key-2026-09-12.key" -L 9113:127.0.0.1:8113 ubuntu@150.136.143.227
+ssh -i "<path-to-ssh-key>" -L 9113:127.0.0.1:8113 ubuntu@<box-b-ip>
 ```
 
 Open `http://localhost:9113/dashboard`.
@@ -491,7 +491,7 @@ uv run crucible approve <run-id> --experiment <n> --as raghu
 uv run crucible report --run <run-id>
 
 # Run replay benchmark
-export GLC_BASE_URL=https://glc-v5-rraghu214.onrender.com
+export GLC_BASE_URL=https://<your-gateway>.onrender.com
 uv run crucible bench \
     --tasks config/tasks/ \
     --fixtures results/ \

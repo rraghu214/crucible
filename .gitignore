@@ -21,3 +21,7 @@ proofs/out/
 /.crucible/
 /runs/
 CLAUDE_CODE_PROMPTS.md
+.claude/
+# Operator-only details (IPs, key paths, gateway URL) kept out of the public
+# repo; the docs refer to them by placeholder. See docs/local/PRIVATE.md.
+/docs/local/

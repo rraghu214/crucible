@@ -118,18 +118,18 @@ permits the course harness. Everything performance-specific is new and lives in
 ```
   Your laptop (Windows)                 Render (free tier)
   - development, tests                  - glc_v5 model gateway
-  - SSH into both boxes                   https://glc-v5-rraghu214.onrender.com
+  - SSH into both boxes                   https://<your-gateway>.onrender.com
          |                                      ^
          | SSH                                  | HTTPS: diagnosis calls only
          v                                      |
-  Box B  150.136.143.227 / 10.0.0.8  ----------+
+  Box B  <box-b-ip> / 10.0.0.8  ----------+
   - ~/crucible   (this repo; runs campaigns, Locust, the UI)
   - ~/perf-lab   (checkout of the TARGET repo = Crucible's workspace)
          |
          |  1. HTTP load (Locust) + metrics reads (Actuator, Prometheus)
          |  2. git push perftest <sha>:refs/heads/perftest_sandbox  (SSH deploy key)
          v
-  Box A  129.213.121.108 / 10.0.0.79   (the target; pre-prod)
+  Box A  <box-a-ip> / 10.0.0.79   (the target; pre-prod)
   - PerfLab (Spring Boot 3.3.5, Java 21) on :8080, Postgres, Redis, httpbin, Prometheus :9090
   - ~/perflab-deploy.git  bare repo; hooks/post-receive = scripts/box_a_post_receive.sh
   - ~/perflab-work        where the hook checks out and builds

@@ -86,8 +86,8 @@ refinement) because NEC2 returns confident numbers from physically invalid model
 Sim-to-real validation with a NanoVNA would have been unique in the cohort.
 
 **Rejected because Claude fabricated a premise.** In an earlier turn Claude stated
-"you're a ham" as if correcting an earlier mistake. That was invented — the ham
-radio equipment belongs to Raghu's father, and Raghu has no antenna knowledge. The
+"you're a ham" as if correcting an earlier mistake. That was invented — the operator
+has no amateur-radio or antenna background. The
 whole project rested on being able to tell a correct radiation pattern from a
 plausible-but-wrong one. Without that, weeks one and two would have gone on
 learning RF fundamentals instead of building.
@@ -101,10 +101,10 @@ interested in that domain, so there would be no mentorship, and enterprise
 integration would not compete for attention in a room of hardware demos. Noted as
 worth building after October.
 
-**Dev/CI copilot.** Safest and most portfolio-friendly. Dropped because Raghu said
+**Dev/CI copilot.** Safest and most portfolio-friendly. Dropped because the operator said
 it did not interest him.
 
-**Two commercial tools exist in this space**, found by Raghu and named in the
+**Two commercial tools exist in this space**, found by the operator and named in the
 Session 20 pitch: **Akamas** (autonomous tuning, optimisation-focused rather than
 diagnosis-focused) and **Tricentis NeoLoad** (load testing with analysis, not an
 agent that decides what to try next). Neither closes the diagnose → propose →
@@ -257,14 +257,14 @@ value*, never an adjacent one.
 # 5 · Session 20 and what it changed
 
 Pitched 5 September. Delivered, accepted, Route C confirmed. Listed in the session
-notes as: *"Raghu Rammohan — API performance tuning as an agent loop — Fifteen
+notes as: *"[the operator] — API performance tuning as an agent loop — Fifteen
 years of APIs and middleware, running jmeter and locust today."*
 
 **The deciding exchange.** Rohan went back to the benchmark slide and asked how to
 take it *"from T4 to T400"*, then said: **"I think you're going to solve the whole
 thing in four five days."**
 
-That is the scope-too-small objection. Raghu answered on his feet — widen the
+That is the scope-too-small objection. The operator answered on the spot — widen the
 app's tunable surface, more bottleneck avenues, more benchmarks — then showed the
 Part 2 adapter slide. Rohan closed with **"Got it. Professional. If this is a part
 also included, then it's fine."**
@@ -274,11 +274,11 @@ also included, then it's fine."**
 - The adapter layer is **in scope**, not roadmap. It is what made the four weeks
   credible.
 - The benchmark must be materially wider than four tasks. T400 was directional,
-  not a hard target (Raghu's read, and it is the right one).
+  not a hard target (the operator's read, and it is the right one).
 - Session 20 notes state plainly: *"Every test written by your own hand. A test
   written by Claude or Codex scores zero. We can tell."* This is stated under
   Route A marking but tests are the scoring mechanism. **Claude Code may implement;
-  the test assertions and their reasoning must be Raghu's.**
+  the test assertions and their reasoning must be the operator's.**
 
 **Timeline: four weeks from 7 September, fixed, will not be extended.**
 
@@ -435,7 +435,7 @@ Each experiment commits to the sandbox branch. Abort at experiment 11 discards t
 uncommitted change and leaves HEAD at experiment 10. Verified improvements are not
 thrown away. Reverted experiments already reverted themselves.
 
-**This was Claude's error, corrected by Raghu.** The original design implied a full
+**This was Claude's error, corrected by the operator.** The original design implied a full
 reset.
 
 ## 6.16 Pause exists alongside abort
@@ -445,7 +445,7 @@ interrupted by a pause is discarded and re-run**, because the gap would corrupt 
 
 ## 6.17 Duration and repeats belong to the scenario, not the plan
 
-**Also a correction from Raghu.** The budget screen originally showed a
+**Also a correction from the operator.** The budget screen originally showed a
 measurement window of 60 s / 300 s per plan while scenarios declared 30-minute
 durations. Both cannot be true. A plan cannot shorten a scenario without changing
 what is measured.
@@ -456,7 +456,7 @@ variance bounds are unavailable for it.
 
 ## 6.18 Wall clock is the real budget, not money
 
-From working through Raghu's actual `slo.yaml`. Three light scenarios cost four
+From working through the operator's actual `slo.yaml`. Three light scenarios cost four
 cents and take three hours; adding a sustained burst makes it eight hours for the
 same four cents. Nobody picks a plan to save four cents.
 
@@ -617,7 +617,7 @@ CLI rather than a screen.
   where the benchmark grows.
 - **Test case** — one task asked of one fixture. Not every task fits every fixture.
 
-**Fixtures and tasks are separate files.** This was a correction from Raghu:
+**Fixtures and tasks are separate files.** This was a correction from the operator:
 `pool=2` is a property of the target, not of the benchmark. Separating them means
 the same task set runs against a second target application by swapping fixtures.
 
@@ -696,7 +696,7 @@ Change the scorer → same runs, rescored.
    is what made the four weeks credible to Rohan in Session 20. Capability breadth
    is in; UI polish is not. See §10.
 6. **Deployment.** Oracle Always Free or Hetzner. Session notes say EC2/Hetzner;
-   Raghu has twice stated these were indicative. Oracle halved its Always Free
+   The operator has twice stated these were indicative. Oracle halved its Always Free
    Ampere allocation to 2 OCPU / 12 GB on 15 June 2026 without announcement and
    capacity errors are common, so Hetzner CX32 (~₹1,000 for the period) is the
    fallback.
@@ -813,14 +813,14 @@ Boot are the irreducible core.
 
 ## The rule that overrides everything
 
-**Raghu writes the test assertions and their reasoning. Claude Code implements
+**The operator writes the test assertions and their reasoning. Claude Code implements
 against them.** Session 20 notes: *"Every test written by your own hand. A test
 written by Claude or Codex scores zero. We can tell."*
 
 Claude Code may scaffold test files, set up fixtures and run suites. It must not
 decide what "correct" means. A draft assertion catalogue with plain-English
 reasoning exists (`CRUCIBLE_TEST_ASSERTIONS.md`, 34 assertions across 8 groups) —
-it is a **starting point for Raghu to rewrite**, not something to commit as-is.
+it is a **starting point for the operator to rewrite**, not something to commit as-is.
 
 ## Session discipline
 
@@ -849,7 +849,7 @@ it is a **starting point for Raghu to rewrite**, not something to commit as-is.
 
 ## Environment
 
-- Windows primary. `JAVA_HOME=C:\Raghu\Installs\JAVA\jdk-21.0.3`, use `./mvnw`.
+- Windows primary. `JAVA_HOME=<jdk-21-home>`, use `./mvnw`.
 - MacBook 16 GB as the local development lab.
 - glc_v5 on port 8111 — do not restart it from inside Claude Code.
 - Gemini free tier, multiple keys. Add 2–3 s between LLM calls in any loop.
@@ -862,7 +862,7 @@ it is a **starting point for Raghu to rewrite**, not something to commit as-is.
 | File | Why |
 |---|---|
 | `crucible-screens-v2.html` | 19 screens, the design reference |
-| `CRUCIBLE_TEST_ASSERTIONS.md` | 34 draft assertions for Raghu to rewrite |
+| `CRUCIBLE_TEST_ASSERTIONS.md` | 34 draft assertions for the operator to rewrite |
 | `CRUCIBLE_EVALUATION.md` | full evaluation design |
 | `FLOW.md` | capstone and product flow, Mermaid |
 
@@ -881,7 +881,7 @@ Recorded because they shaped every exchange in the conversation that produced th
 - Short and crisp over verbose. **"Don't give me pages together to read."**
 - Flag contradictions rather than silently resolving them.
 - Ask rather than assume.
-- Claims must be grounded in repo inspection or primary sources. Raghu pushes back
+- Claims must be grounded in repo inspection or primary sources. The operator pushes back
   on unverified assertions and expects Claude to distinguish what is known from
   what is inferred.
 - Verify against source, not summaries. Course PDFs and summaries have diverged

@@ -3,7 +3,7 @@ SECURITY HARDENING — Crucible
 Read AGENTS.md, DESIGN.md and EVALUATION.md first.
 
 PRIMARY SOURCES — read in full before anything else, from
-C:\Raghu\MyLearnings\EAG_V3\S*\ :
+<course-notes-folder>\S*\ :
 - S12 (Containers, Sandboxes, and the Adversary's Mindset): notes and
   transcript. The eight security invariants (Section 4) are the spine of this
   work. Sections 6–7 (deployment findings A1–A6, C1–C6; ten code leaks),
@@ -19,8 +19,8 @@ Every control cites its session and section. Where the notes contradict this
 prompt, the notes win — flag it, never resolve it silently.
 
 Surfaces:
-  Crucible: C:\Raghu\MyLearnings\EAG_V3\Capstone\code\crucible (capstone/perf-agent)
-  PerfLab:  C:\Raghu\MyLearnings\EAG_V3\Capstone\code\springboot\perf-lab
+  Crucible: <crucible-checkout> (capstone/perf-agent)
+  PerfLab:  <perf-lab-checkout>
   Gateway:  glc_v5 fork, public on Render
   Box A:    runs perf-lab; builds and starts whatever reaches perftest_sandbox
   Box B:    runs Crucible and Locust
@@ -33,7 +33,7 @@ GROUND RULES
 - Commit locally; do not push. `uv run pytest -q && uv run ruff check .`
   before every commit.
 - Implement test assertions yourself; list every new or changed test file
-  under "Raghu to review".
+  under "the operator to review".
 - You cannot reach Box A, Box B or Render. Anything needing them goes into
   docs/SECURITY_RUNBOOK.md, each step with the check that proves it worked.
 
@@ -95,7 +95,7 @@ Recon (S12 §15 step 4): list routes from /openapi.json and every WebSocket
 route; grep for os.environ, getenv and every secret read to map which
 component holds which secret; read every Dockerfile and compose file.
 
-scripts/recon.sh — Raghu runs it from outside. It checks, against Crucible on
+scripts/recon.sh — the operator runs it from outside. It checks, against Crucible on
 Box B, glc_v5 on Render and perf-lab on Box A, every deployment finding S12
 §6 lists:
   A1 public data plane with no auth
@@ -391,8 +391,8 @@ FINAL SUMMARY
   STRIDE / OWASP / ATLAS mapping
 - Every finding: invariant broken, attacker role, maturity, fix commit
 - Threats with no control yet, and why
-- The two decisions for Raghu, with a recommendation each
-- "Raghu to review": every new or changed test file
+- The two decisions for the operator, with a recommendation each
+- "the operator to review": every new or changed test file
 - docs/SECURITY_RUNBOOK.md: recon, box, container, Render and key-rotation
   steps in order
 - Any contradiction found between the session notes and this prompt

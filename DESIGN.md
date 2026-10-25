@@ -725,7 +725,7 @@ free or near-free tiers per §16 — the only ongoing spend in the whole
 architecture is that one box.
 
 **The model gateway is hosted, and on neither box.** `glc_v5` runs at
-https://glc-v5-rraghu214.onrender.com rather than on a developer's machine or on
+https://<your-gateway>.onrender.com rather than on a developer's machine or on
 Box A/Box B. Three reasons, in order of how much they cost to learn:
 
 - A gateway on a laptop makes every campaign depend on that laptop staying

@@ -23,7 +23,7 @@ Practise it once end to end (Part P) before recording.*
 ### 0.1 Pull latest code (first time after 25 October: follow checklist 9g)
 
 ```bash
-ssh -i "C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-1\ssh-key-2026-09-12.key" ubuntu@150.136.143.227
+ssh -i "<path-to-ssh-key>" ubuntu@<box-b-ip>
 
 cd ~/crucible
 git status --short
@@ -39,7 +39,7 @@ rm -f ~/.crucible/memory.db ~/.crucible/memory.db.faiss ~/.crucible/memory.db.fa
 # Restart the UI server
 pkill -f "crucible serve"
 set -a; . ./.env; set +a
-export GLC_BASE_URL=https://glc-v5-rraghu214.onrender.com
+export GLC_BASE_URL=https://<your-gateway>.onrender.com
 nohup uv run crucible serve > ~/crucible-serve.log 2>&1 &
 curl -s http://127.0.0.1:8113/healthz        # {"ok":true,...}
 ```
@@ -76,7 +76,7 @@ git push origin perftest_sandbox
 ### 0.4 Warm up the GLC v5 gateway
 
 ```bash
-curl -s -X POST https://glc-v5-rraghu214.onrender.com/v1/chat \
+curl -s -X POST https://<your-gateway>.onrender.com/v1/chat \
   -H "Content-Type: application/json" \
   -d '{"model":"gemini-2.5-flash","messages":[{"role":"user","content":"ping"}]}' | head -c 200; echo
 # Burns off the Render cold start (up to 60 s). If it took >30 s, run it again.
@@ -111,9 +111,9 @@ ls ~/crucible/results/                  # manifests: <run>.json, ceiling probes 
 
 ```powershell
 # Windows laptop. Keep this terminal open throughout
-ssh -i "C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-1\ssh-key-2026-09-12.key" `
+ssh -i "<path-to-ssh-key>" `
     -L 9113:127.0.0.1:8113 `
-    ubuntu@150.136.143.227
+    ubuntu@<box-b-ip>
 # Locust runs --headless: there is no Locust web UI and no port 8089 to forward.
 ```
 

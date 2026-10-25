@@ -11,7 +11,7 @@
 > | Polished SPA demo | `uv run crucible serve` | 8113 | `localhost:9113/dashboard` |
 > | NiceGUI production UI | `uv run crucible serve-ui` | 8765 | `localhost:8765` |
 >
-> For the demo recording, use the SPA. Tunnel: `ssh -i "C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-1\ssh-key-2026-09-12.key" -L 9113:127.0.0.1:8113 ubuntu@150.136.143.227`
+> For the demo recording, use the SPA. Tunnel: `ssh -i "<path-to-ssh-key>" -L 9113:127.0.0.1:8113 ubuntu@<box-b-ip>`
 
 This guide tells you what to run, what to show, and what to verify — for both
 the CLI and the UI — covering every persona who might be in the room.
@@ -34,7 +34,7 @@ These steps take ~5–10 minutes and ensure a known state.
 
 ```bash
 # SSH to Box B
-ssh -i "C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-1\ssh-key-2026-09-12.key" ubuntu@150.136.143.227
+ssh -i "<path-to-ssh-key>" ubuntu@<box-b-ip>
 
 cd ~/crucible
 git pull origin capstone/perf-agent
@@ -59,7 +59,7 @@ curl -s http://10.0.0.79:8080/actuator/metrics/hikaricp.connections.max \
 ### 3. Warm up GLC v5
 
 ```bash
-curl -s -X POST https://glc-v5-rraghu214.onrender.com/v1/chat \
+curl -s -X POST https://<your-gateway>.onrender.com/v1/chat \
   -H "Content-Type: application/json" \
   -d '{"model":"gemini-2.5-flash","messages":[{"role":"user","content":"ping"}]}' | head -c 200; echo
 # If it takes >30 s, that is the cold start. Run it once; subsequent calls are fast.
@@ -81,8 +81,8 @@ curl -s http://127.0.0.1:8113/v1/perf/runs/latest/report \
 
 ```powershell
 # Windows laptop — keep this terminal open for the whole session
-ssh -i "C:\Raghu\MyLearnings\EAG_V3\Capstone\infra\OCI\Box-1\ssh-key-2026-09-12.key" `
-    -L 9113:127.0.0.1:8113 ubuntu@150.136.143.227
+ssh -i "<path-to-ssh-key>" `
+    -L 9113:127.0.0.1:8113 ubuntu@<box-b-ip>
 ```
 
 Open `http://localhost:9113/dashboard`. Before recording:
@@ -134,7 +134,7 @@ agent finds it, raises it, re-measures, p99 drops from ~1,200ms to ~58ms.
 **Terminal 1 — campaign:**
 ```bash
 cd ~/crucible && set -a; . ./.env; set +a
-export GLC_BASE_URL=https://glc-v5-rraghu214.onrender.com
+export GLC_BASE_URL=https://<your-gateway>.onrender.com
 nohup uv run crucible run \
     --run-id demo-t1 \
     --workspace ~/perf-lab \
@@ -197,7 +197,7 @@ Key numbers to show:
 
 ```bash
 cd ~/crucible && set -a; . ./.env; set +a
-export GLC_BASE_URL=https://glc-v5-rraghu214.onrender.com
+export GLC_BASE_URL=https://<your-gateway>.onrender.com
 nohup uv run crucible run \
     --run-id demo-t3 \
     --workspace ~/perf-lab \
@@ -225,7 +225,7 @@ uv run crucible status demo-t3
 
 ```bash
 cd ~/crucible && set -a; . ./.env; set +a
-export GLC_BASE_URL=https://glc-v5-rraghu214.onrender.com
+export GLC_BASE_URL=https://<your-gateway>.onrender.com
 nohup uv run crucible run \
     --run-id demo-t4 \
     --workspace ~/perf-lab \
@@ -243,7 +243,7 @@ and stops with no proposal. Expected result: `HONEST_FAILURE` or abstention.
 
 ```bash
 cd ~/crucible
-export GLC_BASE_URL=https://glc-v5-rraghu214.onrender.com
+export GLC_BASE_URL=https://<your-gateway>.onrender.com
 uv run crucible bench \
     --tasks config/tasks/ \
     --fixtures results/ \

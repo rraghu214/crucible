@@ -241,7 +241,7 @@ AD-hopping needed** — worth noting in case Box B ever needs a retry.
       one — confirmed this skipped Box A's routing rescue entirely (public IP
       came up clean, no quick action needed). Reused the same SSH key
       (upload, not regenerate). Instance name: `instance-20260912-2245`.
-      Public IP: `150.136.143.227`. Private IP: `10.0.0.8`. AD-2, FD-3.
+      Public IP: `<box-b-ip>`. Private IP: `10.0.0.8`. AD-2, FD-3.
       **Status: Running, SSH confirmed.**
 - [x] **Note the private IPs of both instances.** Box A: `10.0.0.79`. Box B:
       `10.0.0.8`. This is the pair §8's `8080` rule and §9's acceptance
@@ -671,11 +671,11 @@ section 7 onward remains; re-running K1 on the cloud box is the critical
 path for week 2.
 
 Box A (target — PerfLab, Postgres, Redis, httpbin):
-  ssh -i <path-to>/ssh-key.key ubuntu@129.213.121.108
+  ssh -i <path-to>/ssh-key.key ubuntu@<box-a-ip>
   Private IP: 10.0.0.79 — repo already cloned, JDK 21 and Docker installed.
 
 Box B (Crucible + Locust):
-  ssh -i <path-to>/ssh-key.key ubuntu@150.136.143.227
+  ssh -i <path-to>/ssh-key.key ubuntu@<box-b-ip>
   Private IP: 10.0.0.8 — repo already cloned, git/python3-pip/uv installed.
 
 Start at section 7 on Box A: bring up the docker-compose stack (Postgres,

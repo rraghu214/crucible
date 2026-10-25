@@ -57,7 +57,7 @@ Before every commit: `uv run pytest -q` and `uv run ruff check .`
 Five task classes (`EVALUATION.md`), each a behaviour rather than a fixture.
 Task set v2 covers all five classes: 18 tasks (T1–T17 + T3b), 20 fixtures across
 9 cause families. Replay runs against captured snapshots; live campaigns run on
-Box B under Raghu's approval.
+Box B under the operator's approval.
 
 | Class | In plain English |
 |---|---|

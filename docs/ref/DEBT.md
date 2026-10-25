@@ -51,7 +51,7 @@ work. Fix only when touching the file for another reason.
   applications; what Crucible refuses is to present the result as verified.
 
 - **The model gateway is public and unauthenticated.** glc_v5 is hosted at
-  https://glc-v5-rraghu214.onrender.com and `/v1/chat` accepts requests without a
+  https://<your-gateway>.onrender.com and `/v1/chat` accepts requests without a
   token; anyone who learns the URL can spend the Gemini free-tier quota.
 
   **Crucible side fixed 4 Oct 2026.** `GatewayClient` now reads `CRUCIBLE_GATEWAY_TOKEN`
