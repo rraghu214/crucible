@@ -422,6 +422,10 @@ class GitPushDeployer:
         return result
 
 
+#: How Spring Boot's /actuator/env reports a value it will not show.
+_MASKED = re.compile(r"\*+")
+
+
 def verify_properties_via_env(
     changes: "Any",
     base_url: str,
@@ -463,6 +467,12 @@ def verify_properties_via_env(
         actual = str(prop_block.get("value", "")) if isinstance(prop_block, dict) else ""
         if not actual:
             read_errors.append(f"{prop}: not in /actuator/env response")
+        elif _MASKED.fullmatch(actual):
+            # Spring Boot 3 masks every /env value unless the target opts in. A
+            # masked value says nothing about whether the change took, so it is
+            # "could not read", never "mismatch": reporting a mismatch would tell
+            # the reader a verified deploy failed.
+            read_errors.append(f"{prop}: the target masks this value in /actuator/env")
         elif actual != expected:
             mismatches.append(f"{prop}: expected {expected!r}, got {actual!r}")
     if mismatches:

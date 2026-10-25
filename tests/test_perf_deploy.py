@@ -564,6 +564,32 @@ class TestVerifyPropertiesViaEnv:
         assert ok is False
         assert "mismatch" in detail
 
+    def test_masked_value_is_unavailable_not_a_mismatch(self):
+        """Spring Boot 3 masks /env values by default ("******").
+
+        A masked value proves nothing either way, so the read-back must say it
+        could not read the property. Reporting "mismatch" would tell a reader
+        that a deploy the commit check had verified did not take effect.
+        """
+        from dataclasses import dataclass
+
+        @dataclass
+        class _Change:
+            prop: str
+            value: object
+
+        srv = _fake_actuator_env(18093, {"spring.datasource.hikari.maximum-pool-size": "******"})
+        try:
+            ok, detail = verify_properties_via_env(
+                [_Change("spring.datasource.hikari.maximum-pool-size", 20)],
+                "http://127.0.0.1:18093",
+            )
+        finally:
+            srv.shutdown()
+        assert ok is False
+        assert "unavailable" in detail and "masks" in detail
+        assert "mismatch" not in detail
+
     def test_unreachable_endpoint_returns_false(self):
         from dataclasses import dataclass
 
