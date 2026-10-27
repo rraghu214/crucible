@@ -1694,9 +1694,14 @@ function go(p){
   }
 }
 
-// Init: hide everything, then show library (workspace home)
-Object.values(PAGES).forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
-go('library');
+// Init: hide everything, then show library (workspace home). Deferred until the
+// whole script has run: go() reaches `let` state declared further down
+// (_activePollTimer, chatRunId, ...), and touching it before its declaration
+// throws, which aborted the rest of this script and left every screen static.
+document.addEventListener('DOMContentLoaded',()=>{
+  Object.values(PAGES).forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
+  go('library');
+});
 
 /* ── Wizard ──────────────────────────────────────────────────────────── */
 const WZ_MSGS=[
