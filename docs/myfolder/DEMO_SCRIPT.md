@@ -63,15 +63,21 @@ curl -s http://10.0.0.79:8080/actuator/metrics/hikaricp.connections.max \
 
 ### 0.3 Reset Box A to pool=2 (only if needed)
 
+On **Box B** (`hostname` = instance-20260912-2245), never on Box A. Deploys go to
+the `perftest` remote (Box A's `~/perflab-deploy.git`, SSH deploy key), **not**
+`origin` (GitHub over HTTPS, which asks for a password and deploys nothing).
+
 ```bash
-cd ~/perf-lab
-git checkout perftest_sandbox
-nano src/main/resources/application.properties
-# set: spring.datasource.hikari.maximum-pool-size=2
-git add src/main/resources/application.properties
-git commit -m "reset: pool=2 for demo baseline"
-git push origin perftest_sandbox
-# Wait ~90 s for the post-receive hook, then re-check 0.2
+cd ~/perf-lab && git checkout -q perftest_sandbox && git fetch -q perftest \
+  && git merge -q --ff-only perftest/perftest_sandbox \
+  && sed -i 's/^spring.datasource.hikari.maximum-pool-size=.*/spring.datasource.hikari.maximum-pool-size=2/' src/main/resources/application.properties \
+  && git diff --stat \
+  && git commit -qm "reset: pool=2 for demo baseline" -- src/main/resources/application.properties \
+  && git push perftest perftest_sandbox
+# Chained with &&, so it stops at the first failure. The hook's output ends with
+# "health UP" and "deploy verified: /api/version reports <sha>"; the
+# "connection refused" lines before that are it polling during the restart.
+# Then re-check 0.2.
 ```
 
 ### 0.4 Warm up the GLC v5 gateway
