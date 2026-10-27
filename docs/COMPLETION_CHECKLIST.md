@@ -360,8 +360,7 @@ re-checking.
 ```bash
 # On Box B, in a second SSH terminal (serve keeps running under nohup).
 # Or launch from the wizard (New Test Run -> Review -> Launch), which runs the same command.
-cd ~/crucible && set -a; . ./.env; set +a
-export GLC_BASE_URL=https://<your-gateway>.onrender.com
+cd ~/crucible && set -a; . ./.env; set +a   # hand-typed CLI: load .env (it holds GLC_BASE_URL)
 uv run crucible run --run-id dry-run-1 --workspace ~/perf-lab \
     --provider gemini --model gemini-2.5-flash --experiments 2
 ```

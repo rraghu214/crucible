@@ -133,8 +133,7 @@ agent finds it, raises it, re-measures, p99 drops from ~1,200ms to ~58ms.
 
 **Terminal 1 — campaign:**
 ```bash
-cd ~/crucible && set -a; . ./.env; set +a
-export GLC_BASE_URL=https://<your-gateway>.onrender.com
+cd ~/crucible && set -a; . ./.env; set +a   # hand-typed CLI: load .env (it holds GLC_BASE_URL)
 nohup uv run crucible run \
     --run-id demo-t1 \
     --workspace ~/perf-lab \
@@ -196,8 +195,7 @@ Key numbers to show:
 **Prerequisite:** pool=2 still on Box A.
 
 ```bash
-cd ~/crucible && set -a; . ./.env; set +a
-export GLC_BASE_URL=https://<your-gateway>.onrender.com
+cd ~/crucible && set -a; . ./.env; set +a   # hand-typed CLI: load .env (it holds GLC_BASE_URL)
 nohup uv run crucible run \
     --run-id demo-t3 \
     --workspace ~/perf-lab \
@@ -224,8 +222,7 @@ uv run crucible status demo-t3
 **Prerequisite:** pool=20 on Box A (reset with §Reset Box A, set value to 20).
 
 ```bash
-cd ~/crucible && set -a; . ./.env; set +a
-export GLC_BASE_URL=https://<your-gateway>.onrender.com
+cd ~/crucible && set -a; . ./.env; set +a   # hand-typed CLI: load .env (it holds GLC_BASE_URL)
 nohup uv run crucible run \
     --run-id demo-t4 \
     --workspace ~/perf-lab \

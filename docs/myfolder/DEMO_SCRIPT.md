@@ -37,10 +37,11 @@ rm -f ~/.crucible/memory.faiss ~/.crucible/memory.faiss.ids.json
 rm -f ~/.crucible/memory.db ~/.crucible/memory.db.faiss ~/.crucible/memory.db.faiss.ids.json
 
 # Restart the UI server
-pkill -f "crucible serve"
-set -a; . ./.env; set +a
-export GLC_BASE_URL=https://<your-gateway>.onrender.com
+# serve loads ~/crucible/.env itself (crucible/main.py), so no sourcing here.
+# Only commands typed by hand (crucible run/resume/report) need: set -a; . ./.env; set +a
+pkill -f "crucible serve"; sleep 2
 nohup uv run crucible serve > ~/crucible-serve.log 2>&1 &
+sleep 8
 curl -s http://127.0.0.1:8113/healthz        # {"ok":true,...}
 ```
 
