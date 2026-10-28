@@ -1,7 +1,7 @@
 """R1 (outsider): the A2A JSON-RPC transport authenticates only when keys are
 configured; with none set it serves anyone.
 
-DRAFTED by Claude Code, 25 October 2026. NOT YET REVIEWED by the operator.
+Drafted by Claude Code, 25 October 2026; reviewed and approved by the operator, 28 October 2026.
 Finding: docs/THREAT_MODEL.md §6.A A1 (the /a2a fail-open clause).
 
 Context: crucible/core/a2a/tests/test_hardening.py already proves the ARMED

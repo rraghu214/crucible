@@ -1,7 +1,7 @@
 """R2 (text-only attacker): the chat reply sanitiser neutralises script in model
 output before it reaches the operator's browser (where the control token lives).
 
-DRAFTED by Claude Code, 25 October 2026. NOT YET REVIEWED by the operator.
+Drafted by Claude Code, 25 October 2026; reviewed and approved by the operator, 28 October 2026.
 Finding: docs/THREAT_MODEL.md §6.C H8 -- RE-VERIFIED 25 Oct and found PARTLY
 MITIGATED since the doc was written. This file pins the control that now exists;
 it is a REGRESSION GUARD, not a live exploit.

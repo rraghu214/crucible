@@ -1,6 +1,6 @@
 """R1 (outsider): information disclosure without a credential.
 
-DRAFTED by Claude Code, 25 October 2026. NOT YET REVIEWED by the operator.
+Drafted by Claude Code, 25 October 2026; reviewed and approved by the operator, 28 October 2026.
 Finding: docs/THREAT_MODEL.md §6.A A2.
 
 These assert that the OpenAPI surface and the on-disk SLA are readable with no

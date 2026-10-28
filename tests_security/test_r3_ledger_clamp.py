@@ -1,7 +1,7 @@
 """R3 (compromised gateway / poisoned usage numbers): the cost ledger cannot be
 driven DOWN by negative token counts.
 
-DRAFTED by Claude Code, 25 October 2026. NOT YET REVIEWED by the operator.
+Drafted by Claude Code, 25 October 2026; reviewed and approved by the operator, 28 October 2026.
 Finding: docs/THREAT_MODEL.md §6.B leak 10 -- RE-VERIFIED 25 Oct and found
 MITIGATED, so this is a REGRESSION GUARD of the good behaviour, not a
 reproduction of a live exploit.

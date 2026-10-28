@@ -1,6 +1,6 @@
 """Fixtures for the security reproduction suite.
 
-DRAFTED by Claude Code, 25 October 2026. NOT YET REVIEWED by the operator.
+Drafted by Claude Code, 25 October 2026; reviewed and approved by the operator, 28 October 2026.
 
 Why this lives in ``tests_security/`` and not ``tests/``: ``pyproject.toml`` sets
 ``testpaths = ["tests", "crucible/core"]``, so a plain ``uv run pytest -q`` does
