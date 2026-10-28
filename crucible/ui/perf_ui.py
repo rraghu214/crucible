@@ -1903,7 +1903,7 @@ def _chat_facts(ctx: PerfContext) -> str:
     return "\n".join(lines)
 
 
-@router.post("/v1/perf/chat")
+@router.post("/v1/perf/chat", dependencies=[Depends(require_control)])
 async def perf_chat(body: ChatBody, request: Request):
     """Chat grounded in the configuration on disk and the uploaded knowledge documents."""
     from ..gateway import GatewayClient

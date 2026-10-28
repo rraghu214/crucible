@@ -181,7 +181,7 @@ class TestTheChatIsGrounded:
         return calls, reply
 
     def _chat(self, client, message="which pool does /api/db use"):
-        return client.post("/v1/perf/chat", json={"message": message, "screen": "new-test"})
+        return client.post("/v1/perf/chat", json={"message": message, "screen": "new-test"}, headers=AUTH)
 
     def test_the_prompt_carries_the_matching_excerpt_and_the_reply_cites_it(self, tmp_path, gateway):
         calls, _ = gateway

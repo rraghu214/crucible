@@ -1,45 +1,31 @@
-"""R1 (outsider, no credentials): state-changing / money-spending routes that
-carry no control-token dependency.
+"""R1 (outsider, no credentials): state-changing / money-spending routes must
+carry a control-token dependency.
 
-DRAFTED by Claude Code, 25 October 2026. NOT YET REVIEWED by the operator.
-Finding: docs/THREAT_MODEL.md §6.A A1 and §6.B leak 9.
+Drafted by Claude Code, 25 October 2026; reviewed and approved by the operator,
+28 October 2026.  Finding: docs/THREAT_MODEL.md §6.A A1 and §6.B leak 9.
 
-The finding is demonstrated at the ROUTING layer: the route's FastAPI dependency
-graph contains no ``require_control``/``require_completion``. This is exact,
-deterministic, and -- importantly under the operator's constraints -- makes NO
-network call. (Driving these routes live would trigger an embedding/gateway call
-on the fact-write and chat paths; the route-layer assertion avoids that while
-proving the same thing: nothing on the path demands a credential.)
+The fix (28 October 2026): ``require_control`` added to /v1/action,
+/v1/perf/chat, /v1/agent/facts and /v1/agent/memory/search.  All four routes
+moved from the original UNAUTH_WRITE list to GUARDED below.
 
-When a fix adds ``Depends(require_control)``, the route moves from UNAUTH_WRITE
-to GUARDED and this test's parametrization flips -- mirroring
-tests/test_control_plane_auth.py, whose "name the control" is ``require_control``.
-
-Review questions for the operator:
-  - Should each UNAUTH_WRITE route carry the control token? `/v1/perf/chat`
-    spends gateway budget; `/v1/agent/facts` writes memory as Principal(
-    "gateway"); `/v1/action` approves a parked node and resumes the run;
-    `/v1/agent/memory/search` lets the caller name any tenant (INV-5).
-  - For GUARDED, this pins the good state so a later edit that drops the guard
-    is caught.
+The assertion is at the ROUTING layer (FastAPI dependency graph), not live HTTP,
+so it makes no network call and cannot accidentally trigger a gateway/embedder
+call.  A later edit that silently drops the guard fails this test -- the same
+pattern as tests/test_control_plane_auth.py.
 """
 from __future__ import annotations
 
 import pytest
 
-# Routes that change state or spend money and (route dump, 25 Oct 2026) have NO
-# auth dependency today.
-UNAUTH_WRITE = [
+# Routes that DO carry the control token -- pinned so a regression is caught.
+# /v1/action, /v1/perf/chat, /v1/agent/facts, /v1/agent/memory/search were
+# UNAUTH on 25 Oct and guarded on 28 Oct (commit that adds this note).
+# /v1/agent/documents was guarded earlier (knowledge-store merge).
+GUARDED = [
     ("POST", "/v1/action"),
     ("POST", "/v1/perf/chat"),
     ("POST", "/v1/agent/facts"),
     ("POST", "/v1/agent/memory/search"),
-]
-
-# Routes that DO carry the control token -- pinned so a regression is caught.
-# POST /v1/agent/documents was UNAUTH when THREAT_MODEL.md was written (22 Oct)
-# and has since been guarded (knowledge-store merge): a STATUS CHANGE.
-GUARDED = [
     ("POST", "/v1/agent/documents"),
     ("POST", "/v1/perf/runs/{run_id}/experiments/{experiment}/decision"),
     ("POST", "/v1/perf/wizard/save"),
@@ -79,20 +65,10 @@ def _find_route(method: str, path: str):
     return matches[0]
 
 
-@pytest.mark.parametrize(("method", "path"), UNAUTH_WRITE)
-def test_state_changing_route_has_no_auth_dependency(method, path):
-    """DEMONSTRATES: the route serves without a credential (no auth dependency)."""
-    deps = _auth_dependencies(_find_route(method, path))
-    assert not deps, (
-        f"{method} {path} now carries {deps}; if it was intentionally guarded, "
-        "move it to GUARDED and update A1."
-    )
-
-
 @pytest.mark.parametrize(("method", "path"), GUARDED)
 def test_guarded_route_keeps_its_control_dependency(method, path):
-    """REGRESSION GUARD: these must keep require_control (documents is the one
-    that changed from unauth since the threat model was written)."""
+    """REGRESSION GUARD: every listed route must keep require_control.
+    A later edit that silently drops the guard fails here."""
     deps = _auth_dependencies(_find_route(method, path))
     assert "require_control" in deps, (
         f"{method} {path} lost its control-token guard -- this is a regression."

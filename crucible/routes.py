@@ -339,7 +339,7 @@ async def complete_waiting_job(body: CompletionBody, request: Request):
             "run": result, "channel_delivery": channel_delivery}
 
 
-@router.post("/facts")
+@router.post("/facts", dependencies=[Depends(require_control)])
 async def fact(body: FactBody, request: Request):
     return request.app.state.runtime.remember_fact(text=body.text, scope=body.scope(), source_uri=body.source_uri,
         source_author=body.source_author, principal=Principal("gateway", "gateway"), supersedes_id=body.supersedes_id)
@@ -380,7 +380,7 @@ async def document_status(upload_id: str, request: Request):
     return found
 
 
-@router.post("/memory/search")
+@router.post("/memory/search", dependencies=[Depends(require_control)])
 async def memory_search(body: SearchBody, request: Request):
     hits = await request.app.state.runtime.recall_evidence(body.query, body.scope(),
                                                            kinds=body.kinds, limit=body.limit)

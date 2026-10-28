@@ -37,6 +37,7 @@ from crucible.ui.perf_ui import _EVIDENCE_CHARS, PerfContext
 
 REPO = Path(__file__).resolve().parents[1]
 POOL = "spring.datasource.hikari.maximum-pool-size"
+TOKEN = "test-chat-token"
 DIFF = f"--- a/application.properties\n+++ b/application.properties\n@@ -1 +1 @@\n-{POOL}=2\n+{POOL}=20\n"
 
 
@@ -113,6 +114,11 @@ def _client(tmp_path, *runs: dict) -> TestClient:
     return TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def _token(monkeypatch):
+    monkeypatch.setenv("CRUCIBLE_CONTROL_TOKEN", TOKEN)
+
+
 @pytest.fixture
 def calls(monkeypatch):
     seen: list[dict] = []
@@ -126,7 +132,8 @@ def calls(monkeypatch):
 
 
 def _ask(client, message="why was that change kept?", **extra):
-    response = client.post("/v1/perf/chat", json={"message": message, "screen": "history", **extra})
+    response = client.post("/v1/perf/chat", json={"message": message, "screen": "history", **extra},
+                           headers={"Authorization": f"Bearer {TOKEN}"})
     assert response.status_code == 200, response.text
 
 

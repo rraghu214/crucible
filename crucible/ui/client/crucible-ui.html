@@ -2524,7 +2524,7 @@ async function _sendChatLive(text){
   try{
     const res=await fetch('/v1/perf/chat',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:getAuthHeaders(),
       body:JSON.stringify({message:text, screen:currentPage, run_id:(typeof chatRunId==='string'?chatRunId:'')})
     });
     t.remove();
