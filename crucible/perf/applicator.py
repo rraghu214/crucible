@@ -549,7 +549,9 @@ class Applicator:
         path = self.config_path
         text = path.read_text(encoding="utf-8")
         for change in changes:
-            text = set_property(text, change.prop, change.value)
+            bounds = self.profile.allowed_properties.get(change.prop)
+            coerced = bounds.coerce(change.value) if bounds else change.value
+            text = set_property(text, change.prop, coerced)
         path.write_text(text, encoding="utf-8")
 
     def preview(self, proposal: Proposal) -> dict[str, Any]:
@@ -573,7 +575,9 @@ class Applicator:
                                         "diff could not be computed; the property and value above are exact"}
         edited = original
         for change in proposal.changes:
-            edited = set_property(edited, change.prop, change.value)
+            bounds = self.profile.allowed_properties.get(change.prop)
+            coerced = bounds.coerce(change.value) if bounds else change.value
+            edited = set_property(edited, change.prop, coerced)
         import difflib  # noqa: PLC0415
 
         diff = "".join(difflib.unified_diff(original.splitlines(keepends=True), edited.splitlines(keepends=True),

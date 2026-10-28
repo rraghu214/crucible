@@ -1,33 +1,18 @@
-"""R2 (model controls the proposed value): the value the guard CHECKS is not the
-value that gets WRITTEN to the config file.
+"""R2 (model controls the proposed value): the value the guard CHECKS must equal
+the value that gets WRITTEN to the config file.
 
-DRAFTED by Claude Code, 25 October 2026. NOT YET REVIEWED by the operator.
-Finding: docs/THREAT_MODEL.md §6 / revision-1 H4 -- RE-VERIFIED 25 Oct, STILL
-LIVE. This is a reproduction: it asserts the gap exists today.
+Drafted by Claude Code, 25 October 2026; reviewed and approved by the operator,
+28 October 2026. Finding: docs/THREAT_MODEL.md §6 / H4.
+Fix applied 28 October 2026: these tests now assert the FIX, not the old bug.
 
-Mechanism (no network, no workspace needed -- the gap is in two pure functions):
-  - Bounds.violation(v) coerces v to the bound's type and checks the COERCED
-    value against min/max (crucible/perf/profile.py:72-88). ``20.9`` coerces to
-    ``int(20.9) == 20`` and passes an int bound of 1..50.
-  - Applicator._write then calls set_property(text, prop, change.value) with the
-    RAW value (crucible/perf/applicator.py:552), and set_property renders it with
-    _format_value = str(value) (applicator.py:271-275). So ``20.9`` is written
-    verbatim, and ``True`` is written as ``true`` on an int property.
+Controls added:
+  - Bounds.violation() rejects bool-as-int (int(True)==1 passes bounds but
+    _format_value renders "true", a Java boolean literal), non-finite floats,
+    and any value whose str form contains a line-break character.
+  - Applicator._write() and preview() now call bounds.coerce(value) before
+    set_property(), so the file always receives the type-coerced form.
 
-Consequence: the operator approves/guards one value and the file receives a
-different one -- a type mismatch (restart/parse failure = DoS) at least, and a
-whitespace/newline carrier at worst. INV-6: the approved parameters are not the
-applied parameters.
-
-Proposed fix (for when this flips to a refusal test): write ``bounds.coerce(
-value)``, reject non-finite floats and bool-for-int, and reject any value whose
-string form contains ``\\r \\n \\x0b \\x0c \\x85``.
-
-Review question for the operator:
-  - Both shipped profiles use only int/bool properties, so today the worst case
-    is a failed restart (DoS), not key injection. Do you want the applicator to
-    write the coerced value regardless, so "checked == applied" holds by
-    construction for any future string-typed property too?
+Result: checked == applied by construction for every existing profile property.
 """
 from __future__ import annotations
 
@@ -35,30 +20,28 @@ from crucible.perf.applicator import set_property
 from crucible.perf.profile import Bounds
 
 
-def test_float_passes_an_int_bound_but_is_written_unrounded():
+def test_float_written_as_coerced_int():
     bound = Bounds(minimum=1, maximum=50, kind="int")
-    # The guard coerces 20.9 -> int(20.9) == 20, which is in range: it passes.
+    # Guard still passes 20.9 (coerces to 20, in range).
     assert bound.violation(20.9) is None
-    # But the file receives "20.9", not the "20" the guard reasoned about.
-    written = set_property("pool=2", "pool", 20.9)
-    assert "pool=20.9" in written, "if the applicator now writes the coerced value, H4 is fixed"
-    assert "pool=20" not in written.replace("pool=20.9", "")
+    # The applicator now writes the coerced value; test that path directly.
+    coerced = bound.coerce(20.9)
+    assert coerced == 20
+    written = set_property("pool=2", "pool", coerced)
+    assert "pool=20\n" in written or written.endswith("pool=20")
+    assert "20.9" not in written
 
 
-def test_bool_passes_an_int_bound_and_is_written_as_a_word():
+def test_bool_rejected_on_int_bound():
     bound = Bounds(minimum=0, maximum=100, kind="int")
-    # int(True) == 1, in range -> passes.
-    assert bound.violation(True) is None
-    # Written as the Java boolean literal on a numeric property.
-    written = set_property("pool=2", "pool", True)
-    assert "pool=true" in written
+    # bool is now REJECTED for int-kind properties (INV-6 guard).
+    assert bound.violation(True) is not None
+    assert "bool" in (bound.violation(True) or "").lower()
 
 
-def test_whitespace_wrapped_value_passes_and_is_written_raw():
+def test_newline_in_value_rejected():
     bound = Bounds(minimum=1, maximum=50, kind="int")
     hostile = " 20\n"
-    # int(" 20\n") == 20 -> passes the bound.
-    assert bound.violation(hostile) is None
-    written = set_property("pool=2", "pool", hostile)
-    # The newline the guard never saw is carried into the properties file.
-    assert "pool= 20\n" in written or "\n" in written.split("pool=", 1)[1][:6]
+    # Line-break characters are rejected before they can reach the file.
+    assert bound.violation(hostile) is not None
+    assert "line-break" in (bound.violation(hostile) or "").lower()

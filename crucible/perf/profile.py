@@ -15,7 +15,9 @@ nothing else -- it is never consulted by :meth:`TargetProfile.check_change`.
 
 from __future__ import annotations
 
+import math
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -24,6 +26,8 @@ import yaml
 
 from ..core.memory.models import MemoryKind
 from .deploy import DeployTarget
+
+_LINE_BREAKS = re.compile(r"[\r\n\x0b\x0c\x85]")
 
 #: ``config/profiles/`` as shipped next to the package.
 DEFAULT_PROFILE_DIR = Path(__file__).resolve().parents[2] / "config" / "profiles"
@@ -70,10 +74,21 @@ class Bounds:
 
     def violation(self, value: Any) -> str | None:
         """Why ``value`` is out of bounds, or ``None`` when it is acceptable."""
+        # Line-break characters would silently inject a new line into a
+        # .properties file when written verbatim (H4 / INV-6).
+        if _LINE_BREAKS.search(str(value)):
+            return f"{value!r} contains a line-break character"
+        # bool is a subclass of int in Python; int(True)==1 passes numeric bounds
+        # but _format_value renders it as "true", a Java boolean literal.
+        if self.kind == "int" and isinstance(value, bool):
+            return f"{value!r} is a bool but this property expects an int"
         try:
             parsed = self.coerce(value)
         except (TypeError, ValueError):
             return f"{value!r} is not a valid {self.kind}"
+        # NaN and infinity pass float() but cannot be written as valid numbers.
+        if self.kind == "float" and not math.isfinite(parsed):
+            return f"{value!r} is not a finite float"
         if self.allowed_values is not None and parsed not in self.allowed_values:
             return f"{parsed!r} is not one of {self.allowed_values}"
         if self.kind in {"int", "float"}:
