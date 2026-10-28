@@ -1,10 +1,11 @@
 # THREAT_MODEL.md — Crucible
 
-Status: **revision 3 (25 October 2026).** The submission-facing summary is `docs/SECURITY.md`; this file is the working analysis behind it.
+Status: **revision 3 (25 October 2026); status markers added 27 October.** The submission-facing summary is `docs/SECURITY.md`; this file is the working analysis behind it.
 
 - **Revision 1 (22 October):** a static read of `capstone/perf-agent`.
 - **Revision 2:** every finding re-checked against code at `92d6ccf` plus the operator's uncommitted working-tree changes. Also adds the new code since 22 October, the first scanner run, and new findings N1–N8.
 - **Revision 3:** read-only checks of the live boxes, with the operator's permission (§14), the operator's scope decisions (§12), and the fixes made today (§15).
+- **27 October update:** explicit FIXED / PARTIAL / ACCEPTED / OPEN status markers added to §6 (original findings) and §7 (N-series). No new findings; no code changes.
 - **Reproduction:** carried out in-process for the R1 surface (see §10). Findings that a test now runs are marked **demonstrated**; the rest stay **feasible**. Three throttled probes hit the hosted gateway only.
 - **Fixes:** the masked read-back (finding R1 in §14), Box B file permissions, and the personal details in the public repo were fixed today (§15). Everything else is a decision recorded in §12 or backlog in `docs/SECURITY.md`. The reproduction tests in `tests_security/` assert the *current* behaviour and are drafts for operator review (AGENTS.md).
 
@@ -151,22 +152,47 @@ Plus large changes to `campaign.py`, `commands.py`, `perf_ui.py` and `crucible-u
 
 ## 6 · Findings (existing, from revision 1)
 
-Severity / invariant / weakest role. See revision-1 history for full "proposed change" text; the deploy path (**H1 Box A builds any tree, H2 push sends all of HEAD, H3 approval TOCTOU/no diff hash, H4 checked≠written value, H7 reverts not deployed**), **leak 2 audit log**, **leak 3 forgeable approvals**, **A3/C1 egress & SSRF**, **A6 approval race**, **H6 coding guard**, **leak 7 git-config execution**, **A2 docs/info disclosure**, **C4 error text**, **C5 rate limits** are all **unchanged and still open** (§0). The A1 unauth routes minus `/documents` remain open and are now **demonstrated** (§10).
+Severity / invariant / weakest role. Status key: **FIXED** = change made (commit in §15) · **PARTIAL** = partially addressed, remainder open · **ACCEPTED** = deliberately deferred (§12) · **OPEN** = unchanged and still open. For full "proposed change" text see revision-1 history.
+
+| Finding | Status | Note |
+|---|---|---|
+| **M1** Box IPs / key paths / personal details in public repo | **FIXED `92506b6`** | Moved to gitignored `docs/local/PRIVATE.md` |
+| **M2** Deploy read-back exposes raw env values | **FIXED `10ccfdf`** | Masked value now reported "unavailable", not "mismatch" |
+| perf-lab `/actuator/env` exposes all property values | **FIXED perf-lab `8af82d6`** | Only Crucible's 12 tunables visible; everything else masked |
+| Box B `.env` world-readable (664) | **FIXED** (box change, no commit) | Now 600 |
+| **H8** XSS → token theft (chat reply sink) | **PARTIAL** | `_safe_reply` fixes the chat sink; approval-gate / history innerHTML sinks open (N3) |
+| **H5** SLA/profile tampering undetected | **PARTIAL** | `fingerprint_files` detects change; attribution gap remains (N2) |
+| **A1** `/documents` unauthenticated | **PARTIAL FIXED** | `/documents` now requires `require_control`; `/v1/action`, `/v1/perf/chat`, `/facts`, `/memory/search`, `/a2a` still open (demonstrated §10) |
+| **A1/A2/C4/C5/C6/N4** remaining unauth + info-disclosure routes | **ACCEPTED** (loopback-only deployment, §12) | Unreachable from outside; add auth before any public exposure |
+| **H1–H4, H7** Deploy path (Box A builds any tree, HEAD push, no diff hash, checked≠written, reverts not deployed) | **OPEN** | See §9 chain 3; highest-priority code fix |
+| **leak 2** Audit log / manifests editable | **OPEN** | R4 only in current deployment |
+| **leak 3** Forgeable approvals (no nonce/expiry) | **OPEN** | R4 only |
+| **A3/C1** Egress and SSRF (model-chosen URLs, no allowlist) | **OPEN** | See §9 chain 2 |
+| **A4/leak 1** Shared process environment; subprocesses inherit all tokens | **OPEN** | All subprocesses |
+| **A5** CI actions pinned to tags; no bandit/pip-audit/semgrep in CI | **OPEN** | Supply-chain hygiene |
+| **A6** Approval check-then-write race | **OPEN** | R4 only |
+| **H6** Coding guard (path traversal, env-var override, unguarded copy) | **OPEN** | Coding-agent path only |
+| **leak 7** Git config/hooks executed by host git calls inside workspace | **OPEN** | Coding-agent path only |
+| **C4** Verbose error text returned to clients | **OPEN** | Loopback-only mitigates; fix before any public exposure |
+| **C5** No HTTP rate limits | **OPEN** | Loopback-only mitigates |
+| **M3** Protected-branch check case-sensitive; commit messages carry model text | **OPEN** | Low severity |
 
 ---
 
 ## 7 · New findings on the new code (N-series)
 
-| # | Sev | Finding | Where | Inv / Role |
-|---|---|---|---|---|
-| **N1** | High | **A hook is code execution on Box B.** `_run_python` runs an operator-uploaded `.py` as Crucible's own OS user, in the target workspace, with a timeout. The env allowlist correctly withholds the token and `CRUCIBLE_*` — but anyone who can POST `/v1/perf/hooks` (control token) and set the SLA `hooks:` block runs arbitrary code on Box B. The isolation that contains it (a separate low-privilege OS user with no read access to Crucible's state) is a **documented deployment step (`docs/HOOKS.md`), not enforced by code.** So the control token is now equivalent to code execution on Box B. | `perf/hooks.py:200-224`, `ui/perf_ui.py:2179` | INV-1 / confused-deputy · R2-with-token → **Box B** |
-| **N2** | High | **Mid-run goalpost move via the filesystem.** `_absorb_operator_edits` re-reads `slo.yaml`/profile from disk at each experiment boundary, and when the fingerprint changed it applies the new SLA (incl. a relaxed p99 or lighter load) and re-baselines. The change is *attributed* to "operator (file edit)" by assumption. §4.4's guard stops the **agent's applicator** writing the file; it does nothing about any other process (R4, or a second user on the box) writing it. In Fully-Automated / Advisory / Ceiling modes the edit is absorbed **without a pause**. | `perf/campaign.py:1571-1705` | INV-2 / §4.4 · R4 (or any FS writer) |
-| **N3** | Medium | **innerHTML sinks `_safe_reply` does not cover.** The chat reply is now sanitised, but the live approval gate inserts model-derived `ap.summary`, `ap.cause_family`, `ap.confidence` and param values straight into `innerHTML`; the history/results tables insert server fields (`r.run`, `ex.label`, `ex.diagnosis`) raw. `cause_family`/`summary` originate from the model's proposal with no markup stripping. A parked approval (or a manifest) whose model-derived fields carry markup is a live sink; the token is in `localStorage`. | `ui/client/crucible-ui.html:~2719, ~2375, ~2818`; source `perf/approval.py:57-80`, `diagnosis.py:344` | INV-3 · R2 (model) / R4 |
-| **N4** | Low–Med | **Unauthenticated chat now leaks proposals, evidence and diffs.** `/v1/perf/chat` is still unauth (demonstrated) and the operator's in-progress `_proposal_context` feeds it the baseline snapshot evidence, the model's reasoning, and the exact unified diff for a **caller-named `run_id`**. An outsider can read campaign internals (and spend gateway budget) through the reply. | `ui/perf_ui.py:1632-1691, 1761` | INV-5 / INV-8 · R1 |
-| **N5** | Low | **Dependency freshness.** `pip-audit` reports 20 known advisories across 8 locked deps, each with a fix: `aiohttp 3.14.3` (→3.14.4, 8 CVEs), `urllib3 2.7.0` (→2.8.0, 3), `cryptography 49.0.0` (→50.0.0), `h2 4.4.0` (→4.4.1), `certifi`, `brotli`, `setuptools`, `opentelemetry-api`. None is a confirmed reachable exploit; this is hygiene / A5. | `uv.lock` | supply chain · R3 |
-| **N6** | Low | **`query_csv` gates SQL with a denylist.** The general-agent CSV tool permits `SELECT`/`WITH` then rejects a *blocklist* of keywords; S12 §4 prefers an allowlist. Table/column names are f-string-interpolated after `re.sub(r"\W+","_")`. Reasonable, but denylist-shaped and not perf-path. | `tools.py:195-235` | injection · R2 (general agent only) |
-| **N7** | Info | **Outbound `urlopen` on config URLs.** `bandit` B310: `urllib.request.urlopen` on profile/config-derived URLs in `deploy.py:225,454`, `watchdog.py:960`, `quota.py:316`, `applicator.py:379` — no host/scheme restriction beyond http(s). This is the surface behind A3/C1; confirms egress scope. | as listed | SSRF/egress · R3 |
-| **N8** | Low | **Non-constant-time token checks (S12 cat. 11).** The custom semgrep token rule flagged A2A key checks as **set membership** (`bearer in self.bearer_tokens`, `server.py:138`, `official.py:58`) and the lease-ownership token as `!=` (`lease.py:121`) — not `hmac.compare_digest`. The control plane (`auth.py`) is already constant-time; these are the exceptions. (`deploy.py:207` `token == bad` compares against forbidden push args, not a secret — not a finding.) | as listed | timing oracle · R1/R3 |
+Status key: **OPEN** = backlog / not yet fixed · **ACCEPTED** = deliberately deferred with stated reason (§12) · **FIXED** = change made (see §15)
+
+| # | Sev | Status | Finding | Where | Inv / Role |
+|---|---|---|---|---|---|
+| **N1** | High | **OPEN** | **A hook is code execution on Box B.** `_run_python` runs an operator-uploaded `.py` as Crucible's own OS user, in the target workspace, with a timeout. The env allowlist correctly withholds the token and `CRUCIBLE_*` — but anyone who can POST `/v1/perf/hooks` (control token) and set the SLA `hooks:` block runs arbitrary code on Box B. The isolation that contains it (a separate low-privilege OS user with no read access to Crucible's state) is a **documented deployment step (`docs/HOOKS.md`), not enforced by code.** So the control token is now equivalent to code execution on Box B. | `perf/hooks.py:200-224`, `ui/perf_ui.py:2179` | INV-1 / confused-deputy · R2-with-token → **Box B** |
+| **N2** | High | **OPEN** | **Mid-run goalpost move via the filesystem.** `_absorb_operator_edits` re-reads `slo.yaml`/profile from disk at each experiment boundary, and when the fingerprint changed it applies the new SLA (incl. a relaxed p99 or lighter load) and re-baselines. The change is *attributed* to "operator (file edit)" by assumption. §4.4's guard stops the **agent's applicator** writing the file; it does nothing about any other process (R4, or a second user on the box) writing it. In Fully-Automated / Advisory / Ceiling modes the edit is absorbed **without a pause**. | `perf/campaign.py:1571-1705` | INV-2 / §4.4 · R4 (or any FS writer) |
+| **N3** | Medium | **FIXED `2c5a2f0`** | **innerHTML sinks `_safe_reply` does not cover.** The chat reply is now sanitised, but the live approval gate inserts model-derived `ap.summary`, `ap.cause_family`, `ap.confidence` and param values straight into `innerHTML`; the history/results tables insert server fields (`r.run`, `ex.label`, `ex.diagnosis`) raw. `cause_family`/`summary` originate from the model's proposal with no markup stripping. A parked approval (or a manifest) whose model-derived fields carry markup is a live sink; the token is in `localStorage`. | `ui/client/crucible-ui.html:~2719, ~2375, ~2818`; source `perf/approval.py:57-80`, `diagnosis.py:344` | INV-3 · R2 (model) / R4 |
+| **N4** | Low–Med | **ACCEPTED** (loopback-only deployment) | **Unauthenticated chat now leaks proposals, evidence and diffs.** `/v1/perf/chat` is still unauth (demonstrated) and the operator's in-progress `_proposal_context` feeds it the baseline snapshot evidence, the model's reasoning, and the exact unified diff for a **caller-named `run_id`**. An outsider can read campaign internals (and spend gateway budget) through the reply. Unreachable from outside while bound to loopback; add `require_control` before any public exposure. | `ui/perf_ui.py:1632-1691, 1761` | INV-5 / INV-8 · R1 |
+| **N5** | Low | **OPEN** (hygiene backlog) | **Dependency freshness.** `pip-audit` reports 20 known advisories across 8 locked deps, each with a fix: `aiohttp 3.14.3` (→3.14.4, 8 CVEs), `urllib3 2.7.0` (→2.8.0, 3), `cryptography 49.0.0` (→50.0.0), `h2 4.4.0` (→4.4.1), `certifi`, `brotli`, `setuptools`, `opentelemetry-api`. None is a confirmed reachable exploit. | `uv.lock` | supply chain · R3 |
+| **N6** | Low | **OPEN** (general-agent only, not perf-path) | **`query_csv` gates SQL with a denylist.** The general-agent CSV tool permits `SELECT`/`WITH` then rejects a *blocklist* of keywords; S12 §4 prefers an allowlist. Table/column names are f-string-interpolated after `re.sub(r"\W+","_")`. Reasonable, but denylist-shaped. | `tools.py:195-235` | injection · R2 (general agent only) |
+| **N7** | Info | **OPEN** (confirms A3/C1 scope) | **Outbound `urlopen` on config URLs.** `bandit` B310: `urllib.request.urlopen` on profile/config-derived URLs in `deploy.py:225,454`, `watchdog.py:960`, `quota.py:316`, `applicator.py:379` — no host/scheme restriction beyond http(s). This is the surface behind A3/C1. | as listed | SSRF/egress · R3 |
+| **N8** | Low | **OPEN** (A2A only; control plane already constant-time) | **Non-constant-time token checks (S12 cat. 11).** The custom semgrep token rule flagged A2A key checks as **set membership** (`bearer in self.bearer_tokens`, `server.py:138`, `official.py:58`) and the lease-ownership token as `!=` (`lease.py:121`) — not `hmac.compare_digest`. The control plane (`auth.py`) is already constant-time; these are the exceptions. (`deploy.py:207` `token == bad` compares against forbidden push args, not a secret — not a finding.) | as listed | timing oracle · R1/R3 |
 
 ---
 
@@ -182,7 +208,7 @@ Raw outputs are in the session scratchpad (`scan/bandit.json`, `pip-audit.json`,
 
 ## 9 · Attack chains (S12 §12)
 
-1. **R2 → full control** (chat XSS → token theft): **weakened.** `_safe_reply` now blocks the chat-reply leg. Still live via the approval-gate / history innerHTML sinks (N3) + `localStorage` token.
+1. **R2 → full control** (chat XSS → token theft): **closed (`2c5a2f0`).** `_safe_reply` blocks the chat-reply leg; `he()`/`safeMarkup()` now cover the approval-gate and history innerHTML sinks (N3). The `localStorage` token storage remains (leak 4, backlog), but there is no remaining unescaped innerHTML sink to exploit it through.
 2. **R2 → secret exfil via allowed channel** (`launch_job` posts the completion token to a model-chosen URL): **open.** A3 + per-job token (D2).
 3. **R4 → code on Box A** (modified `pom.xml` rides the all-of-HEAD push; hook builds it): **open.** H1 (server-side) + H2.
 4. **R1 → approval** (read parked params from unauth `GET /v1/agent/runs/{id}`, replay to `POST /v1/action`): **open, and `/v1/action` unauth is demonstrated (§10).**
