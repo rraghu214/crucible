@@ -2330,6 +2330,26 @@ function switchHistTab(tab){
   });
 }
 
+/* ── HTML safety helpers ─────────────────────────────────────────────── */
+// Mirror of perf_ui.py::_safe_reply: escape everything, re-allow 7 attribute-
+// free tags. Use safeMarkup() for model-derived text going into innerHTML;
+// use he() for short identifiers that carry no intended formatting.
+function he(s){
+  if(s==null) return '';
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;');
+}
+const _SAFE_TAGS=/&lt;(\/?)(strong|code|em|ul|li|p)&gt;/g;
+const _SAFE_BR=/&lt;br\s*\/?&gt;/g;
+function safeMarkup(s){
+  if(s==null) return '';
+  return he(s)
+    .replace(_SAFE_TAGS,'<$1$2>')
+    .replace(_SAFE_BR,'<br>');
+}
+
 /* ── History: live data from /v1/perf/screens/17 ─────────────────────── */
 const OUTCOME_PILL={
   'CHANGE_KEPT':   ['ok',  'IMPROVED'],
@@ -2716,17 +2736,17 @@ async function renderLiveActive(data){
     const ap=approvals[0];
     const rows=Object.entries(ap.params||{}).map(([k,v])=>
       `<div style="display:flex;gap:10px;font-size:12px;margin:3px 0;">
-         <span style="color:var(--lo);min-width:120px;">${k}</span>
+         <span style="color:var(--lo);min-width:120px;">${he(k)}</span>
          <span style="color:var(--mid);">→</span>
-         <span style="font-weight:600;color:var(--fg);">${v}</span>
+         <span style="font-weight:600;color:var(--fg);">${he(v)}</span>
        </div>`).join('');
     body.innerHTML=`
       <div style="font-size:13px;font-weight:600;margin-bottom:6px;">
-        Exp ${ap.experiment||''} · ${ap.cause_family||''} · confidence ${ap.confidence||''}
+        Exp ${he(ap.experiment||'')} · ${he(ap.cause_family||'')} · confidence ${he(ap.confidence||'')}
       </div>
-      <div style="font-size:12px;color:var(--mid);margin-bottom:8px;">${ap.summary||''}</div>
+      <div style="font-size:12px;color:var(--mid);margin-bottom:8px;">${safeMarkup(ap.summary||'')}</div>
       ${rows}
-      <div style="font-size:11px;color:var(--lo);margin-top:6px;">Evidence: ${(ap.evidence_cited||[]).join(', ')||'—'}</div>`;
+      <div style="font-size:11px;color:var(--lo);margin-top:6px;">Evidence: ${he((ap.evidence_cited||[]).join(', ')||'—')}</div>`;
   } else if(gate){
     gate.style.display='none';
     if(body) body.innerHTML='';
@@ -2822,20 +2842,20 @@ async function loadResults(runId){
       const p99=ex.p99_ms!=null?Math.round(ex.p99_ms)+' ms':'—';
       return `<div class="trial-row" onclick="toggleTrial('lr${i}')">
         <div class="tr-num">T${i+1}</div>
-        <div class="tr-name">${ex.label||ex.experiment_id||'Exp '+(i+1)}</div>
+        <div class="tr-name">${he(ex.label||ex.experiment_id||'Exp '+(i+1))}</div>
         <div style="flex:1;"></div>
-        <span class="tr-verdict ${vc}">${verdict}</span>
-        <div style="font-family:var(--f-mono);font-size:13px;margin-left:10px;">${p99}</div>
+        <span class="tr-verdict ${vc}">${he(verdict)}</span>
+        <div style="font-family:var(--f-mono);font-size:13px;margin-left:10px;">${he(p99)}</div>
         <div class="tr-chevron" id="tc-lr${i}">›</div>
       </div>
       <div class="trial-detail" id="td-lr${i}" style="display:none;">
         <div class="detail-grid">
-          <div><div class="dg-key">p99</div><div class="dg-val">${p99}</div></div>
+          <div><div class="dg-key">p99</div><div class="dg-val">${he(p99)}</div></div>
           ${ex.p50_ms!=null?`<div><div class="dg-key">p50</div><div class="dg-val">${Math.round(ex.p50_ms)} ms</div></div>`:''}
           ${ex.rps!=null?`<div><div class="dg-key">RPS</div><div class="dg-val">${ex.rps.toFixed(1)}</div></div>`:''}
           ${ex.error_rate_pct!=null?`<div><div class="dg-key">Errors</div><div class="dg-val">${ex.error_rate_pct.toFixed(2)}%</div></div>`:''}
         </div>
-        ${ex.diagnosis||''}
+        ${safeMarkup(ex.diagnosis||'')}
       </div>`;
     }).join('');
   }
