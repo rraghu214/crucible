@@ -128,13 +128,13 @@ Plus large changes to `campaign.py`, `commands.py`, `perf_ui.py` and `crucible-u
 | Invariant | Status | Note |
 |---|---|---|
 | INV-1 no component gets a credential it doesn't need | **FAIL** | One shared env (`main.py:22`). Hooks now correctly *exclude* the token (`hooks.py:68-86`), but holding the token = code execution on Box B via a hook (N1). |
-| INV-2 action authorised against the real user + exact args | **FAIL** | `/v1/action`, `/facts`, `/memory/search` unauth (demonstrated, §10). Mid-run file edit absorbed as "operator" without proving one (N2). |
-| INV-3 retrieved content never gains instruction authority | **PARTIAL** | Chat sink now sanitised (`_safe_reply`); approval-gate / history innerHTML sinks remain (N3). Suggestion + diagnosis JSON bounds-checked (good). |
+| INV-2 action authorised against the real user + exact args | **PARTIAL** | All write routes now require `require_control` (`566c7f2`). Mid-run file edit still absorbed as "operator" without proving one (N2). |
+| INV-3 retrieved content never gains instruction authority | **FIXED** | All innerHTML sinks covered: `_safe_reply` (chat) + `he()`/`safeMarkup()` (approval gate, history) (`2c5a2f0`). Attack chain 1 closed. |
 | INV-4 a credential works once | **FAIL** | Approvals: no nonce/expiry/consumption (leak 3). A2A tokens static. |
-| INV-5 memory partitioned, provenance | **FAIL** | `/memory/search` caller-chosen tenant, unauth (demonstrated). Docs/skills not hash-pinned. |
-| INV-6 high-impact action approved with final params | **FAIL** | No diff hash; whole file committed; push sends all of `HEAD`; Box A builds any tree (H1–H4). |
+| INV-5 memory partitioned, provenance | **PARTIAL** | `/memory/search` now requires `require_control` (`566c7f2`). Docs/skills still not hash-pinned. |
+| INV-6 high-impact action approved with final params | **PARTIAL** | H4 fixed (`0c1c6c1`): checked value == written value. H1–H3, H7 remain: no diff hash, whole file committed, push sends all of `HEAD`, Box A builds any tree. |
 | INV-7 no component edits its own audit history | **FAIL** | `audit.jsonl` plain append, no chain/lock; manifests overwritten. |
-| INV-8 enforceable budgets | **PARTIAL** | Per-run + run-caps exist; ledger clamp holds (leak 10 mitigated, §10). No HTTP rate limits; unauth money-spend via `/v1/perf/chat`. |
+| INV-8 enforceable budgets | **PARTIAL** | Per-run + run-caps exist; ledger clamp holds (leak 10 mitigated, §10). No HTTP rate limits; unauth money-spend fixed (`566c7f2`). |
 
 ### Already sound (keep; pinned by §10 where noted)
 
@@ -160,11 +160,14 @@ Severity / invariant / weakest role. Status key: **FIXED** = change made (commit
 | **M2** Deploy read-back exposes raw env values | **FIXED `10ccfdf`** | Masked value now reported "unavailable", not "mismatch" |
 | perf-lab `/actuator/env` exposes all property values | **FIXED perf-lab `8af82d6`** | Only Crucible's 12 tunables visible; everything else masked |
 | Box B `.env` world-readable (664) | **FIXED** (box change, no commit) | Now 600 |
-| **H8** XSS → token theft (chat reply sink) | **PARTIAL** | `_safe_reply` fixes the chat sink; approval-gate / history innerHTML sinks open (N3) |
+| **A1** `/v1/action`, `/v1/perf/chat`, `/facts`, `/memory/search` unauthenticated | `crucible/routes.py`, `ui/perf_ui.py`, `ui/routes.py`, `ui/client/crucible-ui.html`, `tests/test_ui_chat_context.py`, `tests/test_ui_knowledge.py`, `tests_security/test_r1_unauthenticated_routes.py` | `566c7f2` |
+| **H4** Checked value ≠ written value; line-break injection; bool-as-int bypass | `crucible/perf/profile.py`, `crucible/perf/applicator.py`, `tests_security/test_r2_value_coercion_gap.py` | `0c1c6c1` |
+| **H8** XSS → token theft (chat reply sink) | **FIXED `2c5a2f0`** | `_safe_reply` + `he()`/`safeMarkup()` cover all innerHTML sinks; attack chain 1 closed (§9) |
 | **H5** SLA/profile tampering undetected | **PARTIAL** | `fingerprint_files` detects change; attribution gap remains (N2) |
-| **A1** `/documents` unauthenticated | **PARTIAL FIXED** | `/documents` now requires `require_control`; `/v1/action`, `/v1/perf/chat`, `/facts`, `/memory/search`, `/a2a` still open (demonstrated §10) |
+| **A1** unauthenticated state-changing routes | **FIXED `566c7f2`** | `/v1/action`, `/v1/perf/chat`, `/facts`, `/memory/search`, `/documents` all require `require_control`; attack chain 4 closed (§9) |
 | **A1/A2/C4/C5/C6/N4** remaining unauth + info-disclosure routes | **ACCEPTED** (loopback-only deployment, §12) | Unreachable from outside; add auth before any public exposure |
-| **H1–H4, H7** Deploy path (Box A builds any tree, HEAD push, no diff hash, checked≠written, reverts not deployed) | **OPEN** | See §9 chain 3; highest-priority code fix |
+| **H4** Checked value ≠ written value (bool-as-int, float-as-int, line-break injection) | **FIXED `0c1c6c1`** | `Bounds.violation()` rejects; applicator writes coerced value |
+| **H1–H3, H7** Deploy path (Box A builds any tree, HEAD push, no diff hash, reverts not deployed) | **OPEN** | See §9 chain 3; highest-priority code fix |
 | **leak 2** Audit log / manifests editable | **OPEN** | R4 only in current deployment |
 | **leak 3** Forgeable approvals (no nonce/expiry) | **OPEN** | R4 only |
 | **A3/C1** Egress and SSRF (model-chosen URLs, no allowlist) | **OPEN** | See §9 chain 2 |
@@ -211,7 +214,7 @@ Raw outputs are in the session scratchpad (`scan/bandit.json`, `pip-audit.json`,
 1. **R2 → full control** (chat XSS → token theft): **closed (`2c5a2f0`).** `_safe_reply` blocks the chat-reply leg; `he()`/`safeMarkup()` now cover the approval-gate and history innerHTML sinks (N3). The `localStorage` token storage remains (leak 4, backlog), but there is no remaining unescaped innerHTML sink to exploit it through.
 2. **R2 → secret exfil via allowed channel** (`launch_job` posts the completion token to a model-chosen URL): **open.** A3 + per-job token (D2).
 3. **R4 → code on Box A** (modified `pom.xml` rides the all-of-HEAD push; hook builds it): **open.** H1 (server-side) + H2.
-4. **R1 → approval** (read parked params from unauth `GET /v1/agent/runs/{id}`, replay to `POST /v1/action`): **open, and `/v1/action` unauth is demonstrated (§10).**
+4. **R1 → approval** (read parked params from unauth `GET /v1/agent/runs/{id}`, replay to `POST /v1/action`): **closed (`566c7f2`).** `/v1/action` now requires `require_control`; the R1 caller has no token.
 5. **New — R4 → goalpost move** (write a relaxed `slo.yaml` to disk mid-run; Fully-Automated absorbs it as an "operator edit" and re-baselines): **open (N2).**
 
 ---
