@@ -2234,6 +2234,7 @@ async function handleCsvInput(input){
     catch(e){addChatMsg('ai','⚠ '+escHtml(f.name)+' was not uploaded: '+escHtml(e.message));}
   }
   input.value='';loadDataFiles();
+}
 let hookFiles=[];
 async function loadHooks(){
   try{const r=await fetch('/v1/perf/hooks');if(r.ok) hookFiles=(await r.json()).files||[];}catch(e){}
@@ -2258,8 +2259,6 @@ function _hooksBody(){
   const pick=id=>(document.getElementById(id)?.value||'').trim();
   return {before_each:pick('hook-before_each'),after_each:pick('hook-after_each'),on_abort:pick('hook-on_abort'),
     timeout_s:Number(pick('hook-timeout'))||60,pass_env:pick('hook-pass-env').split(',').map(x=>x.trim()).filter(Boolean)};
-}
-loadHooks();
 }
 function addRequestRow(endpoint,method,query,body,weight,p99){
   const row=_el('div',{className:'req-row'});
