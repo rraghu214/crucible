@@ -739,6 +739,17 @@ Box A/Box B. Three reasons, in order of how much they cost to learn:
   Box B either, if it can be avoided: Box B runs the load generator, and a model
   call during a scenario would contend with it on a single OCPU.
 
+**Published for review until submission (operator decision, 31 October 2026).**
+The dashboard is reachable from the internet through a Cloudflare quick tunnel
+on Box B: HTTPS terminates at Cloudflare, the tunnel is opened outward from Box
+B, no inbound port opens, and `crucible serve` stays bound to `127.0.0.1`. An
+optional Basic Auth login (`CRUCIBLE_UI_USER` / `CRUCIBLE_UI_PASSWORD`, off unless
+both are set) gates every route except `/healthz`. It sits in front of the token
+gates, not in place of them: logging in lets someone look, and every write still
+needs the control token. Basic Auth is only acceptable over HTTPS; over plain
+HTTP the password would cross the network unencrypted. The tunnel and the login
+come down after submission.
+
 Crucible's *code* default stays `127.0.0.1:8111`. A tool should not ship pointing
 at somebody else's gateway; `GLC_BASE_URL` is deployment configuration.
 

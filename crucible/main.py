@@ -7,6 +7,7 @@ database file; the only seam is HTTP.
 """
 from __future__ import annotations
 
+import logging
 import os
 import time
 from contextlib import asynccontextmanager
@@ -17,11 +18,18 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import PlainTextResponse
 
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / ".env")
 
 from crucible import a2a_routes, routes  # noqa: E402
+from crucible.auth import (  # noqa: E402
+    SITE_LOGIN_EXEMPT,
+    site_login_enabled,
+    site_login_half_configured,
+    site_login_ok,
+)
 from crucible.core.a2a.official import OfficialA2AServer  # noqa: E402
 from crucible.core.a2a.server import A2ADemoServer  # noqa: E402
 from crucible.core.a2a.trust import sign_card  # noqa: E402
@@ -42,6 +50,10 @@ def _secrets(name: str) -> set[str]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    missing = site_login_half_configured()
+    if missing:
+        logging.getLogger("crucible").warning(
+            "site login is OFF: %s is not set, so the dashboard is open to anyone who can reach it", missing)
     app.state.gateway = GatewayClient()
     app.state.runtime = AgentRuntime()
     data_dir = app.state.runtime.root
@@ -134,6 +146,19 @@ app.include_router(a2a_routes.router)
 app.include_router(ui_router)
 app.include_router(perf_ui_router)
 app.include_router(events_router)
+
+
+@app.middleware("http")
+async def site_login(request: Request, call_next):
+    """Basic Auth over the whole site, when CRUCIBLE_UI_USER/PASSWORD are set.
+
+    For a dashboard published beyond localhost (behind an HTTPS tunnel). The
+    browser shows its own login prompt; the control token still guards writes.
+    """
+    if site_login_enabled() and request.url.path not in SITE_LOGIN_EXEMPT             and not site_login_ok(request.headers.get("authorization")):
+        return PlainTextResponse("login required", status_code=401,
+                                 headers={"WWW-Authenticate": 'Basic realm="Crucible", charset="UTF-8"'})
+    return await call_next(request)
 
 
 @app.get("/healthz")

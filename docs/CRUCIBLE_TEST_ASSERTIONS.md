@@ -4575,6 +4575,99 @@ Test: `test_the_system_prompt_is_transparent_about_guard_refusals`.
 
 ---
 
+# GROUP 44 — Optional site login for a published dashboard
+
+*Drafted 31 October 2026 by Claude Code. REVIEWED AND APPROVED by the operator, 31 October 2026. Implemented in
+`tests/test_site_login.py` (23). Code: `site_login_enabled`, `site_login_ok` in `crucible/auth.py`;
+the `site_login` middleware in `crucible/main.py`; `CRUCIBLE_UI_USER` / `CRUCIBLE_UI_PASSWORD` in
+`.env.example`.*
+
+*Operator decision, 31 October 2026: until submission the dashboard is public so
+the instructor can try it. It's reached through an HTTPS tunnel (Cloudflare quick
+tunnel), so no inbound port opens and `crucible serve` stays on `127.0.0.1`. The
+browser's own Basic Auth prompt gates the whole site. A custom login page was
+considered and set aside: it needs a form, signed session cookies, logout and
+CSRF handling, which is security-sensitive code days before submission, and it
+buys only appearance.*
+
+---
+
+### 44.1 Off unless both variables are set
+
+**What it checks.** With neither variable set, `/dashboard` serves as before.
+With only the user set, it still serves. Local use and the test suite are
+unaffected.
+
+**Why it exists.** The default deployment is loopback-only, where a login adds
+nothing. This gate is opt-in, unlike the token gates, which fail closed.
+
+**DECIDED, operator, 31 October 2026: warn.** When exactly one variable is set,
+startup logs `site login is OFF: <missing variable> is not set, so the dashboard
+is open to anyone who can reach it`. Tests: `test_half_configured_names_the_missing_variable`
+(4), `test_startup_warns_when_half_configured`.
+
+---
+
+### 44.2 When on, every route needs the login, except `/healthz`
+
+**What it checks.**
+- `/dashboard`, `/v1/perf/runs`, `/v1/perf/wizard` and `/v1/agent/documents`
+  return 401 without credentials.
+- The 401 carries `WWW-Authenticate: Basic`, which makes the browser show its
+  login prompt.
+- `/healthz` stays open, so `~/restart-serve.sh` and health checks work.
+
+**DECIDED, operator, 31 October 2026:** `/healthz` stays public, including the
+gateway URL it reports, and the A2A routes stay behind the login. Both are
+acceptable until submission.
+
+---
+
+### 44.3 Only the exact credentials pass
+
+**What it checks.**
+- **Accepted:** the right user and password, including a password that
+  contains a colon.
+- **Refused:** a wrong password, a wrong user, empty credentials, malformed
+  base64, a wrong Bearer token, and another scheme (`Digest`).
+- **Timing:** user and password are both compared with `compare_digest`, so the
+  response time doesn't reveal which one was wrong.
+
+**DECIDED, operator, 31 October 2026:** no lockout. HTTPS plus a long random
+password is enough for the week until submission.
+
+---
+
+### 44.4 A valid control or completion token also passes
+
+**What it checks.** A request with `Bearer <control token>` or
+`Bearer <completion token>` passes the login without Basic credentials.
+
+**Why it exists.** The dashboard's writes carry the control token in the
+`Authorization` header. A request has only one, so the Basic credentials can't
+travel with it, and every write would fail the login. A token holder already has
+more authority than the login grants, so accepting the token widens nothing.
+
+---
+
+### 44.5 The login grants no write
+
+**What it checks.** With the right Basic credentials and no token, `POST
+/v1/perf/chat` is refused with the control plane's 401. Logging in lets someone
+look; changing anything still needs the token.
+
+---
+
+### 44.6 The check fails closed on its own
+
+**What it checks.** With nothing configured, `site_login_ok` refuses empty
+Basic credentials. *Found while writing these tests:* the first version accepted
+them, because an empty user and password compared equal to the unset variables.
+The middleware never called it unconfigured, but a check that is only safe
+because of its caller is the shape `auth.py`'s own docstring warns against.
+
+---
+
 # Review decisions — week 1
 
 Raised by Claude Code while implementing, decided by the operator on 10 September 2026.
