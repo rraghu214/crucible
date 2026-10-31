@@ -29,6 +29,11 @@ SITE_USER_ENV = "CRUCIBLE_UI_USER"
 SITE_PASSWORD_ENV = "CRUCIBLE_UI_PASSWORD"
 #: Reachable without the site login, so health checks keep working.
 SITE_LOGIN_EXEMPT = frozenset({"/healthz"})
+#: "1" lets the site login stand in for the control token on dashboard requests.
+SITE_LOGIN_GRANTS_CONTROL_ENV = "CRUCIBLE_UI_LOGIN_GRANTS_CONTROL"
+#: Sent by the dashboard on every request. Another website cannot send a custom
+#: header to this origin without a CORS preflight, which Crucible never grants.
+UI_REQUEST_HEADER = "X-Crucible-UI"
 
 
 def site_login_enabled() -> bool:
@@ -71,6 +76,11 @@ def site_login_ok(authorization: str | None) -> bool:
             if expected and hmac.compare_digest(supplied, expected):
                 return True
         return False
+    return _basic_ok(value)
+
+
+def _basic_ok(value: str) -> bool:
+    """Valid Basic credentials for the configured site login, and nothing else."""
     # Fails closed on its own: unconfigured, an empty user and password would
     # otherwise "match" the empty variables.
     if not value.startswith("Basic ") or not site_login_enabled():
@@ -98,8 +108,35 @@ def _require(env_name: str, authorization: str | None, *, surface: str) -> None:
         raise HTTPException(401, f"invalid {surface} token")
 
 
-async def require_control(authorization: str | None = Header(default=None)) -> None:
+def site_login_grants_control() -> bool:
+    """The site login stands in for the control token (operator, 31 October 2026).
+
+    So the instructor needs one credential, not two, while the dashboard is
+    published until submission. Off unless the site login is on AND this is
+    "1"; deleting the line restores the token requirement.
+    """
+    return site_login_enabled() and os.getenv(SITE_LOGIN_GRANTS_CONTROL_ENV, "").strip() == "1"
+
+
+def _login_as_control(authorization: str | None, ui_header: str | None) -> bool:
+    """Basic credentials count as control only on a request from the dashboard.
+
+    Browsers attach a remembered Basic login to every request to the site,
+    including ones another website triggers (CSRF). The token never travels
+    automatically, which is why it guarded writes. Requiring ``X-Crucible-UI``
+    keeps that property: a cross-site request cannot carry a custom header
+    without a CORS preflight, and Crucible grants none.
+    """
+    return site_login_grants_control() and ui_header == "1" and _basic_ok((authorization or "").strip())
+
+
+async def require_control(
+    authorization: str | None = Header(default=None),
+    x_crucible_ui: str | None = Header(default=None),
+) -> None:
     """Guard anything that creates authority, starts work, or spends money."""
+    if _login_as_control(authorization, x_crucible_ui):
+        return
     _require(CONTROL_TOKEN_ENV, authorization, surface="control plane")
 
 

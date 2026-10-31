@@ -14,7 +14,9 @@ Auth prompt gates the whole site. What is asserted:
 5. a valid control or completion token also passes, because the dashboard's
    writes carry the token in the one Authorization header a request has;
 6. the login grants no write: a write still needs the control token;
-7. a half-configured login (one variable set) is warned about at startup.
+7. a half-configured login (one variable set) is warned about at startup;
+8. with CRUCIBLE_UI_LOGIN_GRANTS_CONTROL=1 the login stands in for the control
+   token, only on requests carrying X-Crucible-UI: 1 (CSRF-safe; 44.7).
 """
 
 from __future__ import annotations
@@ -115,3 +117,78 @@ def test_startup_warns_when_half_configured(monkeypatch, caplog):
     with caplog.at_level("WARNING", logger="crucible"), TestClient(app):
         pass
     assert "site login is OFF: CRUCIBLE_UI_PASSWORD is not set" in caplog.text
+
+
+UI = {"X-Crucible-UI": "1"}
+LOGIN = _basic("instructor", "s3cret:with-colon")
+
+
+@pytest.mark.usefixtures("login_on")
+class TestLoginGrantsControl:
+    """CRUCIBLE_UI_LOGIN_GRANTS_CONTROL=1: the dashboard needs no control token (44.7)."""
+
+    @pytest.fixture(autouse=True)
+    def _grant(self, monkeypatch):
+        monkeypatch.setenv("CRUCIBLE_UI_LOGIN_GRANTS_CONTROL", "1")
+
+    def _write(self, client, headers):
+        # /v1/perf/chat is a control-gated write; the gateway is never reached
+        # when the gate refuses, and is stubbed when it lets the request through.
+        return client.post("/v1/perf/chat", json={"message": "hi"}, headers=headers)
+
+    def test_login_plus_ui_header_passes_the_control_gate(self, client, monkeypatch):
+        async def fake_chat(self, *, prompt, system, request=None):
+            return {"text": "ok"}
+
+        monkeypatch.setattr("crucible.gateway.GatewayClient.chat", fake_chat)
+        assert self._write(client, {**LOGIN, **UI}).status_code == 200
+
+    def test_login_without_the_ui_header_is_refused(self, client):
+        # What a cross-site (CSRF) request riding on the browser's remembered
+        # login looks like: it cannot add a custom header.
+        assert self._write(client, LOGIN).status_code == 401
+
+    @pytest.mark.parametrize("value", ["0", "true", ""])
+    def test_only_the_exact_header_value_counts(self, client, value):
+        assert self._write(client, {**LOGIN, "X-Crucible-UI": value}).status_code == 401
+
+    def test_wrong_login_plus_ui_header_is_refused(self, client):
+        assert self._write(client, {**_basic("instructor", "wrong"), **UI}).status_code == 401
+
+    def test_the_token_still_works(self, client, monkeypatch):
+        async def fake_chat(self, *, prompt, system, request=None):
+            return {"text": "ok"}
+
+        monkeypatch.setattr("crucible.gateway.GatewayClient.chat", fake_chat)
+        assert self._write(client, {"Authorization": f"Bearer {CONTROL_TOKEN}"}).status_code == 200
+
+
+def test_the_grant_needs_the_site_login_on(client, monkeypatch):
+    monkeypatch.setenv("CRUCIBLE_UI_LOGIN_GRANTS_CONTROL", "1")
+    monkeypatch.delenv("CRUCIBLE_UI_USER", raising=False)
+    monkeypatch.delenv("CRUCIBLE_UI_PASSWORD", raising=False)
+    response = client.post("/v1/perf/chat", json={"message": "hi"}, headers={**_basic("", ""), **UI})
+    assert response.status_code == 401
+
+
+@pytest.mark.usefixtures("login_on")
+def test_without_the_grant_the_login_still_grants_no_write(client, monkeypatch):
+    monkeypatch.delenv("CRUCIBLE_UI_LOGIN_GRANTS_CONTROL", raising=False)
+    assert client.post("/v1/perf/chat", json={"message": "hi"}, headers={**LOGIN, **UI}).status_code == 401
+
+
+def test_the_dashboard_sends_the_ui_header_on_every_request():
+    from pathlib import Path
+
+    page = (Path(__file__).resolve().parents[1] / "crucible/ui/client/crucible-ui.html").read_text(encoding="utf-8")
+    assert "'X-Crucible-UI':'1'" in page.split("function getAuthHeaders(){", 1)[1].split("}", 1)[0]
+
+
+def test_no_cors_middleware_while_the_login_can_grant_control():
+    """The X-Crucible-UI check is CSRF-proof only because no cross-origin request
+    may send custom headers. Adding CORS middleware must revisit 44.7 first."""
+    from starlette.middleware.cors import CORSMiddleware
+
+    from crucible.main import app
+
+    assert not any(m.cls is CORSMiddleware for m in app.user_middleware)

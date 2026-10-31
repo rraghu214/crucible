@@ -4578,7 +4578,7 @@ Test: `test_the_system_prompt_is_transparent_about_guard_refusals`.
 # GROUP 44 — Optional site login for a published dashboard
 
 *Drafted 31 October 2026 by Claude Code. REVIEWED AND APPROVED by the operator, 31 October 2026. Implemented in
-`tests/test_site_login.py` (23). Code: `site_login_enabled`, `site_login_ok` in `crucible/auth.py`;
+`tests/test_site_login.py` (34). Code: `site_login_enabled`, `site_login_ok` in `crucible/auth.py`;
 the `site_login` middleware in `crucible/main.py`; `CRUCIBLE_UI_USER` / `CRUCIBLE_UI_PASSWORD` in
 `.env.example`.*
 
@@ -4665,6 +4665,45 @@ Basic credentials. *Found while writing these tests:* the first version accepted
 them, because an empty user and password compared equal to the unset variables.
 The middleware never called it unconfigured, but a check that is only safe
 because of its caller is the shape `auth.py`'s own docstring warns against.
+
+---
+
+### 44.7 The login can stand in for the control token, on dashboard requests only
+
+*Drafted 31 October 2026 by Claude Code. REVIEWED AND APPROVED by the operator, 31 October 2026.
+`TestLoginGrantsControl` (7) and four tests after it in `tests/test_site_login.py`.*
+
+*Operator decision, 31 October 2026: "lets disable it for now, since it will be
+an additional ask to the instructor. We can re-enable it later." Switching the
+token off outright would let any website the instructor visits make their
+browser approve, launch or deploy, because browsers attach a remembered Basic
+login to every request to the site (CSRF). So the token isn't switched off: the
+login stands in for it, only on requests that carry `X-Crucible-UI: 1`. In the
+dashboard this feels the same as no token.*
+
+**What it checks.**
+- With `CRUCIBLE_UI_LOGIN_GRANTS_CONTROL=1`, login + `X-Crucible-UI: 1` passes
+  the control gate.
+- Login without the header is refused. That is the shape of a cross-site
+  request: another site can't add a custom header without a CORS preflight,
+  and Crucible has no CORS configuration.
+- Only the exact value `1` counts. A wrong login plus the header is refused.
+- The control token still works, for the CLI, scripts and the agent API.
+- The grant needs the site login on. Without the grant line, the login still
+  grants no write (44.5).
+- The dashboard sends the header on every request (`getAuthHeaders`).
+
+**Why it exists.** The token's job was never only "a second password". It is a
+credential the browser never sends on its own, which is what makes writes immune
+to CSRF. The custom header keeps that property without the token.
+
+**Re-enabling the token.** Delete `CRUCIBLE_UI_LOGIN_GRANTS_CONTROL=1` from Box B's
+`.env` and run `~/restart-serve.sh`.
+
+**DECIDED, operator, 31 October 2026:**
+- **Intended:** the site login gives full dashboard control until submission.
+- **The CORS dependency is guarded:** `test_no_cors_middleware_while_the_login_can_grant_control`
+  fails if CORS middleware is ever added, so 44.7 is revisited first.
 
 ---
 

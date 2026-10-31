@@ -2059,7 +2059,10 @@ function initActiveCharts(){
 
 /* ── Auth token ──────────────────────────────────────────────────────── */
 function getToken(){try{return localStorage.getItem('crucible_token')||'';}catch(e){return '';}}
-function getAuthHeaders(){const t=getToken();return t?{'Authorization':'Bearer '+t,'Content-Type':'application/json'}:{'Content-Type':'application/json'};}
+// X-Crucible-UI marks a request as coming from this page: with the site login
+// granting control, the server accepts the login in place of the token only
+// when it is present (another website cannot send it). See crucible/auth.py.
+function getAuthHeaders(){const t=getToken();const h={'Content-Type':'application/json','X-Crucible-UI':'1'};if(t)h['Authorization']='Bearer '+t;return h;}
 function saveToken(){
   const t=document.getElementById('tokenInput').value.trim();
   const st=document.getElementById('tokenStatus');
@@ -2078,7 +2081,7 @@ function clearToken(){
   if(!st)return;
   const t=getToken();
   if(t) st.textContent='Token loaded from storage.';
-  else st.textContent='No token saved — read-only until one is set.';
+  else st.textContent='No token saved. If the site login grants control, you are signed in for writes; otherwise read-only until one is set.';
   st.style.color=t?'var(--ok)':'var(--lo)';
 })();
 

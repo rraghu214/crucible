@@ -750,6 +750,14 @@ needs the control token. Basic Auth is only acceptable over HTTPS; over plain
 HTTP the password would cross the network unencrypted. The tunnel and the login
 come down after submission.
 
+**Until submission the login also stands in for the control token in the
+dashboard** (`CRUCIBLE_UI_LOGIN_GRANTS_CONTROL=1`, operator decision, 31 October
+2026), so the instructor needs one credential. It counts only on requests that
+carry `X-Crucible-UI: 1`, which the dashboard always sends and another website
+cannot (no CORS is configured). Without that condition, a remembered browser
+login would let any site the instructor visits trigger approvals and deploys.
+Deleting the line restores the token requirement.
+
 Crucible's *code* default stays `127.0.0.1:8111`. A tool should not ship pointing
 at somebody else's gateway; `GLC_BASE_URL` is deployment configuration.
 
