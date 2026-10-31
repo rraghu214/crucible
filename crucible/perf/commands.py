@@ -282,6 +282,21 @@ def cmd_preflight(
     return worst
 
 
+def _repo_relative(path: str, root: str | Path | None) -> str:
+    """``path`` relative to ``root`` when it lies inside it, else unchanged.
+
+    The profile's protected paths are repo-relative, so an absolute path never
+    matched and a protected SLA was reported unprotected (trial, 31 October 2026).
+    """
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        return path
+    try:
+        return candidate.resolve().relative_to(Path(root or Path.cwd()).resolve()).as_posix()
+    except ValueError:
+        return path
+
+
 def preflight_checks(
     profile: TargetProfile,
     sla: Sla,
@@ -290,8 +305,13 @@ def preflight_checks(
     workspace: str = ".",
     apply_probe: bool = False,
     probe_timeout_s: float = 5.0,
+    root: str | Path | None = None,
 ) -> list[PreflightCheck]:
     """Every check after the profile and SLA have loaded, as data.
+
+    ``root`` is the repository the profile's protected paths are relative to
+    (default: the current directory). An absolute SLA path inside it is checked
+    as its relative path; one outside it cannot match and is reported as such.
 
     Split out of :func:`cmd_preflight` so the Preflight screen shows the same
     checks the CLI prints rather than a second list that could drift from it.
@@ -310,7 +330,7 @@ def preflight_checks(
     # had drifted would otherwise only be discovered by an agent exploiting it.
     from .applicator import path_is_protected
 
-    for guarded in (sla_path, "locust/locustfile.py"):
+    for guarded in (_repo_relative(sla_path, root), "locust/locustfile.py"):
         hit = path_is_protected(guarded, profile.protected_paths)
         checks.append(
             PreflightCheck(

@@ -928,7 +928,9 @@ def screen_preflight(ctx: PerfContext, q: dict[str, str]) -> dict[str, Any]:
             s.row([s.button("Run checks", "request_data", {"run": "1"})]),
         ]))
     else:
-        checks = preflight_checks(profile, sla, str(ctx.path(ctx.sla_path)), probe_timeout_s=3.0)
+        # root: the profile's protected_paths are relative to the repository, and
+        # the resolved path is checked as its relative one (trial, 31 October).
+        checks = preflight_checks(profile, sla, str(ctx.path(ctx.sla_path)), probe_timeout_s=3.0, root=ctx.root)
         rows = [{"check": c.name, "result": "pass" if c.ok else ("FAIL" if c.blocking else "warn"),
                  "detail": c.detail} for c in checks]
         blocked = [c for c in checks if not c.ok and c.blocking]
@@ -2156,8 +2158,10 @@ async def perf_wizard_check(request: Request):
         sla, profile = Sla.load(sla_path), TargetProfile.load(profile_path)
     except (FileNotFoundError, ValueError, RuntimeError) as exc:
         return {"checks": [{"name": "configuration loads", "ok": False, "blocking": True, "detail": str(exc)}]}
+    # root: see screen_preflight.
     checks = await asyncio.to_thread(preflight_checks, profile, sla, str(sla_path),
-                                     workspace=os.getenv("CRUCIBLE_WORKSPACE", "."), apply_probe=False)
+                                     workspace=os.getenv("CRUCIBLE_WORKSPACE", "."), apply_probe=False,
+                                     root=ctx.root)
     return {"checks": [{"name": c.name, "ok": c.ok, "blocking": c.blocking, "detail": c.detail} for c in checks]}
 
 
