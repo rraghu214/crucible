@@ -1,5 +1,29 @@
 # Live campaign results
 
+## Group 46 live benchmark — 1 November 2026 (draft, not yet reviewed)
+
+Seven Fully Automated campaigns, each started from a fixture with `--fixture`, so the
+manifest records the true cause and the diagnosis is scored. Harness: draft branch
+`capstone/live-quadrants`. Manifests: Box B `~/crucible-draft/results/bench46-*.json`.
+
+| Fixture (true cause) | p99 before → after (SLA) | What the agent did | Quadrant | Spend |
+|---|---|---|---|---|
+| `pool_starved` (connection_pool_exhaustion) | 1200 → **59 ms** (120) | pool 2 → 20, IMPROVED, kept | CORRECT | $0.0013 |
+| `thread_starved`, Tomcat metrics **off** (thread_pool_saturation) | 510 → — (120) | declined: thread gauges were null | abstained (not scored) | $0.0013 |
+| `thread_starved`, Tomcat metrics **on** | 510 → **59 ms** (120) | threads.max 4 → 200, IMPROVED, kept | CORRECT | $0.0013 |
+| `inefficient_query_severe` (inefficient_query) | 1600 → **79 ms** (400) | exp 1: pool → 50, INCONCLUSIVE, reverted; exp 2: batch fetch → 50, IMPROVED, kept | WRONG, then CORRECT | $0.0028 |
+| `cache_miss_severe` (cache_miss) | 46 → **8 ms** (20) | cache back on, IMPROVED, kept | CORRECT | $0.0013 |
+| `gc_pressure` (gc_pressure) | 2000 → **220 ms** (300) | heap 128 → 1024 MB (the new lever), IMPROVED, kept | CORRECT | $0.0014 |
+| `gc_and_pool`, lookalike (gc_pressure) | 2300 → **220 ms** (300) | heap 128 → 1536 MB; the pool (the trap) untouched | CORRECT | $0.0014 |
+
+**Quadrants over 8 scored experiments: CORRECT 7, LUCKY 0, UNLUCKY 0, WRONG 1**, plus one
+abstention. Every SLA was met. Total model spend $0.0107, one model throughout
+(`gemini-3.5-flash-lite`), every change approved as `preapproved` (Fully Automated).
+LUCKY is 0 measured over 8, not "not measured": the GC-plus-pool lookalike was the run
+built to tempt it, and the agent took the heap, not the pool.
+
+---
+
 ## Summary (10 October 2026)
 
 Four live campaigns run on Oracle Cloud Box A/B. All four completed correctly.
