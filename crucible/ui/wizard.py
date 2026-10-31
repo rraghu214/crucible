@@ -32,6 +32,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from ..perf.campaign import CampaignRefused, Sla
 from ..perf.deploy import BranchPolicyViolation
 from ..perf.loadprofile import locust_tasks, tag_for_endpoint
@@ -108,8 +110,27 @@ def set_value(text: str, keys: list[str], value: Any) -> str:
     val = m.group("val").strip()
     if not val or val in ("|", ">", "|-", ">-"):
         raise WizardRefused(f"'{'.'.join(keys)}' is not a single-line value")
+    if _same(val, value):
+        # Rewriting an unchanged value only re-spells it (`/api/db` as
+        # `"/api/db"`, `1.0` as `1`), and the Review diff then hides the real
+        # changes among lines that change nothing (trial, 31 October 2026).
+        return text
     lines[i] = f"{m.group('ind')}{keys[-1]}: {_scalar(value)}{m.group('cmt') or ''}{m.group('nl') or ''}"
     return "".join(lines)
+
+
+def _same(written: str, value: Any) -> bool:
+    """The value already on the line, as YAML reads it, equals the new one."""
+    try:
+        old = yaml.safe_load(written)
+    except yaml.YAMLError:
+        return False
+    # bool is an int in Python: true must never count as equal to 1.
+    if isinstance(old, bool) != isinstance(value, bool):
+        return False
+    if isinstance(value, tuple):
+        value = list(value)
+    return old == value
 
 
 def _stamp(text: str, before: str, note: str) -> str:
