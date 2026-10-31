@@ -61,7 +61,7 @@ from ..knowledge import MAX_CHARS, KnowledgeBase, UploadRefused, default_embedde
 from . import actions as _actions
 from .actions import ActionError
 from .hitl import PendingAction, decide_resume
-from .jobs import Job, get_job, list_jobs, read_output, start_job
+from .jobs import RUNNING, Job, get_job, list_jobs, read_output, start_job
 from .validator import validate_surface
 
 # ---------------------------------------------------------------------------
@@ -2618,8 +2618,9 @@ async def perf_active_campaign(request: Request):
     ctx = _context(request)
     active = _active_runs(ctx)
     if not active:
-        # surface the latest job that is still RUNNING so the UI can track it
-        running_jobs = [j for j in list_jobs(ctx.state, limit=20) if j.status == "RUNNING"]
+        # surface the latest job that is still running so the UI can track it.
+        # RUNNING is "running": comparing to "RUNNING" never matched (trial, 31 October).
+        running_jobs = [j for j in list_jobs(ctx.state, limit=20) if j.status == RUNNING]
         return {"active": False, "running_job": _job_dict(running_jobs[0]) if running_jobs else None}
 
     run = active[0]
@@ -2631,7 +2632,7 @@ async def perf_active_campaign(request: Request):
     status = "aborting" if aborting else ("needs_approval" if approvals else ("manual_step" if manual else "running"))
 
     # find the running job for log tailing
-    running_jobs = [j for j in list_jobs(ctx.state, limit=20) if j.status == "RUNNING"]
+    running_jobs = [j for j in list_jobs(ctx.state, limit=20) if j.status == RUNNING]
     job = next((j for j in running_jobs if run_id in j.label), running_jobs[0] if running_jobs else None)
 
     return {
