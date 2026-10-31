@@ -2667,6 +2667,40 @@ async def perf_active_campaign(request: Request):
     }
 
 
+@router.get("/v1/perf/services")
+async def perf_services(request: Request):
+    """Every service this install has a profile for, for Library and Overview.
+
+    One per profile in config/profiles/. ``live`` is true only when the profile
+    declares a deploy pipeline and a branch: a template profile with no target
+    (the FastAPI sample) says so rather than looking like a configured service.
+    Runs are counted from the manifests' own ``profile`` field.
+    """
+    ctx = _context(request)
+    campaigns, _ = _campaigns(ctx)
+    sla, _ = _load_sla(ctx)
+    out = []
+    for profile in _profiles(ctx):
+        deploy = profile.deploy
+        live = getattr(deploy, "mode", "") == "pipeline" and bool(getattr(deploy, "branch", ""))
+        mine = [c for c in campaigns if c.get("profile") == profile.name]
+        active = profile.name == ctx.profile_name
+        out.append({
+            "service": profile.service or profile.name,
+            "profile": profile.name,
+            "runtime": profile.runtime,
+            "live": live,
+            "active": active,
+            "target": (sla.target_base_url if sla else "") if active else "",
+            "environment": (f"{sla.environment_name} ({sla.environment_kind})" if sla else "") if active else "",
+            "endpoint": (sla.endpoint if sla else "") if active else "",
+            "deploy": f"{getattr(deploy, 'remote', '')} -> {getattr(deploy, 'branch', '')}" if live else "manual",
+            "runs": len(mine),
+        })
+    out.sort(key=lambda svc: (not svc["active"], svc["service"]))
+    return {"services": out}
+
+
 @router.get("/v1/perf/runs")
 async def perf_list_runs(request: Request):
     """List completed campaign runs, newest first, and ceiling probes apart.

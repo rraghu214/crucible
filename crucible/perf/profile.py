@@ -158,6 +158,10 @@ class TargetProfile:
     #: more. A memory permission cannot be sidestepped that way.
     policy_memory_kind: MemoryKind = MemoryKind.POLICY
     source_path: Path | None = None
+    #: The service this profile describes, for people: "perf-lab". The profile's
+    #: ``name`` is the runtime adapter ("spring-boot"); the UI showed that as if it
+    #: were the service. Display only: grants nothing.
+    service: str = ""
 
     # -- loading ----------------------------------------------------------
 
@@ -228,6 +232,7 @@ class TargetProfile:
             # protects. The kind is fixed by the code; the profile does not vote.
             policy_memory_kind=MemoryKind.POLICY,
             source_path=source_path,
+            service=str(data.get("service", "")),
         )
 
     # -- authority --------------------------------------------------------

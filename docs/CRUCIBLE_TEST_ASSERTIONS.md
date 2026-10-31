@@ -4860,6 +4860,127 @@ and the static Playbooks and ceiling cards are gone.
 
 ---
 
+# GROUP 46 — Live runs record their true cause; GC gets a real lever
+
+*Drafted 1 November 2026 by Claude Code, while the operator was away. **NOT YET
+REVIEWED** by the operator. On the draft branch `capstone/live-quadrants` only.
+`tests/test_live_ground_truth.py` (23). Code: `fixture_ground_truth` and
+`build_campaign(fixture=)` in `crucible/perf/commands.py`; `ground_truth` on
+`Campaign` / `CampaignResult`; `manifest_ground_truth` in `crucible/perf/scorer.py`;
+the quadrant on the Benchmarks screen; `perflab.jvm.heap-max-mb` in
+`config/profiles/spring-boot.yaml`; `scripts/box_a_post_receive.sh`;
+`config/bench/`.*
+
+*Operator decisions, 1 November 2026: "Our live runs must record the true cause...
+shouldn't it just be an inherent behaviour?"; "We should be ok to change the GC
+fixes. Lets give it a real lever."; "running more live campaigns on other faults,
+even if it takes 25 mins".*
+
+### 46.1 A run started from a fixture records the fixture's true cause
+
+**What it checks.** `crucible run --fixture <id>` copies `cause_family` from
+`config/fixtures/<id>.yaml` onto the manifest as `ground_truth`, before the run
+starts. A healthy fixture records `None`. An unknown fixture refuses the run. A run
+with no fixture records `{}`.
+
+**Why it exists.** The quadrants need the true cause, and Crucible cannot work it
+out: that would be its diagnosis grading itself (principle 3). The fixture file
+already records it, written by whoever designed the fault, before any run. So the
+cause is copied, not typed: no free-text flag that could be mistyped or set after
+seeing the result.
+
+**For review.**
+- `--fixture` names the state the operator put the target in; Crucible does not
+  check that the target really is in that state. Should the campaign compare the
+  fixture's `bottleneck_config` with the workspace's `application.properties` and
+  refuse on a mismatch?
+
+### 46.2 The recorded cause never reaches the model
+
+**What it checks.** A manifest whose `ground_truth` holds a marker string, read back
+through the journal (the one path from old manifests into a prompt), renders
+without the marker.
+
+**Why it exists.** A diagnosis that can read the answer is not being tested.
+
+### 46.3 The scorer and the Benchmarks page score live runs from the record
+
+**What it checks.** The scorer's four outcomes from the manifest's record (named
+cause vs true cause, IMPROVED and kept or not); a run with no record stays
+UNSCORABLE; the Benchmarks page counts each quadrant and says how many runs were
+scored.
+
+**Why it exists.** Until now the quadrant panel was hard-coded empty. Zero in a
+quadrant is a measurement once runs are scored; "not yet measured" is for when none
+are.
+
+### 46.4 The heap is a real lever for gc_pressure
+
+**What it checks.** `perflab.jvm.heap-max-mb` is an allowed int, 128-1536 MB. Box A's
+deploy hook reads it from `application.properties` and passes `-Xmx` after
+`PERFLAB_JAVA_OPTS` (HotSpot honours the last). The GC fixtures set their state
+through it; the pool is now the judgement trap on `perflab_gc_pressure`; SKILL.md
+names the lever.
+
+**Why it exists.** The agent could name GC and do nothing. The task text said
+"abstain", while the grader required a proposal for class B, so those cases failed
+whatever the model did. Now both say "raise the heap".
+
+**For review.**
+- The key sits in `application.properties` but Spring does not read it; only the
+  hook does. Is that acceptable, or should it be a separate `jvm.options` file
+  (needs a multi-file applicator)?
+- Proof it is in force is the commit check plus `jvm.memory.max` in the snapshot.
+  Should the campaign refuse to measure until `jvm.memory.max` matches?
+- T2 and T12 were changed to expect the heap proposal. The traps changed with them.
+  Confirm this is the goalpost you meant to move.
+
+### 46.5 Each live benchmark SLA is protected
+
+**What it checks.** Every `config/bench/slo-*.yaml` loads, is not production, and
+matches the profile's protected paths (`config/bench/**`, added).
+
+**For review.**
+- The targets were chosen by Claude Code from the fixtures' captured broken-state
+  p99: /api/db 120 ms (pool and threads), /api/orders 400 ms, /api/catalog 20 ms,
+  /api/churn 300 ms. Are those the goals you would have set?
+
+---
+
+# GROUP 47 — Library and Overview name the service, not the runtime
+
+*Drafted 1 November 2026 by Claude Code, while the operator was away. **NOT YET
+REVIEWED** by the operator. Draft branch only. `tests/test_ui_services.py` (4).
+Code: `TargetProfile.service`; `service:` in both profiles; `/v1/perf/services`;
+`loadLibrary` / `loadOverview` in the dashboard.*
+
+*Operator, 1 November 2026: "include the service name properly. perf-lab, as well
+the sample python one we had.. it helps for representational purposes".*
+
+### 47.1 Each profile names its service; the page lists them by it
+
+**What it checks.** `spring-boot.yaml` declares `service: perf-lab`, `fastapi.yaml`
+`service: perf-lab-py`. `/v1/perf/services` lists both, the active one first, with
+runs counted from each manifest's own `profile` field. Library draws one card per
+service from it.
+
+**Why it exists.** The card read "spring-boot target": that is the runtime adapter,
+not the service.
+
+### 47.2 A profile with no pipeline is shown as a profile, not a live service
+
+**What it checks.** The FastAPI profile (deploy manual, no branch) comes back
+`live: false` with no target or environment, and the card says "profile only".
+
+**Why it exists.** The old sample card ("RecoAPI") gave it collections and runs it
+never had. It is representational, and now it says honestly what it represents.
+
+**For review.**
+- `perf-lab-py` is a name Claude Code chose for the Python sample. Is it the name
+  you use?
+
+---
+
 # Review decisions — week 1
 
 Raised by Claude Code while implementing, decided by the operator on 10 September 2026.

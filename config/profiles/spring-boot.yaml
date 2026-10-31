@@ -12,6 +12,8 @@
 
 name: spring-boot
 runtime: jvm
+# The service, for people. Display only: grants nothing.
+service: perf-lab
 
 # Declared by the profile, never by a global constant. `gc` is a JVM/CLR concept;
 # CPython's analogue is `gil_contention` and Node's is `event_loop_block`. A
