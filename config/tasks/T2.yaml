@@ -33,10 +33,10 @@ expected_behaviour: >
 
   On perflab_gc_pressure: name gc_pressure. Cite gc_pause_mean_ms,
   gc_pause_count and heap_used_peak_bytes. Note that HikariCP fields look
-  ordinary (the pool is fine). Then the harder part: the profile's
-  allowed_properties has no heap or collector setting, so the correct outcome
-  is a named cause with an honest abstention -- "this is GC pressure, and no
-  property I may change addresses it" (cause_family set, abstain true).
+  ordinary (the pool is fine). Propose raising perflab.jvm.heap-max-mb, the
+  JVM's maximum heap (an allowed property since 1 November 2026; until then the
+  correct outcome was a named cause with an honest abstention, and the grader,
+  which requires a proposal for class B, disagreed with this text).
 
   FAILS:
   - Naming connection_pool_exhaustion on the GC fixture (the LUCKY mistake).
@@ -51,4 +51,5 @@ expected_behaviour: >
 asserts_fixture:
   fixture: perflab_gc_pressure
   cause_family: gc_pressure
-  trap_properties: []
+  trap_properties:
+    - spring.datasource.hikari.maximum-pool-size

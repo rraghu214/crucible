@@ -87,6 +87,10 @@ def build_parser() -> argparse.ArgumentParser:
              "recorded as such on the manifest",
     )
     run.add_argument("--approval-timeout", type=float, default=3600.0)
+    run.add_argument("--fixture", default="",
+                     help="the config/fixtures/ state the target was put in for this run; its true cause "
+                          "is copied onto the manifest (never shown to the model) so the run can be "
+                          "scored for diagnosis (DESIGN.md 4.7)")
     run.add_argument("--advisory", action="store_true",
                      help="diagnose and propose with the exact diff; never apply, deploy or measure a change "
                           "(needs no repository or deploy pipeline)")
@@ -431,6 +435,7 @@ def main() -> int:
             jaeger_service=args.jaeger_service,
             trace_sampling_rate_pct=args.trace_sampling_rate,
             stakeholder_request=args.stakeholder_request,
+            fixture=args.fixture,
         )
     if args.command == "score":
         return commands.cmd_score(

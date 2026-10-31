@@ -14,7 +14,7 @@ ground_truth_cause_family: gc_pressure
 severity: moderate
 
 bottleneck_config:
-  jvm.Xmx: 192m
+  perflab.jvm.heap-max-mb: 192
   endpoint: /api/churn
 
 setup: >

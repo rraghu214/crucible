@@ -42,7 +42,9 @@ guess dressed as an elimination.
 **gc_pressure** — `gc_pause_total_ms` a material fraction of the measured window,
 heap used tracking close to heap max, and latency spikes that are periodic rather
 than load-proportional. A p99 that is much worse than p95 while the mean is fine
-is the classic shape.
+is the classic shape. The lever is `perflab.jvm.heap-max-mb` (the JVM's maximum
+heap): more headroom means fewer, cheaper collections. A bigger connection pool
+does not address GC, even when it happens to move the number.
 
 **inefficient_query** — request count per endpoint far below query executions per
 request (the N+1 shape), or one endpoint's `mean_ms` dominating while the pool and

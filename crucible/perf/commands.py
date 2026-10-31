@@ -1169,6 +1169,26 @@ def resolve_spawn_rate(given: float | None, sla: Sla) -> float:
     return rate
 
 
+def fixture_ground_truth(fixture_id: str, fixture_dir: str | Path = "config/fixtures") -> dict[str, Any]:
+    """The true cause of a live run started from a fixture, read from the fixture file.
+
+    Operator decision, 1 November 2026: a live benchmark run records its true
+    cause by itself, with no free-text flag. The cause is never worked out by
+    Crucible -- that would be its diagnosis grading itself (principle 3). It was
+    written into the fixture before any run, by whoever designed the fault. An
+    unknown fixture refuses the run rather than recording a guess.
+    """
+    from .fixtures import load_specs  # noqa: PLC0415
+
+    specs = {spec.id: spec for spec in load_specs(Path(fixture_dir))}
+    spec = specs.get(fixture_id)
+    if spec is None:
+        raise ValueError(f"no fixture {fixture_id!r} in {fixture_dir}; known: {', '.join(sorted(specs))}")
+    return {"fixture": spec.id, "cause_family": spec.cause_family or None,
+            "source": f"{Path(fixture_dir).as_posix()}/{spec.id}.yaml",
+            "recorded": "from the fixture file, before the run started"}
+
+
 def build_campaign(
     *,
     profile_name: str,
@@ -1197,6 +1217,7 @@ def build_campaign(
     requests: list[dict[str, Any]] | None = None,
     data: dict[str, dict[str, str]] | None = None,
     accept_tradeoffs: bool = False,
+    fixture: str = "",
 ) -> Any:
     """Assemble a real campaign from configuration. Kept apart from ``cmd_run``
     so a test can build one without going through argparse."""
@@ -1306,6 +1327,7 @@ def build_campaign(
         # scripted test campaign never sets this and skips the wait entirely.
         warm_up_gateway=gateway_client.warm_up,
         stakeholder_request=stakeholder_request,
+        ground_truth=fixture_ground_truth(fixture) if fixture else {},
         guarded_files=tuple(p for p in (sla.source_path, profile.source_path) if p),
         # §10 hooks: uploaded .py files in <state>/hooks, run in the target's
         # workspace with an allowlisted environment (Group 41).

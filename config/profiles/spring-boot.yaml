@@ -94,6 +94,20 @@ allowed_properties:
     type: int
     min: 100
     max: 30000
+  # The JVM's maximum heap, in MB. Operator decision, 1 November 2026: gc_pressure
+  # needed a real lever; until then the agent could name GC and do nothing about
+  # it. Heap size is a JVM flag, read before Spring starts, so it cannot be a
+  # Spring property -- but it lives in application.properties anyway, because
+  # that is the one file the agent edits and the one file each experiment
+  # commits. Box A's deploy hook (scripts/box_a_post_receive.sh) reads this line
+  # and passes -Xmx<n>m to java; Spring ignores the key. Bounds: Box A has 5.9 GB
+  # and the JVM's own default is ~1.5 GB; below 128 MB PerfLab does not start.
+  # Proof it is in force: the commit check (the jar carries the sha of the
+  # commit that set it) plus jvm.memory.max in the snapshot.
+  perflab.jvm.heap-max-mb:
+    type: int
+    min: 128
+    max: 1536
 
 # The first half of the SLA protection. The second half is the Policy memory kind,
 # which the agent has no write permission for. Both exist because a file guard can
@@ -101,6 +115,7 @@ allowed_properties:
 # be weakened independently of the other (DESIGN.md section 4.4).
 protected_paths:
   - config/slo.yaml
+  - config/bench/**
   - config/profiles/**
   - locust/**
   - tests/**

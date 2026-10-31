@@ -1363,12 +1363,32 @@ def screen_benchmark(ctx: PerfContext, q: dict[str, str]) -> dict[str, Any]:
         "Graded by crucible.perf.scorer.score_replay, which calls no model. Class C carries two caveats in "
         "docs/BENCHMARK_REPLAY_RESULTS.md: the trap was never tempted, and T3's prompt is not sent.")]))
 
-    quadrant = {"CORRECT": [], "LUCKY": [], "UNLUCKY": [], "WRONG": []}
-    panels = [s.text(f"{k}: " + ("not yet measured -- no scored live campaign" if not v else ", ".join(v)))
-              for k, v in quadrant.items()]
+    # Live runs started from a fixture carry their true cause (crucible run
+    # --fixture); each of their experiments is scored by the scorer's own rule.
+    from ..perf.scorer import UNSCORABLE, manifest_ground_truth, score_diagnosis
+
+    quadrant: dict[str, list[str]] = {"CORRECT": [], "LUCKY": [], "UNLUCKY": [], "WRONG": []}
+    scored_runs = 0
+    for c in campaigns:
+        truth = manifest_ground_truth(c)
+        if truth is None:
+            continue
+        scored_runs += 1
+        for e in c.get("experiments") or []:
+            if e.get("refused_by_guard"):
+                continue
+            q = score_diagnosis(e, truth)
+            if q != UNSCORABLE:
+                quadrant[q].append(f"{c.get('run_id')} exp {e.get('experiment')}")
+    if scored_runs:
+        panels = [s.text(f"{k}: {len(v)}" + (f" -- {', '.join(v)}" if v else "")) for k, v in quadrant.items()]
+    else:
+        panels = [s.text(f"{k}: not yet measured -- no scored live campaign") for k in quadrant]
     s.add(s.card("Diagnosis against outcome", [s.tabs(list(quadrant), panels), s.text(
-        "Every quadrant needs to know whether the fix worked, which only a live campaign can measure. Replay "
-        f"shows the diagnosis half alone: correct on {_correct_count(replay)}.")]))
+        f"Every quadrant needs to know whether the fix worked, which only a live campaign can measure: "
+        f"{scored_runs} live run(s) started from a fixture are scored here. Zero in a quadrant is a "
+        f"measurement once runs are scored. Replay shows the diagnosis half alone: correct on "
+        f"{_correct_count(replay)}.")]))
     claims = [c for c in (_claim(ctx, ctx.replay_results_doc), _claim(ctx, ctx.live_results_doc)) if c]
     s.add(s.card("The claim this supports", [s.text(c) for c in claims] or [
         s.text("No results document yet -- no claim.")]))

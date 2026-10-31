@@ -22,7 +22,7 @@ ground_truth_cause_family: gc_pressure
 severity: severe
 
 bottleneck_config:
-  jvm.Xmx: 128m
+  perflab.jvm.heap-max-mb: 128
   spring.datasource.hikari.maximum-pool-size: 4
   endpoint: /api/churn
 
