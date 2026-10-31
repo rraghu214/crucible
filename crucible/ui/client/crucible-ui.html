@@ -236,6 +236,8 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
 .pgraph-label.done{color:var(--hi);}
 .pgraph-label.active{color:var(--fire);font-weight:600;}
 .pgraph-label.waiting{color:var(--warn);font-weight:600;}
+.pgraph-node.waiting .pgraph-dot{background:var(--warn);border-color:var(--warn);box-shadow:0 0 0 4px var(--warn-d);}
+.pgraph-node.waiting .pgraph-label{color:var(--warn);font-weight:600;}
 .pgraph-role{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--lo);width:68px;text-align:right;flex-shrink:0;}
 
 /* ── CLI twin ── */
@@ -456,7 +458,7 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
     <a class="nav-item" onclick="go('active')">
       <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8l2.5 2"/></svg>
       Active
-      <span class="nav-badge pulse">1</span>
+      <span class="nav-badge pulse" id="active-badge" style="display:none">1</span>
     </a>
     <a class="nav-item" onclick="go('results')">
       <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12h2V6H2zm4 0h2V4H6zm4 0h2V8h-2z"/></svg>
@@ -510,39 +512,32 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
     <div class="ph-left">
       <div class="ph-eyebrow">Dashboard</div>
       <div class="ph-title">Overview</div>
-      <div class="ph-sub">PerfLab · Spring Boot · hikaricp — last run 2h ago</div>
+      <div class="ph-sub" id="ov-sub">Loading…</div>
     </div>
     <div class="ph-actions">
       <button class="btn btn-ghost btn-sm" onclick="go('results')">View Results</button>
       <button class="btn btn-primary btn-sm" onclick="go('new-test')">+ New Test Run</button>
     </div>
   </div>
+  <!-- Every value below comes from the server (loadOverview). -->
   <div class="grid4" style="margin-bottom:14px;">
-    <div class="kpi"><div class="kpi-label">Test Runs</div><div class="kpi-val">12</div><div class="kpi-meta">+2 this week</div></div>
-    <div class="kpi"><div class="kpi-label">Best p99</div><div class="kpi-val ok">58 ms</div><div class="kpi-meta">TR-003 pool=20</div></div>
-    <div class="kpi"><div class="kpi-label">Improvement</div><div class="kpi-val fire">95%</div><div class="kpi-meta">1206 → 58 ms</div></div>
-    <div class="kpi"><div class="kpi-label">AI Accuracy</div><div class="kpi-val">94.6%</div><div class="kpi-meta">35/37 fixtures</div></div>
+    <div class="kpi"><div class="kpi-label">Runs on disk</div><div class="kpi-val" id="ov-runs">—</div><div class="kpi-meta" id="ov-runs-note"></div></div>
+    <div class="kpi"><div class="kpi-label">Best measured p99</div><div class="kpi-val ok" id="ov-best">—</div><div class="kpi-meta" id="ov-best-note"></div></div>
+    <div class="kpi"><div class="kpi-label">Latest baseline p99</div><div class="kpi-val" id="ov-base">—</div><div class="kpi-meta" id="ov-base-note"></div></div>
+    <div class="kpi"><div class="kpi-label">Ceiling probes</div><div class="kpi-val" id="ov-ceil">—</div><div class="kpi-meta" id="ov-ceil-note"></div></div>
   </div>
   <div class="grid2">
     <div class="card">
-      <div class="card-h"><div><div class="card-title">Recent Test Runs</div></div><button class="btn btn-ghost btn-sm" onclick="go('results')">All →</button></div>
+      <div class="card-h"><div><div class="card-title">Recent Test Runs</div></div><button class="btn btn-ghost btn-sm" onclick="go('history')">All →</button></div>
       <div class="tbl-wrap"><table>
-        <tr><th>Run</th><th>Status</th><th>p99</th><th>Trials</th></tr>
-        <tr><td class="hi">TR-003</td><td><span class="pill ok">IMPROVED</span></td><td class="mono" data-thermal="58">58 ms</td><td>4</td></tr>
-        <tr><td class="hi">TR-002</td><td><span class="pill err">REVERTED</span></td><td class="mono" data-thermal="892">892 ms</td><td>3</td></tr>
-        <tr><td class="hi">TR-001</td><td><span class="pill idle">BASELINE</span></td><td class="mono" data-thermal="1206">1206 ms</td><td>1</td></tr>
+        <thead><tr><th>Run</th><th>Kind</th><th>Outcome</th><th>Baseline p99</th><th>After</th></tr></thead>
+        <tbody id="ov-recent"><tr><td colspan="5" style="color:var(--lo);">Loading…</td></tr></tbody>
       </table></div>
     </div>
     <div class="card">
-      <div class="card-h"><div><div class="card-title">Active Run</div><div class="card-sub">TR-004 in progress</div></div><span class="pill running">RUNNING</span></div>
-      <div style="font-size:13px;color:var(--mid);margin-bottom:8px;">steady_50u · Trial 3/5 · 14m elapsed</div>
-      <div class="progress-track"><div class="progress-fill" style="width:60%"></div></div>
-      <div class="metric-band" style="margin-top:10px;">
-        <div class="mb-item"><div class="mb-label">p99</div><div class="mb-val" data-thermal="312">312 ms</div></div>
-        <div class="mb-item"><div class="mb-label">RPS</div><div class="mb-val">48.2</div></div>
-        <div class="mb-item"><div class="mb-label">Errors</div><div class="mb-val ok">0.1%</div></div>
-      </div>
-      <button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="go('active')">Open Live View →</button>
+      <div class="card-h"><div><div class="card-title">Active Run</div><div class="card-sub" id="ov-active-sub">—</div></div></div>
+      <div id="ov-active" style="font-size:13px;color:var(--mid);">Checking…</div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="go('active')">Open Live View →</button>
     </div>
   </div>
 </section>
@@ -550,122 +545,17 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
 <!-- ══ LIBRARY ══ -->
 <section class="pg" id="pg-library">
   <div class="ph">
-    <div class="ph-left"><div class="ph-eyebrow">Workspace</div><div class="ph-title">Services</div><div class="ph-sub">Every service you've instrumented — click in to see its collections and runs</div></div>
+    <div class="ph-left"><div class="ph-eyebrow">Workspace</div><div class="ph-title">Services</div><div class="ph-sub">The service this install is configured for, and every run on disk</div></div>
     <div class="ph-actions">
       <button class="btn btn-ghost btn-sm" onclick="importYaml()">↑ Import YAML</button>
       <button class="btn btn-primary btn-sm" onclick="go('new-test')">+ New Test Run</button>
     </div>
   </div>
 
-  <!-- Service cards grid (Postman-style workspace overview) -->
-  <div class="grid3" style="margin-bottom:20px;">
-    <!-- PerfLab — active, has data -->
-    <div class="card" style="cursor:pointer;border-color:rgba(59,171,140,.3);" onclick="libExpand('svc-perflab')">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-        <div style="width:36px;height:36px;border-radius:10px;background:var(--ok-d);border:1px solid rgba(59,171,140,.3);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">🚀</div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:14px;font-weight:700;">PerfLab</div>
-          <div style="font-size:11px;color:var(--lo);font-family:var(--f-mono);">Spring Boot · HikariCP</div>
-        </div>
-        <span class="pill running" style="font-size:10px;">1 active</span>
-      </div>
-      <div style="display:flex;gap:16px;margin-bottom:10px;">
-        <div><div style="font-size:10px;color:var(--lo);text-transform:uppercase;letter-spacing:.06em;">Collections</div><div style="font-size:18px;font-weight:700;">3</div></div>
-        <div><div style="font-size:10px;color:var(--lo);text-transform:uppercase;letter-spacing:.06em;">Runs</div><div style="font-size:18px;font-weight:700;">12</div></div>
-        <div><div style="font-size:10px;color:var(--lo);text-transform:uppercase;letter-spacing:.06em;">Best p99</div><div style="font-size:18px;font-weight:700;color:var(--ok);">58ms</div></div>
-      </div>
-      <div style="font-size:11px;color:var(--mid);">Oracle Free · box-a:8080 · staging</div>
-    </div>
-
-    <!-- FastAPI app — configured, no runs yet -->
-    <div class="card" style="cursor:pointer;opacity:.8;" onclick="libExpand('svc-fastapi')">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-        <div style="width:36px;height:36px;border-radius:10px;background:var(--blue-d);border:1px solid rgba(91,155,213,.3);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">⚡</div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:14px;font-weight:700;">RecoAPI</div>
-          <div style="font-size:11px;color:var(--lo);font-family:var(--f-mono);">FastAPI · asyncpg</div>
-        </div>
-        <span class="pill idle" style="font-size:10px;">no runs</span>
-      </div>
-      <div style="display:flex;gap:16px;margin-bottom:10px;">
-        <div><div style="font-size:10px;color:var(--lo);text-transform:uppercase;letter-spacing:.06em;">Collections</div><div style="font-size:18px;font-weight:700;">1</div></div>
-        <div><div style="font-size:10px;color:var(--lo);text-transform:uppercase;letter-spacing:.06em;">Runs</div><div style="font-size:18px;font-weight:700;">0</div></div>
-        <div><div style="font-size:10px;color:var(--lo);text-transform:uppercase;letter-spacing:.06em;">Best p99</div><div style="font-size:18px;font-weight:700;color:var(--lo);">—</div></div>
-      </div>
-      <div style="font-size:11px;color:var(--mid);">Hetzner · reco-api:8000 · staging</div>
-    </div>
-
-    <!-- Add new service -->
-    <div class="card" style="display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;border-style:dashed;min-height:160px;cursor:pointer;opacity:.6;" onclick="go('new-test')">
-      <div style="font-size:28px;">＋</div>
-      <div style="font-size:13px;font-weight:600;color:var(--mid);">Add a service</div>
-      <div style="font-size:11px;color:var(--lo);text-align:center;max-width:180px;">Spring Boot, FastAPI, Express, .NET — any service with an HTTP endpoint</div>
-    </div>
-  </div>
-
-  <!-- Expanded tree (shows on service card click) -->
-  <div id="libTree">
-    <div class="lib-service" id="svc-perflab">
-      <div class="lib-svc-head" onclick="toggleLib(this)">
-        <span style="font-size:18px;width:28px;text-align:center;">🚀</span>
-        <div style="flex:1;"><div style="font-size:14px;font-weight:700;">PerfLab</div><div style="font-size:11px;color:var(--lo);">Spring Boot · hikaricp · box-a:8080</div></div>
-        <span style="font-size:11px;color:var(--lo);margin-right:8px;">3 collections · 12 runs</span>
-        <span style="color:var(--lo);font-size:16px;transition:transform .2s;" class="lib-chev">›</span>
-      </div>
-      <div class="lib-svc-body on">
-        <div class="lib-col-head" onclick="toggleLibCol(this)">
-          <span style="color:var(--purple);">📁</span>
-          <span style="font-size:13px;font-weight:600;flex:1;">Connection Pool Investigation</span>
-          <span style="font-size:11px;color:var(--lo);">8 runs · best p99 58ms</span>
-          <span style="color:var(--lo);font-size:14px;transition:transform .2s;" class="lib-col-chev">›</span>
-        </div>
-        <div class="lib-col-body on" style="padding-left:28px;">
-          <div class="lib-run-row" onclick="go('active')"><span style="font-size:12px;">🔄</span><span style="font-size:12px;flex:1;">TR-004 · /cache/get</span><span class="pill running" style="font-size:10px;padding:2px 7px;">RUNNING</span><span style="font-size:11px;color:var(--lo);margin-left:8px;">now</span></div>
-          <div class="lib-run-row" onclick="go('results')"><span style="font-size:12px;">✅</span><span style="font-size:12px;flex:1;">TR-003 · pool=20 · /transfer</span><span class="pill ok" style="font-size:10px;padding:2px 7px;">IMPROVED</span><span style="font-size:11px;color:var(--lo);margin-left:8px;">2h ago</span></div>
-          <div class="lib-run-row"><span style="font-size:12px;">↩️</span><span style="font-size:12px;flex:1;">TR-002 · pool=10 · /transfer</span><span class="pill err" style="font-size:10px;padding:2px 7px;">REVERTED</span><span style="font-size:11px;color:var(--lo);margin-left:8px;">1d ago</span></div>
-          <div class="lib-run-row"><span style="font-size:12px;">📊</span><span style="font-size:12px;flex:1;">TR-001 · baseline · /transfer</span><span class="pill idle" style="font-size:10px;padding:2px 7px;">BASELINE</span><span style="font-size:11px;color:var(--lo);margin-left:8px;">2d ago</span></div>
-        </div>
-        <div class="lib-col-head" onclick="toggleLibCol(this)">
-          <span style="color:var(--blue);">📁</span>
-          <span style="font-size:13px;font-weight:600;flex:1;">Cache Endpoint Tests</span>
-          <span style="font-size:11px;color:var(--lo);">2 runs</span>
-          <span style="color:var(--lo);font-size:14px;transition:transform .2s;" class="lib-col-chev">›</span>
-        </div>
-        <div class="lib-col-body" style="padding-left:28px;">
-          <div class="lib-run-row"><span style="font-size:12px;">📊</span><span style="font-size:12px;flex:1;">TR-005 · /cache/get baseline</span><span class="pill idle" style="font-size:10px;padding:2px 7px;">BASELINE</span><span style="font-size:11px;color:var(--lo);margin-left:8px;">3d ago</span></div>
-        </div>
-        <div class="lib-col-head" onclick="toggleLibCol(this)">
-          <span style="color:var(--warn);">📁</span>
-          <span style="font-size:13px;font-weight:600;flex:1;">Ceiling Discovery</span>
-          <span style="font-size:11px;color:var(--lo);">1 ceiling probe</span>
-          <span style="color:var(--lo);font-size:14px;transition:transform .2s;" class="lib-col-chev">›</span>
-        </div>
-        <div class="lib-col-body" style="padding-left:28px;">
-          <div class="lib-run-row" onclick="switchHistTab('ceiling');go('history')"><span style="font-size:12px;">⚡</span><span style="font-size:12px;flex:1;">CP-001 · ceiling: 200–225 users</span><span class="pill" style="font-size:10px;padding:2px 7px;background:var(--warn-d);color:var(--warn);">CEILING</span><span style="font-size:11px;color:var(--lo);margin-left:8px;">13 Sep</span></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="lib-service" id="svc-fastapi" style="display:none;">
-      <div class="lib-svc-head" onclick="toggleLib(this)">
-        <span style="font-size:18px;width:28px;text-align:center;">⚡</span>
-        <div style="flex:1;"><div style="font-size:14px;font-weight:700;">RecoAPI</div><div style="font-size:11px;color:var(--lo);">FastAPI · asyncpg · reco-api:8000</div></div>
-        <span style="font-size:11px;color:var(--lo);margin-right:8px;">1 collection · 0 runs</span>
-        <span style="color:var(--lo);font-size:16px;transition:transform .2s;" class="lib-chev">›</span>
-      </div>
-      <div class="lib-svc-body">
-        <div class="lib-col-head" onclick="toggleLibCol(this)">
-          <span style="color:var(--blue);">📁</span>
-          <span style="font-size:13px;font-weight:600;flex:1;">Recommendation Latency</span>
-          <span style="font-size:11px;color:var(--lo);">0 runs — ready to start</span>
-          <span style="color:var(--lo);font-size:14px;transition:transform .2s;" class="lib-col-chev">›</span>
-        </div>
-        <div class="lib-col-body" style="padding-left:28px;">
-          <div class="lib-run-row" onclick="go('new-test')" style="color:var(--lo);font-style:italic;"><span style="font-size:12px;">＋</span><span style="font-size:12px;flex:1;">Start first run…</span></div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <!-- The service this install is configured for, from slo.yaml and the profile,
+       and the runs on disk. No sample services or collections (loadLibrary). -->
+  <div class="grid3" style="margin-bottom:20px;" id="lib-cards"><div class="card" style="color:var(--lo);">Loading…</div></div>
+  <div id="libTree"></div>
 </section>
 
 <!-- ══ NEW TEST RUN (5-step wizard) ══ -->
@@ -763,7 +653,7 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
       <div class="card-h"><div class="card-title">What do you want to improve?</div></div>
       <div class="form-row">
         <label class="form-label">Goal (plain English)</label>
-        <input class="form-input" id="goal-text" value="Reduce p99 latency of /transfer below 200 ms at 50 concurrent users">
+        <input class="form-input" id="goal-text" value="">
         <div class="form-hint">Crucible turns this into a measurable SLA. Any number you write here is used exactly.</div>
         <button class="btn btn-ghost btn-sm" id="sla-suggest-btn" onclick="suggestSLA()" style="margin-top:6px;align-self:flex-start;">✨ AI suggestion</button>
       </div>
@@ -838,7 +728,7 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
           <div><input value="50" type="number" min="1"></div>
           <div><input value="300s"></div>
           <div><input value="30s"></div>
-          <div><input value="" placeholder="/api/db=60@150, /api/orders=40"></div>
+          <div><input value="" placeholder="optional, e.g. /api/db=60@150, /api/orders=40"></div>
           <button class="scenario-rm" onclick="rmScenario(this)">✕</button>
         </div>
         <div class="scenario-row">
@@ -846,7 +736,7 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
           <div><input value="100" type="number" min="1"></div>
           <div><input value="180s"></div>
           <div><input value="15s"></div>
-          <div><input value="" placeholder="/api/db=60@150, /api/orders=40"></div>
+          <div><input value="" placeholder="optional, e.g. /api/db=60@150, /api/orders=40"></div>
           <button class="scenario-rm" onclick="rmScenario(this)">✕</button>
         </div>
       </div>
@@ -897,7 +787,7 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
   <div class="wz-pane" id="wp-3">
     <div class="card">
       <div class="card-h"><div class="card-title">Cost &amp; time estimate</div><div class="card-sub" id="budget-sub">Calculated from your scenario, mode and the target profile</div></div>
-      <div class="budget-cap-row" style="margin-bottom:12px;">
+      <div class="budget-cap-row" id="wz-experiments-row" style="margin-bottom:12px;">
         <div>
           <div class="budget-cap-label">Maximum experiments</div>
           <div style="font-size:11px;color:var(--lo);">The plan's experiment count (DESIGN.md §7). The campaign stops earlier once the SLA is met.</div>
@@ -1059,7 +949,7 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;margin-top:10px;">
         <div style="display:flex;flex-direction:column;align-items:flex-start;">
           <button class="btn btn-ok" onclick="doApprove()">✓ Approve</button>
-          <div class="cli-twin" id="live-approve-cli">crucible approve …</div>
+          <div class="cli-twin" id="live-approve-cli"></div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-start;">
           <button class="btn btn-err" onclick="doReject()">✕ Reject</button>
@@ -1075,94 +965,33 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
       <pre id="active-log-pre" style="font-family:var(--f-mono);font-size:10px;line-height:1.4;overflow-x:auto;white-space:pre-wrap;max-height:200px;overflow-y:auto;background:var(--s2);padding:10px;border-radius:var(--rs);color:var(--mid);margin-top:6px;"></pre>
     </div>
   </div>
-  <!-- Demo header (always shown; live overlay prepends above) -->
-  <div class="ph">
-    <div class="ph-left"><div class="ph-eyebrow">Live</div><div class="ph-title" id="active-demo-title">TR-004</div><div class="ph-sub">steady_50u · Trial 3/5 · 14m 32s elapsed · Semi-Automated</div></div>
-    <div class="ph-actions">
-      <span class="pill running" id="active-demo-pill">RUNNING</span>
-      <div style="display:flex;flex-direction:column;align-items:center;">
-        <button class="btn btn-ghost btn-sm" onclick="confirmPause()">⏸ Pause</button>
-        <div class="cli-twin">crucible pause TR-004</div>
-      </div>
-      <div style="display:flex;flex-direction:column;align-items:center;">
-        <button class="btn btn-err btn-sm" onclick="confirmAbort()">■ Abort</button>
-        <div class="cli-twin">crucible abort TR-004</div>
-      </div>
-    </div>
+  <!-- Shown when no campaign is running. Nothing on this screen is sample data:
+       a made-up campaign here once read as a live one (trial, 31 October 2026). -->
+  <div id="active-empty" class="card" style="margin-bottom:14px;">
+    <div class="card-title">No campaign running</div>
+    <div style="font-size:12px;color:var(--mid);margin-top:6px;">Start one from <a href="#" onclick="go('new-test')">New Test Run</a>. While it runs, this screen shows its id, status, the change it is waiting for you to approve, and its live log. Measured numbers are in <a href="#" onclick="go('results')">Results</a> once it finishes.</div>
+    <div id="active-running-job" style="font-size:12px;color:var(--lo);margin-top:6px;"></div>
   </div>
-  <div class="progress-track"><div class="progress-fill" style="width:62%"></div></div>
-  <div class="metric-band">
-    <div class="mb-item"><div class="mb-label">p99</div><div class="mb-val" data-thermal="312">312 ms</div></div>
-    <div class="mb-item"><div class="mb-label">p50</div><div class="mb-val">88 ms</div></div>
-    <div class="mb-item"><div class="mb-label">RPS</div><div class="mb-val">48.2</div></div>
-    <div class="mb-item"><div class="mb-label">Errors</div><div class="mb-val ok">0.1%</div></div>
-    <div class="mb-item"><div class="mb-label">Pool Active</div><div class="mb-val err">2/2</div></div>
-    <div class="mb-item"><div class="mb-label">Pending</div><div class="mb-val err">43</div></div>
-  </div>
-  <div class="charts-row">
-    <div class="chart-wrap"><div class="chart-title">p99 Latency (ms)</div><canvas id="chartP99"></canvas></div>
-    <div class="chart-wrap"><div class="chart-title">Throughput (req/s)</div><canvas id="chartRps"></canvas></div>
-  </div>
-
-  <!-- PDMA Plan Graph -->
+  <!-- The loop, as a reference. Only the approval step is ever highlighted, and only
+       when the server reports a pending approval. -->
   <div class="card" style="margin-bottom:14px;">
-    <div class="card-h">
-      <div><div class="card-title">Agent Task Flow</div><div class="card-sub">PDMA loop — Trial 3 · pool=20 hypothesis</div></div>
-      <span class="pill" style="font-size:10px;letter-spacing:.05em;">SEMI-AUTO</span>
-    </div>
+    <div class="card-h"><div><div class="card-title">The loop each experiment follows</div><div class="card-sub">Semi-Automated: perceive, decide, act, measure. Advisory stops after the guard check; a ceiling probe only measures.</div></div></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;">
       <div class="pgraph">
-        <div class="pgraph-node"><div class="pgraph-dot done"></div><div class="pgraph-label done">Baseline snapshot</div><div class="pgraph-role">Measure</div></div>
-        <div class="pgraph-node"><div class="pgraph-dot done"></div><div class="pgraph-label done">Recall past attempts</div><div class="pgraph-role">Plan</div></div>
-        <div class="pgraph-node"><div class="pgraph-dot done"></div><div class="pgraph-label done">Diagnose — pool saturation</div><div class="pgraph-role">Diagnose</div></div>
-        <div class="pgraph-node"><div class="pgraph-dot done"></div><div class="pgraph-label done">Guard check — within bounds</div><div class="pgraph-role">Guard</div></div>
-        <div class="pgraph-node"><div class="pgraph-dot waiting"></div><div class="pgraph-label waiting">⏸ Human approval</div><div class="pgraph-role">Approve</div></div>
+        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Baseline snapshot</div><div class="pgraph-role">Measure</div></div>
+        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Recall past attempts</div><div class="pgraph-role">Plan</div></div>
+        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Diagnose</div><div class="pgraph-role">Diagnose</div></div>
+        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Guard check: property and bounds</div><div class="pgraph-role">Guard</div></div>
+        <div class="pgraph-node" id="loop-approve"><div class="pgraph-dot"></div><div class="pgraph-label">Human approval</div><div class="pgraph-role">Approve</div></div>
         <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Apply config change</div><div class="pgraph-role">Act</div></div>
       </div>
       <div class="pgraph">
-        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Push to perftest_sandbox</div><div class="pgraph-role">Deploy</div></div>
-        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Read-back verify via /actuator/env</div><div class="pgraph-role">Verify</div></div>
-        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Re-measure under load</div><div class="pgraph-role">Measure</div></div>
-        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Score verdict (keep / revert)</div><div class="pgraph-role">Verdict</div></div>
-        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Commit manifest to Episode memory</div><div class="pgraph-role">Record</div></div>
+        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Push to the sandbox branch</div><div class="pgraph-role">Deploy</div></div>
+        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Prove the change is in force</div><div class="pgraph-role">Verify</div></div>
+        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Re-measure under the same load</div><div class="pgraph-role">Measure</div></div>
+        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Verdict: keep or revert</div><div class="pgraph-role">Verdict</div></div>
+        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Write the manifest</div><div class="pgraph-role">Record</div></div>
       </div>
-    </div>
-    <div style="margin-top:8px;display:flex;gap:14px;flex-wrap:wrap;">
-      <span style="font-size:11px;color:var(--lo);display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;background:var(--ok);border-radius:50%;display:inline-block;"></span>done</span>
-      <span style="font-size:11px;color:var(--lo);display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;background:var(--warn);border-radius:50%;display:inline-block;"></span>waiting for human</span>
-      <span style="font-size:11px;color:var(--lo);display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;background:var(--s3);border:2px solid var(--bd2);border-radius:50%;display:inline-block;"></span>pending</span>
-    </div>
-  </div>
-
-  <div class="approval-gate" id="approvalGate">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-      <span style="font-size:18px;">⚠️</span>
-      <span style="font-family:var(--f-head);font-size:14px;font-weight:700;color:var(--warn);">AI Proposes a Change — Your Approval Needed</span>
-    </div>
-    <p style="font-size:13px;color:var(--mid);margin-bottom:10px;"><strong style="color:var(--hi);">Diagnosis:</strong> Connection pool saturated. 43 threads waiting, max acquire 2406 ms. GC and CPU are healthy.</p>
-    <div class="diff-box"><div class="diff-rm">- spring.datasource.hikari.maximum-pool-size=2</div><div class="diff-add">+ spring.datasource.hikari.maximum-pool-size=20</div></div>
-    <div style="margin-bottom:10px;">
-      <div style="font-size:12px;font-weight:600;color:var(--mid);margin-bottom:6px;">Evidence</div>
-      <div class="evidence-bar"><div class="ev-label">Pool saturation</div><div class="ev-track"><div class="ev-fill" style="width:97%;background:var(--err)"></div></div><span style="font-size:11px;color:var(--err);">97%</span></div>
-      <div class="evidence-bar"><div class="ev-label">Acquire wait</div><div class="ev-track"><div class="ev-fill" style="width:92%;background:var(--err)"></div></div><span style="font-size:11px;color:var(--err);">2406 ms</span></div>
-      <div class="evidence-bar"><div class="ev-label">GC overhead</div><div class="ev-track"><div class="ev-fill" style="width:4%"></div></div><span style="font-size:11px;color:var(--ok);">4%</span></div>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;">
-      <div style="display:flex;flex-direction:column;align-items:flex-start;">
-        <button class="btn btn-ok" onclick="doApprove()">✓ Approve</button>
-        <div class="cli-twin">crucible approve TR-004</div>
-      </div>
-      <div style="display:flex;flex-direction:column;align-items:flex-start;">
-        <button class="btn btn-err" onclick="doReject()">✕ Reject</button>
-        <div class="cli-twin">crucible reject TR-004</div>
-      </div>
-      <button class="btn btn-ghost btn-sm" onclick="expandChat()">💬 Ask AI first</button>
-    </div>
-  </div>
-  <div id="diagResult" style="display:none;" class="card" style="border-color:rgba(59,171,140,.3);">
-    <div style="display:flex;align-items:center;gap:10px;">
-      <span style="font-size:22px;">✅</span>
-      <div><div style="font-family:var(--f-head);font-size:14px;font-weight:700;color:var(--ok);">Change applied — measuring now</div><div style="font-size:12px;color:var(--mid);">Deploy to perftest_sandbox · Commit 4f2a1c3 · Verified via /actuator/env</div></div>
     </div>
   </div>
 </section>
@@ -1171,9 +1000,9 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
 <section class="pg" id="pg-results">
   <!-- Live results header — replaced by real data when available -->
   <div class="ph" id="results-ph">
-    <div class="ph-left"><div class="ph-eyebrow">Test Run</div><div class="ph-title" id="results-title">TR-003 · Connection Pool Fix</div><div class="ph-sub" id="results-sub">PerfLab · /transfer · Semi-Automated · 22 Oct 2026</div></div>
+    <div class="ph-left"><div class="ph-eyebrow">Test Run</div><div class="ph-title" id="results-title">Loading the latest run…</div><div class="ph-sub" id="results-sub"></div></div>
     <div class="ph-actions">
-      <span class="pill ok" id="results-outcome-pill">IMPROVED</span>
+      <span class="pill idle" id="results-outcome-pill">—</span>
       <button class="btn btn-ghost btn-sm" onclick="loadResults('latest')">↺ Latest run</button>
       <button class="btn btn-ghost btn-sm" id="results-run-picker-btn" style="display:none;" onclick="toggleRunPicker()">▼ Pick run</button>
     </div>
@@ -1183,10 +1012,12 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
     <div id="results-run-list"></div>
   </div>
   <!-- KPI strip -->
-  <div class="grid3" style="margin-bottom:14px;" id="results-kpi-strip">
-    <div class="kpi"><div class="kpi-label">Baseline p99</div><div class="kpi-val" id="res-p99-before" data-thermal="1206">1206 ms</div><div class="kpi-meta" id="res-p99-before-note">pool=2</div></div>
-    <div class="kpi"><div class="kpi-label">Final p99</div><div class="kpi-val" id="res-p99-after" data-thermal="58">58 ms</div><div class="kpi-meta" id="res-p99-after-note">pool=20</div></div>
-    <div class="kpi"><div class="kpi-label">Improvement</div><div class="kpi-val fire" id="res-improvement">95.2%</div><div class="kpi-meta" id="res-sla-note">SLA: &lt;200 ms ✓</div></div>
+  <!-- Empty until a report fills it: a sample number here reads as a result (principle 1). -->
+  <div class="grid4" style="margin-bottom:14px;" id="results-kpi-strip">
+    <div class="kpi"><div class="kpi-label">Baseline p99</div><div class="kpi-val" id="res-p99-before">—</div><div class="kpi-meta" id="res-p99-before-note"></div></div>
+    <div class="kpi"><div class="kpi-label">Final p99</div><div class="kpi-val" id="res-p99-after">—</div><div class="kpi-meta" id="res-p99-after-note"></div></div>
+    <div class="kpi"><div class="kpi-label">Improvement</div><div class="kpi-val fire" id="res-improvement">—</div><div class="kpi-meta" id="res-sla-note"></div></div>
+    <div class="kpi"><div class="kpi-label">Model spend</div><div class="kpi-val" id="res-spend">—</div><div class="kpi-meta" id="res-spend-note"></div></div>
   </div>
   <!-- Before / After chart (real data) -->
   <div class="card" style="margin-bottom:14px;" id="results-chart-card">
@@ -1199,12 +1030,7 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
   <div class="card" id="results-exp-card">
     <div class="card-h"><div class="card-title">Trials</div></div>
     <div id="results-trials-live" style="display:none;"></div>
-    <div id="results-trials-demo">
-      <div class="trial-row" onclick="toggleTrial('t1')"><div class="tr-num">T1</div><div class="tr-name">Baseline — pool=2</div><div style="flex:1;"></div><span class="tr-verdict fire">BASELINE</span><div style="font-family:var(--f-mono);font-size:13px;margin-left:10px;">1206 ms</div><div class="tr-chevron" id="tc-t1">›</div></div>
-      <div class="trial-detail" id="td-t1"><div class="detail-grid"><div><div class="dg-key">p99</div><div class="dg-val fire">1206 ms</div></div><div><div class="dg-key">p50</div><div class="dg-val">420 ms</div></div><div><div class="dg-key">RPS</div><div class="dg-val">32.1</div></div><div><div class="dg-key">Pool active</div><div class="dg-val fire">2/2</div></div><div><div class="dg-key">Pending</div><div class="dg-val fire">43</div></div><div><div class="dg-key">Duration</div><div class="dg-val">300s</div></div></div><div style="font-size:12px;color:var(--mid);">Pool saturation: 43 waiters, 2406 ms max acquire. GC overhead 4%. CPU 28%.</div></div>
-      <div class="trial-row" onclick="toggleTrial('t2')"><div class="tr-num">T2</div><div class="tr-name">pool=20 applied</div><div style="flex:1;"></div><span class="tr-verdict ok">KEPT</span><div style="font-family:var(--f-mono);font-size:13px;color:var(--ok);margin-left:10px;">58 ms</div><div class="tr-chevron" id="tc-t2">›</div></div>
-      <div class="trial-detail" id="td-t2"><div class="detail-grid"><div><div class="dg-key">p99</div><div class="dg-val ok">58 ms</div></div><div><div class="dg-key">p50</div><div class="dg-val">21 ms</div></div><div><div class="dg-key">RPS</div><div class="dg-val">49.8</div></div><div><div class="dg-key">Pool active</div><div class="dg-val ok">4/20</div></div><div><div class="dg-key">Pending</div><div class="dg-val ok">0</div></div><div><div class="dg-key">Duration</div><div class="dg-val">300s</div></div></div><div style="font-size:12px;color:var(--mid);">SLA met. Pool contention resolved. Headroom confirmed to 200 users.</div></div>
-    </div>
+    <div id="results-trials-demo" style="font-size:12px;color:var(--lo);padding:8px 0;">No run loaded yet.</div>
   </div>
   <!-- Headline + limits (live) -->
   <div class="card" id="results-headline-card" style="display:none;">
@@ -1217,116 +1043,16 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
 <!-- ══ BENCHMARKS ══ -->
 <section class="pg" id="pg-benchmarks">
   <div class="ph">
-    <div class="ph-left"><div class="ph-eyebrow">AI Evaluation</div><div class="ph-title">Benchmarks</div><div class="ph-sub">20 fixtures · 22 snapshots · 9 cause families · gemini-3.5-flash-lite via glc_v5</div></div>
-    <div class="ph-actions"><button class="btn btn-ghost btn-sm" onclick="go('new-test')">Capture Fixture</button><button class="btn btn-primary btn-sm">▶ Re-run replay</button></div>
+    <div class="ph-left"><div class="ph-eyebrow">AI Evaluation</div><div class="ph-title">Benchmarks</div><div class="ph-sub">Read from the task set, the captured fixtures and the replay results on disk</div></div>
+    <div class="ph-actions"><button class="btn btn-ghost btn-sm" onclick="loadBenchmarks()">↺ Refresh</button></div>
   </div>
   <div class="info-banner" id="ib-benchmarks">
     <span class="info-banner-icon">🧪</span>
-    <div class="info-banner-body"><strong>Replay eval separates diagnosis quality from luck.</strong> Each fixture is a recorded metric snapshot captured from a real Box A/B campaign — the AI diagnoses it without running anything live. "35/37 cases" means 18 tasks run against 20 fixtures; not every task applies to every fixture, giving 37 evaluable task-cases with ground truth. 2 fixtures also captured through PromQL and Datadog for cross-provider agreement. Full results: <code style="font-family:var(--f-mono);font-size:10px;">docs/BENCHMARK_REPLAY_RESULTS.md</code></div>
+    <div class="info-banner-body"><strong>Replay separates diagnosis quality from luck.</strong> Each fixture is a metric snapshot captured from a real PerfLab state with its true cause recorded first. The model diagnoses it without running anything live, and the scorer grades it with no model call. Whether a fix <em>worked</em> needs a live campaign, so the diagnosis quadrant (CORRECT, LUCKY, UNLUCKY, WRONG) stays "not yet measured" until one is scored. Re-run with <code style="font-family:var(--f-mono);font-size:10px;">crucible bench</code>; the write-up is <code style="font-family:var(--f-mono);font-size:10px;">docs/BENCHMARK_REPLAY_RESULTS.md</code>.</div>
     <button class="info-banner-close" onclick="dismissBanner('ib-benchmarks')">✕</button>
   </div>
-  <div class="grid4" style="margin-bottom:16px;">
-    <div class="kpi"><div class="kpi-label">Task accuracy</div><div class="kpi-val ok">94.6%</div><div class="kpi-meta">35/37 cases with ground truth</div></div>
-    <div class="kpi"><div class="kpi-label">Fixtures</div><div class="kpi-val">20</div><div class="kpi-meta">22 snapshots · 2 multi-provider</div></div>
-    <div class="kpi"><div class="kpi-label">Avg latency</div><div class="kpi-val">1.8s</div><div class="kpi-meta">per replay diagnosis</div></div>
-    <div class="kpi"><div class="kpi-label">Model</div><div class="kpi-val" style="font-size:11px;font-family:var(--f-mono);">gemini-3.5-flash-lite</div><div class="kpi-meta">pinned · failover disabled · via glc_v5</div></div>
-  </div>
-  <div style="font-size:11px;color:var(--mid);margin-bottom:10px;padding:8px 12px;background:var(--s2);border-radius:var(--rs);border:1px solid var(--bd);">
-    <strong style="color:var(--hi);">What these fixtures are:</strong> each is a recorded metric snapshot captured from a real Box A/B PerfLab campaign. The AI is given the snapshot and asked to identify the cause family and propose the correct property change — without running anything live. 18 tasks are evaluated across the 20 fixtures, yielding 37 task-cases that have a ground truth. Full per-task breakdown: <code style="font-family:var(--f-mono);font-size:10px;">docs/BENCHMARK_REPLAY_RESULTS.md</code>. Fixtures marked <strong>multi-provider</strong> were captured through Actuator, PromQL, and Datadog to verify cross-provider agreement.
-  </div>
-  <!-- connection_pool_exhaustion -->
-  <div class="bench-row" onclick="toggleBench(this)">
-    <div class="bench-head"><div class="bench-icon" style="background:var(--err-d);">🏊</div><div class="bench-info"><div class="bench-name">connection_pool_exhaustion</div><div class="bench-desc">HikariCP acquire wait · pool starved · pending threads — 3 fixtures · 5 snapshots</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:100%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--lo);">3 fixtures</div></div><span class="bench-chevron">›</span></div>
-    <div class="bench-body">
-      <div class="bench-fix-row hdr"><span>Fixture ID</span><span>Providers</span><span>Severity</span><span>Cause family</span></div>
-      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_pool_starved</span><span><span class="pill ok" style="font-size:9px;">actuator</span> <span class="pill ok" style="font-size:9px;">promql</span> <span class="pill ok" style="font-size:9px;">datadog</span></span><span style="color:var(--err);">severe</span><span class="fix-diag">connection_pool_exhaustion</span></div>
-      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_pool_starved_mild</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--warn);">mild</span><span class="fix-diag">connection_pool_exhaustion</span></div>
-      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_pool_starved_moderate</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--warn);">moderate</span><span class="fix-diag">connection_pool_exhaustion</span></div>
-    </div>
-  </div>
-  <!-- gc_pressure -->
-  <div class="bench-row" onclick="toggleBench(this)">
-    <div class="bench-head"><div class="bench-icon" style="background:var(--warn-d);">♻️</div><div class="bench-info"><div class="bench-name">gc_pressure</div><div class="bench-desc">JVM GC overhead · STW pauses · heap exhaustion — 3 fixtures · 5 snapshots · includes co-occurring pool</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:100%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--lo);">3 fixtures</div></div><span class="bench-chevron">›</span></div>
-    <div class="bench-body">
-      <div class="bench-fix-row hdr"><span>Fixture ID</span><span>Providers</span><span>Severity</span><span>Cause family</span></div>
-      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_gc_pressure</span><span><span class="pill ok" style="font-size:9px;">actuator</span> <span class="pill ok" style="font-size:9px;">promql</span> <span class="pill ok" style="font-size:9px;">datadog</span></span><span style="color:var(--err);">severe</span><span class="fix-diag">gc_pressure</span></div>
-      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_gc_pressure_moderate</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--warn);">moderate</span><span class="fix-diag">gc_pressure</span></div>
-      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_gc_and_pool</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--err);">severe</span><span class="fix-diag">gc_pressure + connection_pool_exhaustion (co-occurring)</span></div>
-    </div>
-  </div>
-  <!-- thread_pool_saturation -->
-  <div class="bench-row" onclick="toggleBench(this)">
-    <div class="bench-head"><div class="bench-icon" style="background:var(--blue-d);">🧵</div><div class="bench-info"><div class="bench-name">thread_pool_saturation</div><div class="bench-desc">Tomcat thread pool full · active threads at max · request queuing — 2 fixtures</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:100%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--lo);">2 fixtures</div></div><span class="bench-chevron">›</span></div>
-    <div class="bench-body">
-      <div class="bench-fix-row hdr"><span>Fixture ID</span><span>Providers</span><span>Severity</span><span>Cause family</span></div>
-      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_thread_starved</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--err);">severe</span><span class="fix-diag">thread_pool_saturation</span></div>
-      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_thread_starved_moderate</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--warn);">moderate</span><span class="fix-diag">thread_pool_saturation</span></div>
-    </div>
-  </div>
-  <!-- inefficient_query -->
-  <div class="bench-row" onclick="toggleBench(this)">
-    <div class="bench-head"><div class="bench-icon" style="background:var(--purple-d);">🐌</div><div class="bench-info"><div class="bench-name">inefficient_query</div><div class="bench-desc">Postgres sequential scan · missing index · slow DB response time — 2 fixtures</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:100%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--lo);">2 fixtures</div></div><span class="bench-chevron">›</span></div>
-    <div class="bench-body">
-      <div class="bench-fix-row hdr"><span>Fixture ID</span><span>Providers</span><span>Severity</span><span>Cause family</span></div>
-      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_inefficient_query_severe</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--err);">severe</span><span class="fix-diag">inefficient_query</span></div>
-      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_inefficient_query_moderate</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--warn);">moderate</span><span class="fix-diag">inefficient_query</span></div>
-    </div>
-  </div>
-  <!-- cache_miss -->
-  <div class="bench-row" onclick="toggleBench(this)">
-    <div class="bench-head"><div class="bench-icon" style="background:var(--ok-d);">📦</div><div class="bench-info"><div class="bench-name">cache_miss</div><div class="bench-desc">Redis miss rate spike · cache eviction · cold cache latency — 2 fixtures</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:100%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--lo);">2 fixtures</div></div><span class="bench-chevron">›</span></div>
-    <div class="bench-body">
-      <div class="bench-fix-row hdr"><span>Fixture ID</span><span>Providers</span><span>Severity</span><span>Cause family</span></div>
-      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_cache_miss_severe</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--err);">severe</span><span class="fix-diag">cache_miss</span></div>
-      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_cache_miss_moderate</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--warn);">moderate</span><span class="fix-diag">cache_miss</span></div>
-    </div>
-  </div>
-  <!-- downstream_latency -->
-  <div class="bench-row" onclick="toggleBench(this)">
-    <div class="bench-head"><div class="bench-icon" style="background:var(--warn-d);">🌐</div><div class="bench-info"><div class="bench-name">downstream_latency</div><div class="bench-desc">httpbin dependency slow · connection timeout propagation — 2 fixtures</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:100%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--lo);">2 fixtures</div></div><span class="bench-chevron">›</span></div>
-    <div class="bench-body">
-      <div class="bench-fix-row hdr"><span>Fixture ID</span><span>Providers</span><span>Severity</span><span>Cause family</span></div>
-      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_downstream_latency_severe</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--err);">severe</span><span class="fix-diag">downstream_latency</span></div>
-      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_downstream_latency_moderate</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--warn);">moderate</span><span class="fix-diag">downstream_latency</span></div>
-    </div>
-  </div>
-  <!-- lock_contention -->
-  <div class="bench-row" onclick="toggleBench(this)">
-    <div class="bench-head"><div class="bench-icon" style="background:var(--fire-d);">🔒</div><div class="bench-info"><div class="bench-name">lock_contention</div><div class="bench-desc">Postgres row-level lock · transaction serialisation wait — 1 fixture</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:100%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--lo);">1 fixture</div></div><span class="bench-chevron">›</span></div>
-    <div class="bench-body">
-      <div class="bench-fix-row hdr"><span>Fixture ID</span><span>Providers</span><span>Severity</span><span>Cause family</span></div>
-      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_lock_contention_severe</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--err);">severe</span><span class="fix-diag">lock_contention</span></div>
-    </div>
-  </div>
-  <!-- payload_serialization -->
-  <div class="bench-row" onclick="toggleBench(this)">
-    <div class="bench-head"><div class="bench-icon" style="background:var(--blue-d);">📋</div><div class="bench-info"><div class="bench-name">payload_serialization</div><div class="bench-desc">Large JSON response · serialisation CPU cost · response size overhead — 1 fixture</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:100%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--lo);">1 fixture</div></div><span class="bench-chevron">›</span></div>
-    <div class="bench-body">
-      <div class="bench-fix-row hdr"><span>Fixture ID</span><span>Providers</span><span>Severity</span><span>Cause family</span></div>
-      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_payload_severe</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--err);">severe</span><span class="fix-diag">payload_serialization</span></div>
-    </div>
-  </div>
-  <!-- application_code -->
-  <div class="bench-row" onclick="toggleBench(this)">
-    <div class="bench-head"><div class="bench-icon" style="background:var(--purple-d);">💻</div><div class="bench-info"><div class="bench-name">application_code</div><div class="bench-desc">Deliberate code-level latency injection · business logic bottleneck — 2 fixtures</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:100%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--lo);">2 fixtures</div></div><span class="bench-chevron">›</span></div>
-    <div class="bench-body">
-      <div class="bench-fix-row hdr"><span>Fixture ID</span><span>Providers</span><span>Severity</span><span>Cause family</span></div>
-      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_code_latency</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--err);">severe</span><span class="fix-diag">application_code</span></div>
-      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_code_latency_moderate</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--warn);">moderate</span><span class="fix-diag">application_code</span></div>
-    </div>
-  </div>
-  <!-- healthy baseline -->
-  <div class="bench-row" onclick="toggleBench(this)">
-    <div class="bench-head"><div class="bench-icon" style="background:var(--ok-d);">✅</div><div class="bench-info"><div class="bench-name">healthy / near-SLA baseline</div><div class="bench-desc">No bottleneck present · correctly abstain from proposing a change — 2 fixtures</div></div><div class="bench-bar-wrap"><div class="bench-bar-track"><div class="bench-bar-fill" style="width:100%;background:var(--ok);"></div></div><div class="bench-acc" style="color:var(--lo);">2 fixtures</div></div><span class="bench-chevron">›</span></div>
-    <div class="bench-body">
-      <div class="bench-fix-row hdr"><span>Fixture ID</span><span>Providers</span><span>Profile</span><span>Cause family</span></div>
-      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_near_sla</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--warn);">borderline</span><span class="fix-diag">none (within SLA, no actionable bottleneck)</span></div>
-      <div class="bench-fix-row"><span class="fix-name" style="font-family:var(--f-mono);font-size:11px;">perflab_healthy</span><span><span class="pill ok" style="font-size:9px;">actuator</span></span><span style="color:var(--ok);">healthy</span><span class="fix-diag">none (all metrics nominal)</span></div>
-    </div>
-  </div>
-  <div style="font-size:11px;color:var(--mid);margin-top:10px;padding:8px 12px;background:var(--s2);border-radius:var(--rs);border:1px solid var(--bd);">
-    <strong style="color:var(--hi);">Aggregate score: 35/37 task-cases correct (94.6%).</strong> 2 task-cases misdiagnosed — specific fixture and task detail in <code style="font-family:var(--f-mono);">docs/BENCHMARK_REPLAY_RESULTS.md</code>. 12 abstentions (model declined to name a cause) across 40 total evaluated cases. Harness: <code style="font-family:var(--f-mono);">crucible@0bd2b87</code>.
-  </div>
+  <!-- Rendered from /v1/perf/screens/18: no figure on this page is typed in. -->
+  <div id="bench-surface"><div class="card" style="color:var(--lo);">Loading…</div></div>
 </section>
 
 <!-- ══ GUARDRAILS ══ -->
@@ -1336,31 +1062,8 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
   </div>
   <div class="info-banner" id="ib-guardrails">
     <span class="info-banner-icon">🛡️</span>
-    <div class="info-banner-body"><strong>"Always enforced" rules cannot be turned off</strong> — each one exists because removing it caused a specific failure during the feasibility spike. The configurable rules below are safe to adjust per service. The Allowed Properties table is the most important: the AI can only propose what is listed there, with values inside the stated bounds.</div>
+    <div class="info-banner-body"><strong>"Always enforced" rules cannot be turned off</strong> — each one exists because removing it caused a specific failure during the feasibility spike. The most important table is the profile's tunable properties, at the bottom: the AI can only change what is listed there, with values inside the stated bounds.</div>
     <button class="info-banner-close" onclick="dismissBanner('ib-guardrails')">✕</button>
-  </div>
-  <!-- Live refused-attempts counter -->
-  <div class="grid4" style="margin-bottom:16px;">
-    <div class="kpi" style="border-color:rgba(224,82,82,.25);">
-      <div class="kpi-label">Proposals refused</div>
-      <div class="kpi-val err" id="guardRefusedCount">3</div>
-      <div class="kpi-meta">this campaign · TR-004</div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-label">Last refusal</div>
-      <div class="kpi-val" style="font-size:13px;" id="guardLastRefusal">TR-004</div>
-      <div class="kpi-meta" id="guardLastReason">pool-size out of bounds (max=50, proposed=200)</div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-label">Proposals approved</div>
-      <div class="kpi-val ok">1</div>
-      <div class="kpi-meta">pool=20 · kept</div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-label">Guard latency</div>
-      <div class="kpi-val">0 ms</div>
-      <div class="kpi-meta">synchronous, no model call</div>
-    </div>
   </div>
   <div class="card">
     <div class="card-h"><div class="card-title">Core protections</div><div class="card-sub">These cannot be disabled — they exist because disabling them reintroduces a specific past failure</div></div>
@@ -1386,55 +1089,27 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
     </div>
   </div>
   <div class="card">
-    <div class="card-h"><div class="card-title">Configurable rules</div></div>
-    <div class="guard-row">
-      <div class="guard-info"><div class="guard-name">Require human approval before every change</div><div class="guard-desc">Semi-automated mode. Turn off only in Fully Automated mode with pre-approved properties.</div></div>
-      <label class="toggle"><input type="checkbox" checked><span class="toggle-track"></span><span class="toggle-thumb"></span></label>
-    </div>
-    <div class="guard-row">
-      <div class="guard-info"><div class="guard-name">Auto-revert on SLA miss</div><div class="guard-desc">If a change fails to improve p99 or worsens error rate, Crucible redeploys the last good commit automatically.</div></div>
-      <label class="toggle"><input type="checkbox" checked><span class="toggle-track"></span><span class="toggle-thumb"></span></label>
-    </div>
-    <div class="guard-row">
-      <div class="guard-info"><div class="guard-name">Abort if host CPU steal exceeds threshold</div><div class="guard-desc">A noisy neighbour on shared VCPUs means measurements are about someone else's workload. Default 5%; Oracle free tier uses 10%.</div></div>
-      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-        <input class="form-input" value="10" type="number" min="1" max="50" style="width:60px;padding:5px 8px;">
-        <span style="font-size:13px;color:var(--mid);">%</span>
-      </div>
-    </div>
-    <div class="guard-row">
-      <div class="guard-info"><div class="guard-name">Max changes per run</div><div class="guard-desc">Campaign stops after this many trials, even if the SLA is not yet met.</div></div>
-      <input class="form-input" value="8" type="number" min="1" max="20" style="width:70px;padding:5px 8px;flex-shrink:0;">
-    </div>
+    <div class="card-h"><div class="card-title">Where the adjustable limits are set</div><div class="card-sub">Read-only here, so this page never shows a switch that does nothing</div></div>
+    <div class="guard-row"><div class="guard-info"><div class="guard-name">Human approval before every change</div><div class="guard-desc">Set by the mode chosen in New Test Run: Semi-Automated asks, Fully Automated is pre-approved within the profile's bounds, Advisory applies nothing.</div></div></div>
+    <div class="guard-row"><div class="guard-info"><div class="guard-name">Revert on a change that is not better</div><div class="guard-desc">Always on. A change measured WORSE or INCONCLUSIVE against the noise floor is reverted and the last good commit redeployed.</div></div></div>
+    <div class="guard-row"><div class="guard-info"><div class="guard-name">Stop on host CPU steal</div><div class="guard-desc">The threshold is per environment, in <code style="font-family:var(--f-mono);font-size:11px;">config/slo.yaml</code>: default 5%, 10% on Oracle free tier (DESIGN.md §6).</div></div></div>
+    <div class="guard-row"><div class="guard-info"><div class="guard-name">Experiments, cost and wall clock per run</div><div class="guard-desc">Set in the Budget step. A cap pauses the run at the next experiment boundary; three misses in a row stop it.</div></div></div>
   </div>
-  <div class="card">
-    <div class="card-h"><div class="card-title">Allowed properties &amp; bounds</div><div class="card-sub">The AI can only propose changes to properties listed here, within these bounds. A property not on this list cannot be touched, regardless of the AI's confidence.</div></div>
-    <div class="tbl-wrap">
-      <table class="prop-table">
-        <tr><th>Property</th><th>Current</th><th>Min</th><th>Max</th><th>Unit</th><th>Cause family</th></tr>
-        <tr><td class="hi mono">spring.datasource.hikari.maximum-pool-size</td><td class="mono">2</td><td class="mono">1</td><td class="mono">50</td><td>count</td><td>pool_saturation</td></tr>
-        <tr><td class="hi mono">spring.datasource.hikari.connection-timeout</td><td class="mono">30000</td><td class="mono">1000</td><td class="mono">60000</td><td>ms</td><td>pool_saturation</td></tr>
-        <tr><td class="hi mono">server.tomcat.threads.max</td><td class="mono">200</td><td class="mono">50</td><td class="mono">800</td><td>count</td><td>thread_exhaustion</td></tr>
-        <tr><td class="hi mono">-Xmx (JVM heap)</td><td class="mono">512m</td><td class="mono">256m</td><td class="mono">4096m</td><td>MB</td><td>gc_pressure</td></tr>
-        <tr><td class="hi mono">spring.datasource.hikari.idle-timeout</td><td class="mono">600000</td><td class="mono">10000</td><td class="mono">1800000</td><td>ms</td><td>pool_saturation</td></tr>
-      </table>
-    </div>
-    <button class="btn btn-ghost btn-sm" style="margin-top:10px;">+ Add allowed property</button>
-  </div>
+  <!-- Rendered from /v1/perf/screens/5: the profile's own properties, bounds and contract. -->
+  <div id="guard-profile-surface"><div class="card" style="color:var(--lo);">Loading the target profile…</div></div>
 </section>
 
 <!-- ══ HISTORY & DIFF ══ -->
 <section class="pg" id="pg-history">
   <div class="ph">
-    <div class="ph-left"><div class="ph-eyebrow">Trend</div><div class="ph-title">History &amp; Diff</div><div class="ph-sub">All test runs · compare any two · promoted playbooks</div></div>
+    <div class="ph-left"><div class="ph-eyebrow">Trend</div><div class="ph-title">History &amp; Diff</div><div class="ph-sub">All test runs · compare any two · ceiling probes kept apart</div></div>
     <div class="ph-actions">
-      <button class="btn btn-ghost btn-sm" id="diffBtn" disabled onclick="showDiff()">Compare selected (2)</button>
-      <button class="btn btn-ghost btn-sm">Export CSV</button>
+      <button class="btn btn-ghost btn-sm" id="diffBtn" disabled onclick="showDiff()">Compare selected (0)</button>
     </div>
   </div>
   <div class="info-banner" id="ib-history">
     <span class="info-banner-icon">📈</span>
-    <div class="info-banner-body"><strong>Select two runs to compare them side-by-side.</strong> Crucible flags when runs used different environments or models — those comparisons are marked unreliable. Playbooks are fix patterns that worked and were promoted from a single service to global — use them to seed the AI's diagnosis on similar services.</div>
+    <div class="info-banner-body"><strong>Select two runs to compare them side-by-side.</strong> Crucible checks that both measured the same thing (environment, model, load, SLA) and says when they did not.</div>
     <button class="info-banner-close" onclick="dismissBanner('ib-history')">✕</button>
   </div>
   <!-- History tabs -->
@@ -1450,81 +1125,31 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
     <div class="kpi"><div class="kpi-label">Total runs</div><div class="kpi-val" id="hist-kpi-total">—</div></div>
     <div class="kpi"><div class="kpi-label">Improved</div><div class="kpi-val ok" id="hist-kpi-improved">—</div><div class="kpi-meta" id="hist-kpi-improved-pct"></div></div>
     <div class="kpi"><div class="kpi-label">Best gain</div><div class="kpi-val fire" id="hist-kpi-best-gain">—</div><div class="kpi-meta" id="hist-kpi-best-run"></div></div>
-    <div class="kpi"><div class="kpi-label">Playbooks</div><div class="kpi-val">3</div><div class="kpi-meta">2 global</div></div>
+    <div class="kpi"><div class="kpi-label">Ceiling probes</div><div class="kpi-val" id="hist-kpi-ceil">—</div><div class="kpi-meta">kept apart: not verdicts</div></div>
   </div>
   <div class="card" style="margin-bottom:12px;">
     <div class="card-h"><div class="card-title">All Test Runs</div><div class="card-sub">Click rows to select for comparison (max 2)</div></div>
     <div class="tbl-wrap"><table>
-      <tr><th></th><th>Run</th><th>Date</th><th>Service</th><th>Endpoint</th><th>Status</th><th>Baseline p99</th><th>Final p99</th><th>Δ</th></tr>
+      <tr><th></th><th>Run</th><th>Date</th><th>Environment</th><th>Endpoint</th><th>Status</th><th>Baseline p99</th><th>Final p99</th><th>Δ</th></tr>
       <tbody id="hist-tbody">
       <tr><td colspan="9" style="text-align:center;color:var(--lo);padding:18px;">Loading…</td></tr>
       </tbody>
     </table></div>
   </div>
-  <div id="diffView" style="display:none;" class="card">
-    <div class="card-h"><div class="card-title">Diff: TR-002 vs TR-003</div><div class="card-sub">Same service, same environment, same model — comparison is valid</div></div>
-    <div class="grid3">
-      <div class="kpi"><div class="kpi-label">p99 (TR-002)</div><div class="kpi-val" style="color:var(--err);">892 ms</div><div class="kpi-meta">pool=10 reverted</div></div>
-      <div class="kpi"><div class="kpi-label">p99 (TR-003)</div><div class="kpi-val ok">58 ms</div><div class="kpi-meta">pool=20 kept</div></div>
-      <div class="kpi"><div class="kpi-label">Difference</div><div class="kpi-val fire">−93.5%</div><div class="kpi-meta">pool size was the lever</div></div>
-    </div>
-    <div style="font-size:12px;color:var(--mid);margin-top:10px;padding:10px 12px;background:var(--s2);border-radius:var(--rs);">
-      TR-002 tried pool=10 — p99 improved from 1206 ms to 892 ms but missed the 200 ms SLA, so it was auto-reverted. TR-003 tried pool=20 — p99 dropped to 58 ms, SLA met, change kept. The difference confirms pool size is the binding lever, not anything else.
-    </div>
-  </div>
+  <!-- Filled from /v1/perf/screens/17?a=&b=: the server's own comparison. -->
+  <div id="diffView" style="display:none;"></div>
   </div><!-- end hpanel-runs -->
 
   <!-- Tab: Ceiling Probes -->
   <div id="hpanel-ceiling" style="display:none;">
     <div style="font-size:12px;color:var(--mid);margin-bottom:14px;">Ceiling probe results are kept separate from experiment runs — nothing was changed, so they cannot be compared as verdicts (§20.6).</div>
-    <div class="grid2" style="margin-bottom:14px;">
-      <div class="card">
-        <div class="card-h"><div class="card-title">CP-001 · PerfLab /transfer</div><div class="card-sub">13 Sep 2026 · step=25 users</div></div>
-        <div style="display:flex;flex-direction:column;gap:8px;">
-          <div style="background:var(--ok-d);border:1px solid rgba(59,171,140,.25);border-radius:var(--rs);padding:12px 14px;">
-            <div style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ok);margin-bottom:3px;">Last passing level</div>
-            <div style="font-family:var(--f-head);font-size:22px;font-weight:700;color:var(--ok);">200 users</div>
-            <div style="font-size:12px;color:var(--mid);margin-top:1px;">p99: 183 ms · Errors: 0.2% · SLA ✓</div>
-          </div>
-          <div style="background:var(--err-d);border:1px solid rgba(224,82,82,.25);border-radius:var(--rs);padding:12px 14px;">
-            <div style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--err);margin-bottom:3px;">First failing level</div>
-            <div style="font-family:var(--f-head);font-size:22px;font-weight:700;color:var(--err);">225 users</div>
-            <div style="font-size:12px;color:var(--mid);margin-top:1px;">p99: 418 ms · Errors: 3.1% · SLA ✗</div>
-          </div>
-          <div style="font-size:11px;color:var(--mid);">True ceiling: 200–225 users. Reduce step to 10 for ±5-user resolution.</div>
-        </div>
-      </div>
-      <div class="card" style="display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;border-style:dashed;min-height:180px;">
-        <div style="font-size:28px;">⚡</div>
-        <div style="font-size:13px;font-weight:600;color:var(--mid);">Run a new ceiling probe</div>
-        <div style="font-size:11px;color:var(--lo);text-align:center;max-width:200px;">Select "Ceiling Probe" mode in New Test Run</div>
-        <button class="btn btn-ghost btn-sm" onclick="go('new-test')">+ New Test Run</button>
-      </div>
-    </div>
+    <div class="grid2" style="margin-bottom:14px;" id="hist-ceilings"><div class="card" style="color:var(--lo);">Loading…</div></div>
   </div>
 
   <!-- Tab: Playbooks -->
   <div id="hpanel-playbooks" style="display:none;">
-  <div class="card">
-    <div class="card-h"><div class="card-title">Playbooks</div><div class="card-sub">Fix patterns that worked — promoted from service-scoped to global</div></div>
-    <div class="tbl-wrap"><table>
-      <tr><th>Name</th><th>Cause family</th><th>Fix</th><th>Scope</th><th>Confirmed on</th></tr>
-      <tr>
-        <td class="hi">HikariCP pool exhaustion → size increase</td>
-        <td>pool_saturation</td>
-        <td class="mono">maximum-pool-size × 10</td>
-        <td><span style="background:var(--ok-d);color:var(--ok);padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;">GLOBAL</span></td>
-        <td>3 services</td>
-      </tr>
-      <tr>
-        <td class="hi">Missing index on high-cardinality FK</td>
-        <td>slow_query</td>
-        <td class="mono">CREATE INDEX CONCURRENTLY</td>
-        <td><span style="background:var(--blue-d);color:var(--blue);padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;">SERVICE</span></td>
-        <td>PerfLab only</td>
-      </tr>
-    </table></div>
-  </div>
+    <!-- From /v1/perf/screens/17: playbook promotion is not built, and the page says so. -->
+    <div id="hist-playbooks"><div class="card" style="color:var(--lo);">Loading…</div></div>
   </div>
 </section>
 
@@ -1605,29 +1230,27 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
       <div class="chat-avatar" style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--fire),var(--warn));display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">🔥</div>
       <div style="flex:1;min-width:0;">
         <div class="chat-pane-title">Crucible AI</div>
-        <div class="chat-ai-status" id="chatAiStatus">● scripted</div>
+        <div class="chat-ai-status" id="chatAiStatus">● live · GLC v5</div>
       </div>
       <label class="live-toggle" title="OFF = scripted demo responses · ON = live LLM call via GLC v5">
-        <input type="checkbox" id="liveAiToggle" onchange="onLiveToggle(this.checked)">
+        <input type="checkbox" id="liveAiToggle" checked onchange="onLiveToggle(this.checked)">
         <span class="live-toggle-track"><span class="live-toggle-thumb"></span></span>
         <span class="live-toggle-label">Live AI</span>
       </label>
       <button class="chat-collapse-btn" onclick="collapseChat()" title="Collapse panel">‹</button>
     </div>
     <div class="chat-context-bar" id="chatContextBar">
-      📍 Active: TR-004 · Trial 3 · Approval pending
+      📍 Crucible AI
     </div>
     <div class="chat-messages" id="chatMessages">
       <div class="chat-msg ai">
         <div class="msg-av">🔥</div>
-        <div class="msg-bubble-ai">Hi! I've been watching TR-004. The connection pool is saturated — 43 threads waiting, max acquire 2.4 s. I'd like to raise <code style="font-family:var(--f-mono);font-size:11px;">maximum-pool-size</code> from 2 → 20.<br><br>Shall I show you the exact diff and evidence?</div>
+        <div class="msg-bubble-ai">Hi! Ask about any run on disk by its id, or about the documents in the knowledge base. If the model gateway is down, switch <strong>Live AI</strong> off: scripted mode answers from the same run files, without a model.</div>
       </div>
     </div>
     <div class="chat-quick" id="chatQuick">
-      <span class="quick-chip ok" onclick="chatApprove()">✓ Approve the change</span>
-      <span class="quick-chip" onclick="chatReject()">✕ Reject</span>
-      <span class="quick-chip" onclick="chatAsk('Why pool=20 and not pool=10?')">Why 20?</span>
-      <span class="quick-chip" onclick="chatAsk('Show me the full evidence')">Show evidence</span>
+      <span class="quick-chip" onclick="chatAsk('What happened in the latest run?')">Latest run?</span>
+      <span class="quick-chip" onclick="chatAsk('How does the approval gate work?')">Approval gate?</span>
     </div>
     <div class="chat-input-row">
       <input class="chat-input" id="chatInput" placeholder="Ask about this run…" onkeydown="if(event.key==='Enter')sendChat()">
@@ -1645,8 +1268,8 @@ const CHAT_CONTEXT={
   'overview':'📍 Overview — ask about any run',
   'new-test':'📍 Setup wizard — I can help fill in fields',
   'preflight':'📍 Preflight — verifying target readiness',
-  'active':'📍 Active: TR-004 · Approval pending',
-  'results':'📍 Results: TR-003 — ask about findings',
+  'active':'📍 Active — ask about the running campaign',
+  'results':'📍 Results — ask about this run',
   'benchmarks':'📍 Benchmarks — ask about accuracy and LUCKY quadrant',
   'guardrails':'📍 Guardrails — ask about any rule or property bound',
   'library':'📍 Library — ask about a collection',
@@ -1657,7 +1280,7 @@ const CHAT_CONTEXT={
 const ONBOARD_MSGS={
   'new-test':'👋 Starting a new test run? I can help! Tell me the service you want to test and what feels slow — I\'ll suggest the right scenario, SLA, and mode.',
   'guardrails':'The guardrails page shows what the AI can and can\'t change. The green "Always enforced" ones can\'t be turned off — they exist because disabling them caused a real failure in our feasibility spike.',
-  'benchmarks':'The Benchmark page shows how accurately I diagnose problems on pre-recorded fixtures. Click any problem type to see individual fixture results — green = I got it right, red = I was wrong.',
+  'benchmarks':'The Benchmark page shows how I diagnose pre-recorded fixtures, graded by a scorer that calls no model. The numbers come from the replay results on disk.',
 };
 let currentPage='overview';
 const onboardShown={};
@@ -1680,11 +1303,16 @@ function go(p){
   if(p==='active'){ setTimeout(initActiveCharts,80); startActivePoll(); } else { stopActivePoll(); }
   if(p==='results') loadResults('latest');
   if(p==='history') loadHistory();
+  if(p==='overview') loadOverview();
+  if(p==='library') loadLibrary();
+  if(p==='benchmarks') loadBenchmarks();
+  if(p==='guardrails') loadGuardrails();
   if(p==='jobs') loadJobs();
   window.scrollTo(0,0);
   currentPage=p;
   const ctx=document.getElementById('chatContextBar');
   if(ctx) ctx.textContent=CHAT_CONTEXT[p]||'📍 Crucible AI';
+  _chatContextRun();
   // Info banners replace chat tips — show once per page on first visit
   const bannerMap={'new-test':'ib-new-test','guardrails':'ib-guardrails','benchmarks':'ib-benchmarks','history':'ib-history','ceiling':'ib-ceiling'};
   if(bannerMap[p]&&!onboardShown[p]){
@@ -1706,7 +1334,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 /* ── Wizard ──────────────────────────────────────────────────────────── */
 const WZ_MSGS=[
   'Starting a new run! First, tell me about the target service and connect the GitHub repo. I need repo access for Semi-Automated and Fully Automated modes — for Advisory mode it\'s optional.',
-  'What\'s your goal? Be specific — e.g. "reduce /transfer p99 below 200ms at 50 users". I\'ll extract the SLA numbers for you. <span class="suggest-fill-btn" onclick="suggestSLA()">✨ Let AI suggest SLA</span>',
+  'What\'s your goal? Be specific — e.g. "keep /api/db p99 under 120 ms at 50 users". I\'ll extract the SLA numbers for you. <span class="suggest-fill-btn" onclick="suggestSLA()">✨ Let AI suggest SLA</span>',
   'How many users do you expect in production? That shapes the scenario. I recommend starting with your normal load, then one burst scenario at 2×. <span class="suggest-fill-btn" onclick="suggestScenarios()">✨ Suggest scenarios</span>',
   'The wall clock budget matters more than cost. Most runs take 2–4 hours. Set a cap so the campaign stops gracefully if it runs long.',
   'Everything looks good! Preflight will run first — a test deploy + revert — before any real measurement starts. Want me to explain what happens step by step?',
@@ -1742,7 +1370,12 @@ async function renderBudget(){
   const tb=document.getElementById('budget-rows');if(!tb)return;
   const b=wizardBody();
   const sub=document.getElementById('budget-sub');
-  if(sub) sub.textContent=b.mode+(b.mode==='Ceiling Probe'?'':' · first scenario '+(b.scenarios[0]?.name||'(none)')+' · up to '+b.experiments+' experiments');
+  // Advisory applies nothing, so an experiment count means nothing there.
+  const advisory=b.mode==='Advisory';
+  const expRow=document.getElementById('wz-experiments-row');
+  if(expRow) expRow.style.display=(advisory||b.mode==='Ceiling Probe')?'none':'';
+  if(sub) sub.textContent=b.mode+(b.mode==='Ceiling Probe'?'':' · first scenario '+(b.scenarios[0]?.name||'(none)')+
+    (advisory?' · up to 3 ranked proposals, nothing applied':' · up to '+b.experiments+' experiments'));
   try{
     const r=await fetch('/v1/perf/wizard/budget',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
     const d=await r.json();
@@ -1750,7 +1383,7 @@ async function renderBudget(){
     if(!r.ok){const tr=document.createElement('tr');const td=document.createElement('td');td.colSpan=5;td.textContent=typeof d.detail==='string'?d.detail:'These inputs cannot be estimated yet.';tr.appendChild(td);tb.appendChild(tr);return;}
     const add=(cells,total)=>{const tr=document.createElement('tr');if(total)tr.style.background='var(--s2)';cells.forEach((c,i)=>{const td=document.createElement('td');td.textContent=c;if(i===0||total)td.style.fontWeight=total?'700':'';if(i===0)td.className='hi';tr.appendChild(td);});tb.appendChild(tr);};
     d.rows.forEach(x=>add([x.phase,x.what,x.max_s?_span(x.min_s,x.max_s):'not measured',String(x.calls),_money(x.cost,d.currency)]));
-    add(['Total','range: SLA met early → every experiment used',_span(d.min_s,d.max_s),String(d.calls),_money(d.cost,d.currency)],true);
+    add(['Total',advisory?'measure each scenario, then propose; nothing applied or re-measured':'range: SLA met early → every experiment used',_span(d.min_s,d.max_s),String(d.calls),_money(d.cost,d.currency)],true);
     const note=document.getElementById('budget-note');
     if(note&&d.cap_warning){note.style.color='var(--warn)';note.textContent='⚠ '+d.cap_warning;return;}
     if(note) note.style.color='';
@@ -1788,7 +1421,7 @@ function _scenarioRow(name,users,duration,ramp,mix){
   [[name,'text'],[users,'number'],[duration,'text'],[ramp,'text'],[mix||'','text']].forEach(([v,type],i)=>{
     const cell=document.createElement('div');const inp=document.createElement('input');
     inp.type=type;if(type==='number')inp.min='1';inp.value=String(v);
-    if(i===4)inp.placeholder='/api/db=60@150, /api/orders=40';
+    if(i===4)inp.placeholder='optional, e.g. /api/db=60@150, /api/orders=40';
     cell.appendChild(inp);row.appendChild(cell);
   });
   const rm=document.createElement('button');rm.className='scenario-rm';rm.textContent='✕';rm.onclick=()=>rmScenario(rm);row.appendChild(rm);
@@ -1806,8 +1439,9 @@ document.getElementById('scenarioList')?.addEventListener('input',()=>{scenEdite
 function wzMode(){return (document.querySelector('.mode-card.on .mode-card-name')?.textContent||'').trim();}
 function _wzVal(id){return (document.getElementById(id)?.value||'').trim();}
 function _citeHtml(sources){
-  const cited=(sources||[]).map(s=>'<code>'+escHtml(s.source)+(s.heading?' › '+escHtml(s.heading):'')+'</code>').join(' ');
-  return cited?'<div style="margin-top:6px;font-size:11px;color:var(--lo);">Sources: '+cited+'</div>':'';
+  // One source per line: joined with spaces they ran together and read as one.
+  const cited=(sources||[]).map(s=>'<div><code>'+escHtml(s.source)+(s.heading?' › '+escHtml(s.heading):'')+'</code></div>').join('');
+  return cited?'<div style="margin-top:6px;font-size:11px;color:var(--lo);">Sources:'+cited+'</div>':'';
 }
 async function _suggest(kind,btnId){
   const btn=document.getElementById(btnId);if(btn){btn.disabled=true;btn.style.opacity='.5';}
@@ -2009,7 +1643,7 @@ async function renderReview(){
     });
   }
   const cli=document.getElementById('rev-cli');
-  if(cli) cli.textContent=b.mode==='Ceiling Probe'?'crucible ceiling --sla config/slo.yaml --max-users '+(b.ceiling?.max_users||''):'crucible run --sla config/slo.yaml --users '+(b.scenarios[0]?.users||'')+(b.mode==='Fully Automated'?' --approve preapproved':'');
+  if(cli) cli.textContent=b.mode==='Ceiling Probe'?'crucible ceiling --sla config/slo.yaml --max-users '+(b.ceiling?.max_users||''):'crucible run --sla config/slo.yaml --users '+(b.scenarios[0]?.users||'')+(b.mode==='Fully Automated'?' --approve preapproved':b.mode==='Advisory'?' --advisory':'');
   runWizardChecks(document.getElementById('rev-checks'));
   const box=document.getElementById('yamlBox');const notes=document.getElementById('rev-notes');
   box.textContent='Validating…';notes.textContent='';
@@ -2048,7 +1682,9 @@ function toggleBench(row){row.classList.toggle('open');}
 /* ── Active charts ───────────────────────────────────────────────────── */
 let chartsInit=false;
 function initActiveCharts(){
-  if(chartsInit)return;chartsInit=true;
+  // The sample charts are gone: the server reports no live metrics, and a chart
+  // of invented numbers read as a measurement. Kept as a no-op for the caller.
+  if(chartsInit)return;chartsInit=true;return;
   const labels=[...Array(20)].map((_,i)=>`${i*30}s`);
   const base={responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#555',font:{size:10},maxTicksLimit:6}},y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#555',font:{size:10}}}}};
   try{
@@ -2098,14 +1734,18 @@ async function apiPost(url,body){
 }
 
 /* ── Current run id (read from URL hash or last launched run) ────────── */
-let _activeRunId='TR-004';
+let _activeRunId='';
+// The experiment the pending approval belongs to, from the server. Approve and
+// Reject read an element that did not exist, so every decision went to
+// experiment 1 (trial, 31 October 2026).
+let _pendingExperiment=null;
 function getActiveRunId(){return _activeRunId;}
 
 /* ── Approval ────────────────────────────────────────────────────────── */
 // Returns true if a real campaign (not the demo placeholder) is active.
 // Used to decide whether to send the decision to the server.
 async function _isRealCampaign(runId){
-  if(!runId||runId==='TR-004') return false;
+  if(!runId) return false;
   try{
     const r=await fetch('/v1/perf/campaign/'+runId+'/state');
     if(!r.ok) return false;
@@ -2113,18 +1753,19 @@ async function _isRealCampaign(runId){
     return d.status!=='idle';
   }catch(e){return false;}
 }
-async function doApprove(){
-  document.getElementById('approvalGate').style.display='none';
-  document.getElementById('diagResult').style.display='flex';
+// Nothing is ever reported as done unless the server accepted it.
+async function _decisionTarget(){
   const runId=getActiveRunId();
-  const expEl=document.getElementById('pendingExpNum');
-  const expNum=expEl?parseInt(expEl.textContent||'1',10):1;
-  const real=await _isRealCampaign(runId);
-  if(!real){
-    addChatMsg('ai','Change approved ✓ — deploying pool=20 to perftest_sandbox now. I\'ll start the re-measurement window once /actuator/env confirms the property is live.');
-    return;
+  if(!runId||_pendingExperiment==null||!(await _isRealCampaign(runId))){
+    addChatMsg('ai','No approval is pending on a running campaign, so nothing was sent.');
+    return null;
   }
-  addChatMsg('ai','Change approved ✓ — sending approval to server…');
+  return {runId,expNum:_pendingExperiment};
+}
+async function doApprove(){
+  const t=await _decisionTarget();if(!t) return;
+  const {runId,expNum}=t;
+  addChatMsg('ai','Sending your approval for experiment '+escHtml(String(expNum))+'…');
   try{
     await apiPost('/v1/perf/runs/'+runId+'/experiments/'+expNum+'/decision',{responder:'operator',approved:true});
     addChatMsg('ai','Approval recorded — deploying to perftest_sandbox. Measurement starts once /actuator/env confirms the property is live.');
@@ -2133,15 +1774,8 @@ async function doApprove(){
   }
 }
 async function doReject(){
-  document.getElementById('approvalGate').style.display='none';
-  const runId=getActiveRunId();
-  const expEl=document.getElementById('pendingExpNum');
-  const expNum=expEl?parseInt(expEl.textContent||'1',10):1;
-  const real=await _isRealCampaign(runId);
-  if(!real){
-    addChatMsg('ai','Rejected. I\'ll keep the baseline and look for other hypotheses. Want me to probe for slow queries or GC pressure next?');
-    return;
-  }
+  const t=await _decisionTarget();if(!t) return;
+  const {runId,expNum}=t;
   try{
     await apiPost('/v1/perf/runs/'+runId+'/experiments/'+expNum+'/decision',{responder:'operator',approved:false});
     addChatMsg('ai','Rejected. I\'ll keep the baseline and look for other hypotheses.');
@@ -2153,7 +1787,7 @@ async function confirmAbort(){
   const runId=getActiveRunId();
   if(!confirm('Abort '+runId+'? The in-progress trial will be discarded and the last good commit will be redeployed.')) return;
   const real=await _isRealCampaign(runId);
-  if(!real){addChatMsg('ai','Abort initiated — redeploying last good commit and stopping the load generator.');return;}
+  if(!real){addChatMsg('ai','No campaign is running, so there is nothing to abort.');return;}
   addChatMsg('ai','Abort initiated…');
   try{
     const job=await apiPost('/v1/perf/campaign/'+runId+'/abort',{reason:'operator abort from UI'});
@@ -2165,7 +1799,7 @@ async function confirmPause(){
   const runId=getActiveRunId();
   if(!confirm('Pause '+runId+'? The load generator stops; nothing measured so far is lost.')) return;
   const real=await _isRealCampaign(runId);
-  if(!real){addChatMsg('ai','Campaign paused — load generator stopped. Nothing measured so far is lost. Resume when ready.');return;}
+  if(!real){addChatMsg('ai','No campaign is running, so there is nothing to pause.');return;}
   addChatMsg('ai','Pause initiated…');
   try{
     const job=await apiPost('/v1/perf/campaign/'+runId+'/pause',{reason:'operator pause from UI'});
@@ -2177,8 +1811,12 @@ async function confirmPause(){
 /* ── Launch ──────────────────────────────────────────────────────────── */
 async function saveWizard(){
   try{
-    const d=await apiPost('/v1/perf/wizard/save',wizardBody());
-    addChatMsg('ai','Saved slo.yaml and the profile. '+escHtml(d.note)+' Semi-Automated pauses to confirm the change; a load change re-measures the baseline first.');
+    const body=wizardBody();
+    const d=await apiPost('/v1/perf/wizard/save',body);
+    // How a running campaign takes the edit depends on its mode (DESIGN.md 4.4).
+    const how=body.mode==='Semi-Automated'?'A running Semi-Automated campaign pauses at the next experiment boundary to confirm it'
+      :'A running '+body.mode+' campaign takes it at the next experiment boundary without pausing';
+    addChatMsg('ai','Saved slo.yaml and the profile. '+escHtml(d.note)+' '+escHtml(how)+'; a load change re-measures the baseline first.');
     renderReview();loadWizard();
   }catch(e){addChatMsg('ai','⚠ Save refused: '+escHtml(e.message));}
 }
@@ -2361,57 +1999,196 @@ const OUTCOME_PILL={
 };
 let _histLoaded=false;
 async function loadHistory(){
-  // Only re-fetch if the page hasn't loaded yet, or force a refresh.
   const tbody=document.getElementById('hist-tbody');
   if(!tbody) return;
-  try{
-    const res=await fetch('/v1/perf/screens/17');
-    if(!res.ok) throw new Error('HTTP '+res.status);
-    const data=await res.json();
-    const dm=(data.surface||{}).dataModel||{};
-    const rows=(dm.v_9||[]).slice().reverse(); // newest first
-    if(!rows.length){tbody.innerHTML='<tr><td colspan="9" style="text-align:center;color:var(--lo);padding:18px;">No campaigns on record yet.</td></tr>';return;}
-    // KPI
-    const improved=rows.filter(r=>r.outcome==='CHANGE_KEPT');
-    const pct=rows.length?Math.round(improved.length/rows.length*100):0;
-    const bestRow=improved.reduce((best,r)=>{
-      const v=parseFloat(r['p99 after']);
-      return(!best||v<parseFloat(best['p99 after']||'9999'))?r:best;
-    },null);
-    const el=id=>document.getElementById(id);
-    if(el('hist-kpi-total')) el('hist-kpi-total').textContent=rows.length;
-    if(el('hist-kpi-improved')){el('hist-kpi-improved').textContent=improved.length;el('hist-kpi-improved-pct').textContent=pct+'%';}
-    if(bestRow&&el('hist-kpi-best-gain')){
-      const p99=parseFloat(bestRow['p99 after']);
-      el('hist-kpi-best-gain').textContent=p99+' ms';
-      el('hist-kpi-best-run').textContent=bestRow.run;
-    }
-    // Table
-    const sparkline=(dm.v_6||[]).slice().reverse();
-    tbody.innerHTML=rows.map((r,i)=>{
-      const[cls,label]=OUTCOME_PILL[r.outcome]||['idle',r.outcome||'—'];
-      const p99After=r['p99 after']&&r['p99 after']!=='--'?r['p99 after']+' ms':'—';
-      const baseP99=sparkline[i]?sparkline[i]+' ms':'—';
-      const _d=new Date((r.date||'').replace(' UTC','Z').replace(' ','T'));
-      const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-      const dateShort=isNaN(_d.getTime())?r.date:`${_d.getUTCDate()} ${MONTHS[_d.getUTCMonth()]} ${String(_d.getUTCHours()).padStart(2,'0')}:${String(_d.getUTCMinutes()).padStart(2,'0')}`;
-      const env=(r.environment||'').replace('oracle-ashburn-','').replace('boxa','Box A');
-      return `<tr onclick="toggleHistSel(this)" style="cursor:pointer;">
-        <td><input type="checkbox" onclick="event.stopPropagation();toggleHistSel(this.closest('tr'))"></td>
-        <td class="hi" style="font-family:var(--f-mono);font-size:12px;">${r.run}</td>
-        <td>${dateShort}</td>
-        <td>PerfLab</td>
-        <td class="mono">/api/db</td>
-        <td><span class="pill ${cls}">${label}</span></td>
-        <td class="mono">${baseP99}</td>
-        <td class="mono">${p99After}</td>
-        <td>—</td>
-      </tr>`;
-    }).join('');
-    _histLoaded=true;
-  }catch(e){
-    if(tbody) tbody.innerHTML='<tr><td colspan="9" style="text-align:center;color:var(--lo);padding:18px;">Could not load history: '+e.message+'</td></tr>';
+  let d;
+  try{d=await _runsList();}catch(e){tbody.innerHTML='<tr><td colspan="9" style="text-align:center;color:var(--lo);padding:18px;">Could not load history: '+he(e.message)+'</td></tr>';return;}
+  const rows=d.runs||[];
+  histSel=[];_updateDiffBtn();
+  const el=id=>document.getElementById(id);
+  if(el('hist-kpi-total')) el('hist-kpi-total').textContent=rows.length;
+  const improved=rows.filter(r=>r.outcome==='CHANGE_KEPT');
+  if(el('hist-kpi-improved')){el('hist-kpi-improved').textContent=improved.length;el('hist-kpi-improved-pct').textContent=rows.length?Math.round(improved.length/rows.length*100)+'% of runs':'';}
+  const best=improved.filter(r=>r.p99_after!=null).sort((a,b)=>a.p99_after-b.p99_after)[0];
+  if(el('hist-kpi-best-gain')){el('hist-kpi-best-gain').textContent=best?Math.round(best.p99_after)+' ms':'—';el('hist-kpi-best-run').textContent=best?best.run_id:'no change kept yet';}
+  if(el('hist-kpi-ceil')) el('hist-kpi-ceil').textContent=(d.ceilings||[]).length;
+  if(!rows.length){tbody.innerHTML='<tr><td colspan="9" style="text-align:center;color:var(--lo);padding:18px;">No campaigns on record yet.</td></tr>';}
+  else tbody.innerHTML=rows.map(r=>{
+    const[cls,label]=OUTCOME_PILL[r.outcome]||['idle',r.outcome||'—'];
+    const delta=r.p99_before&&r.p99_after!=null?((r.p99_after-r.p99_before)/r.p99_before*100).toFixed(1)+'%':'—';
+    return `<tr data-run="${ha(r.run_id)}" onclick="toggleHistSel(this)" style="cursor:pointer;">
+      <td><input type="checkbox" onclick="event.stopPropagation();toggleHistSel(this.closest('tr'))"></td>
+      <td class="hi" style="font-family:var(--f-mono);font-size:12px;">${he(r.run_id)}</td>
+      <td>${he(_shortDate(r.started_at))}</td>
+      <td>${he(r.environment||'—')}</td>
+      <td class="mono">${he(r.endpoint||'—')}</td>
+      <td><span class="pill ${cls}">${he(label)}</span>${r.kind==='advisory'?' <span class="pill idle">ADVISORY</span>':''}</td>
+      <td class="mono">${r.baseline_p99!=null?Math.round(r.baseline_p99)+' ms':'—'}</td>
+      <td class="mono">${r.p99_after!=null?Math.round(r.p99_after)+' ms':'—'}</td>
+      <td class="mono">${delta}</td>
+    </tr>`;
+  }).join('');
+  const cg=el('hist-ceilings');
+  if(cg){
+    const cs=d.ceilings||[];
+    cg.innerHTML=(cs.length?cs.map(c=>`<div class="card">
+        <div class="card-h"><div class="card-title" style="font-family:var(--f-mono);font-size:12px;">${he(c.run_id)}</div><div class="card-sub">${he(_shortDate(c.started_at))}</div></div>
+        <div style="font-size:13px;">Last level that met the SLA: <strong>${c.last_passing_users!=null?he(c.last_passing_users)+' users':'none'}</strong></div>
+        <div style="font-size:13px;">First level that did not: <strong>${c.first_failing_users!=null?he(c.first_failing_users)+' users':'not reached'}</strong></div>
+        <div style="font-size:11px;color:var(--lo);margin-top:6px;">The ceiling lies between these two tested levels; the step size bounds how tightly.</div>
+      </div>`).join(''):'<div class="card" style="color:var(--lo);">No ceiling probe on disk yet.</div>')+
+      `<div class="card" style="display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;border-style:dashed;min-height:140px;">
+        <div style="font-size:13px;font-weight:600;color:var(--mid);">Run a new ceiling probe</div>
+        <div style="font-size:11px;color:var(--lo);text-align:center;max-width:200px;">Select "Ceiling Probe" mode in New Test Run</div>
+        <button class="btn btn-ghost btn-sm" onclick="go('new-test')">+ New Test Run</button></div>`;
   }
+  _renderScreenCard(17,'',el('hist-playbooks'),'Playbooks');
+  _histLoaded=true;
+}
+
+/* ── Read-only rendering of a server screen (/v1/perf/screens/N) ─────── */
+// Used where this page used to show typed-in sample figures: the server builds
+// these screens from files on disk. Buttons and inputs are not rendered here;
+// every action has its own control elsewhere on the page.
+function ha(s){return he(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function _shortDate(epoch){
+  if(!epoch) return '—';
+  const d=new Date(epoch*1000);
+  return isNaN(d.getTime())?'—':d.toLocaleString(undefined,{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+}
+async function _runsList(){
+  const r=await fetch('/v1/perf/runs');
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  return r.json();
+}
+async function _screen(number,query){
+  const r=await fetch('/v1/perf/screens/'+number+(query||''));
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  return (await r.json()).surface||{};
+}
+function _surfaceHtml(surface,id,depth){
+  const byId={};(surface.components||[]).forEach(c=>{byId[c.id]=c;});
+  const dm=surface.dataModel||{};
+  const val=v=>v&&typeof v==='object'&&v.$bind?dm[v.$bind.slice(1)]:v;
+  const render=(cid,d)=>{
+    const c=byId[cid];if(!c) return '';
+    const kids=()=>(c.children||[]).map(k=>render(k,d+1)).join('');
+    switch(c.type){
+      case 'Column': return '<div>'+kids()+'</div>';
+      case 'Row': return '<div style="display:flex;gap:10px;flex-wrap:wrap;">'+kids()+'</div>';
+      case 'Card': return '<div class="card" style="margin-bottom:12px;"><div class="card-h"><div class="card-title">'+he(c.title||'')+'</div></div>'+kids()+'</div>';
+      case 'Tabs': {
+        const labels=String(c.labels||'').split(',');
+        return (c.children||[]).map((k,i)=>'<div style="margin:4px 0;"><strong style="font-size:11px;">'+he(labels[i]||'')+'</strong> '+render(k,d+1)+'</div>').join('');
+      }
+      case 'Text': {
+        const t=val(c.text);
+        if(c.variant==='heading'||c.variant==='subtitle') return '';
+        if(c.variant==='caption') return '<pre style="font-family:var(--f-mono);font-size:11px;white-space:pre-wrap;color:var(--mid);">'+he(t)+'</pre>';
+        return '<div style="font-size:12px;color:var(--mid);margin:4px 0;white-space:pre-line;">'+he(t)+'</div>';
+      }
+      case 'Notice': {
+        const tone={bad:'var(--err)',warn:'var(--warn)',good:'var(--ok)'}[c.tone]||'var(--mid)';
+        return '<div style="font-size:12px;margin:6px 0;padding:8px 10px;border-radius:var(--rs);border:1px solid var(--bd);color:'+tone+';white-space:pre-line;">'+he(val(c.text))+'</div>';
+      }
+      case 'StatTile': return '<div class="kpi" style="flex:1;min-width:140px;"><div class="kpi-label">'+he(c.label||'')+'</div><div class="kpi-val">'+he(val(c.value))+(c.unit?' <span style="font-size:12px;">'+he(c.unit)+'</span>':'')+'</div><div class="kpi-meta">'+he(val(c.delta)||'')+'</div></div>';
+      case 'DataTable': {
+        const cols=String(c.columns||'').split(',');
+        const rows=val(c.rows)||[];
+        return '<div class="tbl-wrap"><table><tr>'+cols.map(h=>'<th>'+he(h)+'</th>').join('')+'</tr>'+
+          rows.map(r=>'<tr>'+cols.map(h=>'<td>'+he(r[h])+'</td>').join('')+'</tr>').join('')+'</table></div>';
+      }
+      default: return '';
+    }
+  };
+  return render(id||surface.root,depth||0);
+}
+// Render a whole screen, or only its card with the given title.
+async function _renderScreenCard(number,query,el,cardTitle){
+  if(!el) return;
+  try{
+    const surface=await _screen(number,query);
+    let id=surface.root;
+    if(cardTitle){
+      const card=(surface.components||[]).find(c=>c.type==='Card'&&c.title===cardTitle);
+      if(!card){el.innerHTML='<div class="card" style="color:var(--lo);">Nothing to show yet.</div>';return;}
+      id=card.id;
+    }
+    el.innerHTML=_surfaceHtml(surface,id);
+  }catch(e){el.innerHTML='<div class="card" style="color:var(--err);">Could not load: '+he(e.message)+'</div>';}
+}
+function loadBenchmarks(){_renderScreenCard(18,'',document.getElementById('bench-surface'));}
+function loadGuardrails(){_renderScreenCard(5,'',document.getElementById('guard-profile-surface'));}
+
+const KIND_LABEL={'advisory':'Advisory','measured campaign':'Measured'};
+async function loadOverview(){
+  const el=id=>document.getElementById(id);
+  try{
+    const [d,w]=await Promise.all([_runsList(),fetch('/v1/perf/wizard').then(r=>r.ok?r.json():null).catch(()=>null)]);
+    const runs=d.runs||[],ceil=d.ceilings||[];
+    if(el('ov-sub')) el('ov-sub').textContent=(w?w.profile+' · '+w.target+' · '+w.environment:'configuration does not load')+
+      (runs.length?' · latest run '+_shortDate(runs[0].started_at):' · no run yet');
+    el('ov-runs').textContent=runs.length;
+    el('ov-runs-note').textContent=runs.filter(r=>r.kind==='advisory').length+' advisory · '+runs.filter(r=>r.kind!=='advisory').length+' measured';
+    const best=runs.filter(r=>r.p99_after!=null).sort((a,b)=>a.p99_after-b.p99_after)[0];
+    el('ov-best').textContent=best?Math.round(best.p99_after)+' ms':'—';
+    el('ov-best-note').textContent=best?'after a kept change · '+best.run_id:'no change kept yet';
+    const latest=runs.find(r=>r.baseline_p99!=null);
+    el('ov-base').textContent=latest?Math.round(latest.baseline_p99)+' ms':'—';
+    el('ov-base-note').textContent=latest?latest.run_id:'no baseline measured yet';
+    el('ov-ceil').textContent=ceil.length;
+    el('ov-ceil-note').textContent=ceil[0]&&ceil[0].last_passing_users!=null?'latest: met the SLA up to '+ceil[0].last_passing_users+' users':'characterises the service; not a verdict';
+    const tb=el('ov-recent');
+    tb.innerHTML=runs.length?runs.slice(0,6).map(r=>{
+      const[cls,label]=OUTCOME_PILL[r.outcome]||['idle',r.outcome||'—'];
+      return `<tr data-run="${ha(r.run_id)}" style="cursor:pointer;" onclick="openRun(this.dataset.run)">
+        <td class="hi" style="font-family:var(--f-mono);font-size:11px;">${he(r.run_id)}</td>
+        <td>${he(KIND_LABEL[r.kind]||r.kind||'—')}</td>
+        <td><span class="pill ${cls}">${he(label)}</span></td>
+        <td class="mono">${r.baseline_p99!=null?Math.round(r.baseline_p99)+' ms':'—'}</td>
+        <td class="mono">${r.p99_after!=null?Math.round(r.p99_after)+' ms':'—'}</td></tr>`;}).join('')
+      :'<tr><td colspan="5" style="color:var(--lo);">No runs on disk yet.</td></tr>';
+  }catch(e){if(el('ov-sub')) el('ov-sub').textContent='Could not load runs: '+e.message;}
+  try{
+    const a=await fetch('/v1/perf/campaign/active',{headers:getAuthHeaders()}).then(r=>r.json());
+    el('ov-active-sub').textContent=a.active?a.run_id:'none';
+    el('ov-active').textContent=a.active?'Status: '+a.status+(a.elapsed_s!=null?' · '+Math.floor(a.elapsed_s/60)+' min elapsed':''):'No campaign running.';
+  }catch(e){el('ov-active').textContent='Could not check: '+e.message;}
+}
+function openRun(id){go('results');loadResults(id);}
+
+async function loadLibrary(){
+  const cards=document.getElementById('lib-cards'),tree=document.getElementById('libTree');
+  if(!cards||!tree) return;
+  try{
+    const [d,w]=await Promise.all([_runsList(),fetch('/v1/perf/wizard').then(r=>r.ok?r.json():null).catch(()=>null)]);
+    const runs=d.runs||[],ceil=d.ceilings||[];
+    const best=runs.filter(r=>r.p99_after!=null).sort((a,b)=>a.p99_after-b.p99_after)[0];
+    cards.innerHTML=(w?`<div class="card">
+        <div style="font-size:14px;font-weight:700;">${he(w.profile)} target</div>
+        <div style="font-size:11px;color:var(--lo);font-family:var(--f-mono);">${he(w.target)}</div>
+        <div style="display:flex;gap:16px;margin:10px 0;">
+          <div><div style="font-size:10px;color:var(--lo);text-transform:uppercase;letter-spacing:.06em;">Runs</div><div style="font-size:18px;font-weight:700;">${runs.length}</div></div>
+          <div><div style="font-size:10px;color:var(--lo);text-transform:uppercase;letter-spacing:.06em;">Ceiling probes</div><div style="font-size:18px;font-weight:700;">${ceil.length}</div></div>
+          <div><div style="font-size:10px;color:var(--lo);text-transform:uppercase;letter-spacing:.06em;">Best p99</div><div style="font-size:18px;font-weight:700;">${best?Math.round(best.p99_after)+' ms':'—'}</div></div>
+        </div>
+        <div style="font-size:11px;color:var(--mid);">${he(w.environment)} · SLA endpoint ${he(w.endpoint)} · deploy ${he(w.remote)} → ${he(w.branch)}</div>
+      </div>`:'<div class="card" style="color:var(--err);">The SLA or profile does not load.</div>')+
+      `<div class="card" style="display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;border-style:dashed;min-height:140px;cursor:pointer;opacity:.7;" onclick="go('new-test')">
+        <div style="font-size:24px;">＋</div><div style="font-size:13px;font-weight:600;color:var(--mid);">New test run</div>
+        <div style="font-size:11px;color:var(--lo);text-align:center;max-width:200px;">One service per install today; the profile and SLA live in config/</div></div>`;
+    const row=(icon,label,pill,cls,when,onclick)=>`<div class="lib-run-row" ${onclick}><span style="font-size:12px;">${icon}</span><span style="font-size:12px;flex:1;font-family:var(--f-mono);">${label}</span><span class="pill ${cls}" style="font-size:10px;padding:2px 7px;">${pill}</span><span style="font-size:11px;color:var(--lo);margin-left:8px;">${when}</span></div>`;
+    tree.innerHTML=`<div class="card"><div class="card-h"><div class="card-title">Runs on disk</div><div class="card-sub">results/*.json, newest first</div></div>`+
+      (runs.map(r=>{const[cls,label]=OUTCOME_PILL[r.outcome]||['idle',r.outcome||'—'];
+        return row(r.kind==='advisory'?'💡':'📊',he(r.run_id),he(label),cls,he(_shortDate(r.started_at)),`data-run="${ha(r.run_id)}" style="cursor:pointer;" onclick="openRun(this.dataset.run)"`);}).join('')||'<div style="color:var(--lo);font-size:12px;">No runs yet.</div>')+
+      (ceil.length?'<div class="card-sub" style="margin-top:10px;">Ceiling probes</div>'+ceil.map(c=>row('⚡',he(c.run_id)+' · '+he(c.last_passing_users??'?')+'–'+he(c.first_failing_users??'?')+' users','CEILING','',he(_shortDate(c.started_at)),`style="cursor:pointer;" onclick="switchHistTab('ceiling');go('history')"`)).join(''):'')+
+      `</div>`;
+  }catch(e){cards.innerHTML='<div class="card" style="color:var(--err);">Could not load: '+he(e.message)+'</div>';}
+}
+function _chatContextRun(){
+  const ctx=document.getElementById('chatContextBar');
+  if(!ctx||typeof chatRunId!=='string'||!chatRunId) return;
+  if(currentPage==='results'||currentPage==='active') ctx.textContent='📍 '+(currentPage==='active'?'Active':'Results')+': '+chatRunId+' — ask about this run';
 }
 
 /* ── History diff ────────────────────────────────────────────────────── */
@@ -2421,12 +2198,20 @@ function toggleHistSel(row){
   const idx=histSel.indexOf(row);
   if(idx>=0){histSel.splice(idx,1);cb.checked=false;row.style.background='';}
   else if(histSel.length<2){histSel.push(row);cb.checked=true;row.style.background='var(--s2)';}
-  const btn=document.getElementById('diffBtn');
-  if(btn){btn.disabled=histSel.length!==2;btn.textContent=histSel.length===2?'Compare selected (2)':'Compare selected ('+histSel.length+')';}
+  _updateDiffBtn();
 }
+function _updateDiffBtn(){
+  const btn=document.getElementById('diffBtn');
+  if(btn){btn.disabled=histSel.length!==2;btn.textContent='Compare selected ('+histSel.length+')';}
+}
+// The server's comparison (report.compare): it says whether the two measured
+// the same thing before putting their numbers side by side.
 function showDiff(){
   const d=document.getElementById('diffView');
-  if(d) d.style.display=d.style.display==='none'?'block':'none';
+  if(!d||histSel.length!==2) return;
+  const [a,b]=histSel.map(r=>r.dataset.run);
+  d.style.display='block';
+  _renderScreenCard(17,'?a='+encodeURIComponent(a)+'&b='+encodeURIComponent(b),d,'Compare two campaigns');
 }
 
 /* ── Ceiling probe ────────────────────────────────────────────────────── */
@@ -2535,20 +2320,40 @@ async function _sendChatLive(text){
       return;
     }
     const data=await res.json();
-    const cited=(data.sources||[]).map(s=>'<code>'+escHtml(s.source)+(s.heading?' › '+escHtml(s.heading):'')+'</code>').join(' ');
-    addChatMsg('ai', (data.reply||'(empty reply)')+(cited?'<div style="margin-top:6px;font-size:11px;color:var(--lo);">Sources: '+cited+'</div>':''));
+    addChatMsg('ai', (data.reply||'(empty reply)')+_citeHtml(data.sources));
   }catch(e){
     t.remove();
     addChatMsg('ai','⚠ Could not reach the backend: '+e.message+'. Switch to Scripted mode if GLC is not running.');
   }
 }
 
+// Scripted answer about a run: read from its report, the same file the Results
+// screen shows. No model, and no figure that is not on disk.
+async function _scriptedRunReply(text){
+  const named=(text.match(/[a-z0-9]+(?:-[a-z0-9_]+)+/ig)||[]).find(w=>/\d/.test(w));
+  const id=named||(typeof chatRunId==='string'&&chatRunId)||'latest';
+  try{
+    const r=await fetch('/v1/perf/runs/'+encodeURIComponent(id)+'/report');
+    if(!r.ok){addChatMsg('ai','No run <code>'+escHtml(id)+'</code> on disk. (Scripted mode reads the run files; it does not guess.)');return;}
+    const rep=await r.json(),m=(rep.measurement||{}).p99_ms,sp=rep.spend||{};
+    const lines=['<strong>'+escHtml(rep.run_id)+'</strong> (scripted: read from the report on disk)',escHtml(rep.headline||'')];
+    if(rep.baseline_p99!=null) lines.push('Measured baseline p99: '+Math.round(rep.baseline_p99)+' ms.');
+    if(m&&m.after!=null) lines.push('Measured after the last kept change: '+Math.round(m.after)+' ms.');
+    else lines.push('No before/after: no change was kept and re-measured.');
+    (rep.experiments||[]).slice(0,5).forEach(e=>{
+      const ch=Object.entries(e.changes||{}).map(([k,v])=>k+' → '+v).join(', ');
+      lines.push('Experiment '+escHtml(String(e.experiment??''))+': '+escHtml(e.cause_family||'')+(ch?' · '+escHtml(ch):'')+' · '+escHtml(e.verdict||'—')+(e.kept?' · kept':''));
+    });
+    if(sp.total!=null) lines.push('Model spend: '+_money(sp.total,sp.currency||'USD')+' over '+sp.calls+' call(s).');
+    addChatMsg('ai',lines.join('<br>'));
+  }catch(e){addChatMsg('ai','Could not read the run: '+escHtml(e.message));}
+}
 function onLiveToggle(on){
   const status=document.getElementById('chatAiStatus');
   if(status) status.textContent=on?'● live · GLC v5':'● scripted';
   addChatMsg('ai', on
     ? 'Live AI mode enabled — responses will go through GLC v5. There may be a cold-start delay on the first call.'
-    : 'Scripted mode — responses are pre-written and instant. Toggle on for real LLM responses.');
+    : 'Scripted mode — no model call. Questions about a run are answered from its report on disk; anything else gets a pre-written explanation.');
 }
 
 function sendChat(){
@@ -2561,23 +2366,10 @@ function sendChat(){
   const t=showTyping();
   const lc=text.toLowerCase();
   let reply;
-  // Keyword-first — these override page context
-  if(lc.includes('why 20')||lc.includes('not 10')||lc.includes('why pool=20')){
-    reply='Pool utilisation at 50 users peaks at ~22 active connections based on the wait distribution. 10 would help but still queue at burst. 20 gives safe headroom to ~200 users without further changes — and the min/max bounds in Guardrails allow up to 50, so this is well within policy.';
-  } else if(lc.includes('evidence')||lc.includes('proof')){
-    reply='<strong>Pool</strong>: 43 threads waiting, 2/2 active (100% saturated), max acquire wait 2406 ms.<br><strong>GC</strong>: 4% overhead — healthy.<br><strong>CPU</strong>: 28% at peak load — healthy.<br><strong>Network</strong>: box-to-box RTT 0.3 ms.<br>Only the pool is saturated.';
-  } else if(lc.includes('sla')||lc.includes('goal')){
-    reply='Your current goal translates to: p99 ceiling 200 ms, error budget 1.0%, noise threshold 5%. Does that match what you\'d accept in production?';
-  }
-  // History / diff context
-  else if(currentPage==='history'||lc.includes('diff')||lc.includes('tr-00')||lc.includes('compare')||lc.includes('reveal')){
-    if(lc.includes('diff')||lc.includes('reveal')||lc.includes('tr-002')||lc.includes('tr-003')){
-      reply='<strong>TR-002 vs TR-003:</strong> baseline p99 went from <strong>1206 ms → 58 ms</strong> — a 95.2% improvement. The only change was <code>maximum-pool-size: 2 → 20</code>. TR-002 was the diagnostic run (pool saturation: 43 waiters, 2406 ms acquire). TR-003 applied and verified the fix. Comparability score ✓ — same model, same environment, same scenario.';
-    } else if(lc.includes('ceiling')||lc.includes('cp-')){
-      reply='CP-001 is a ceiling probe — it escalated load in steps (no config changes). Result: the service handled up to <strong>200 users</strong> meeting the SLA, broke at <strong>225 users</strong>. That\'s the headroom above your normal 50-user load. Ceiling probes characterise the service as-is; they are never compared against experiment runs.';
-    } else {
-      reply='The History table shows each completed campaign. Select two rows and click "Compare" for a side-by-side view of their findings, exact config diff, and improvement margin. Which runs are you looking at?';
-    }
+  // Scripted mode has no run data, so a question about a specific run or
+  // number is sent to Live AI rather than answered with invented figures.
+  if(/\b(run|p99|latency|result|baseline|spend|cost|kept|verdict|happened)/.test(lc)&&!lc.includes('how does')){
+    t.remove();_scriptedRunReply(text);return;
   }
   // Guardrails context
   else if(currentPage==='guardrails'){
@@ -2588,7 +2380,7 @@ function sendChat(){
     reply='The benchmark table runs the agent against pre-captured telemetry fixtures — no live service needed. Each replay takes ~2 s. The LUCKY quadrant (wrong diagnosis, fix worked anyway) is scored separately — an agent right by accident fails the next similar fixture, so outcome alone isn\'t enough. Click any problem type to see individual fixture results.';
   }
   // Active run context
-  else if(currentPage==='active'){
+  else if(lc.includes('approval')||currentPage==='active'){
     reply='The active tab streams the campaign log in real time. The four PDMA phases are: <strong>Perception</strong> (collector reads telemetry), <strong>Memory</strong> (journal RAG checks for disproven hypotheses), <strong>Decision</strong> (diagnosis + proposal), <strong>Action</strong> (apply → deploy → verify). In Semi-Automated mode the approval button appears between Decision and Action.';
   }
   // Setup wizard context
@@ -2617,15 +2409,18 @@ function sendChat(){
   }
   setTimeout(()=>{t.remove();addChatMsg('ai',reply);},900+Math.random()*400);
 }
-function chatAsk(q){addChatMsg('user',q);const t=showTyping();const replies={'Why pool=20 and not pool=10?':'Pool utilisation at 50 users peaks at ~22 active connections. 10 would still queue at burst. 20 gives headroom to ~200 users and stays within the allowed bound of 50.','Show me the full evidence':'<strong>Pool saturation</strong>: 43 waiters, 2406 ms max acquire.<br><strong>GC</strong>: 4% — healthy.<br><strong>CPU</strong>: 28% — healthy.<br><strong>Network RTT</strong>: 0.3 ms.<br>The pool is the only thing saturated.'};setTimeout(()=>{t.remove();addChatMsg('ai',replies[q]||'Great question — let me look into that for this run.');document.getElementById('chatQuick').style.display='none';},900);}
-function chatApprove(){addChatMsg('user','Approve the change');const t=showTyping();setTimeout(()=>{t.remove();doApprove();},700);}
-function chatReject(){addChatMsg('user','Reject');const t=showTyping();setTimeout(()=>{t.remove();doReject();},700);}
+// A quick chip is just a typed question: it goes the same way as one.
+function chatAsk(q){const inp=document.getElementById('chatInput');if(inp){inp.value=q;sendChat();}}
+
 
 /* ── Jobs ────────────────────────────────────────────────────────────── */
 const STATUS_COLOR={'RUNNING':'var(--warn)','FINISHED':'var(--ok)','UNKNOWN':'var(--lo)'};
 function _statusPill(s,exit){
+  // The server sends running / finished / unknown in lower case (crucible/ui/jobs.py);
+  // comparing them to upper case showed '?' for every job (trial, 31 October 2026).
+  s=String(s||'').toUpperCase();
   const c=STATUS_COLOR[s]||'var(--lo)';
-  const label=s==='FINISHED'?(exit===0?'✓ Done':'✗ Failed'):s==='RUNNING'?'⟳ Running':'?';
+  const label=s==='FINISHED'?(exit===0?'✓ Done':'✗ Failed'):s==='RUNNING'?'⟳ Running':'unknown';
   const bg=s==='FINISHED'?(exit===0?'var(--ok-d)':'var(--err-d)'):s==='RUNNING'?'var(--warn-d)':'var(--s3)';
   return `<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:${bg};color:${c};font-weight:600;">${label}</span>`;
 }
@@ -2667,7 +2462,7 @@ function closeJobOutput(){const c=document.getElementById('job-output-card');if(
 function updateJobsBadge(jobs){
   fetch('/v1/perf/jobs?limit=50').then(r=>r.ok?r.json():null).then(d=>{
     if(!d)return;
-    const running=(d.jobs||[]).filter(j=>j.status==='RUNNING').length;
+    const running=(d.jobs||[]).filter(j=>String(j.status||'').toUpperCase()==='RUNNING').length;
     const badge=document.getElementById('jobs-badge');
     if(!badge)return;
     if(running>0){badge.textContent=running;badge.style.display='flex';}
@@ -2676,6 +2471,17 @@ function updateJobsBadge(jobs){
 }
 // Poll running jobs every 10s to refresh badge
 setInterval(updateJobsBadge,10000);
+// The Active badge shows only when the server reports a running campaign.
+function _setActiveBadge(active,status){
+  const b=document.getElementById('active-badge');if(!b) return;
+  b.style.display=active?'':'none';
+  b.textContent=status==='needs_approval'?'!':'1';
+  b.title=active?('campaign '+(status||'running')):'';
+}
+async function updateActiveBadge(){
+  try{const r=await fetch('/v1/perf/campaign/active',{headers:getAuthHeaders()});if(r.ok){const d=await r.json();_setActiveBadge(!!d.active,d.status);}}catch(e){}
+}
+setInterval(updateActiveBadge,10000);
 
 /* ── Active tab live polling ─────────────────────────────────────────── */
 let _activePollTimer=null;
@@ -2701,22 +2507,26 @@ async function pollActiveCampaign(){
 
 async function renderLiveActive(data){
   const overlay=document.getElementById('active-live-overlay');
-  const demoTitle=document.getElementById('active-demo-title');
+  const empty=document.getElementById('active-empty');
+  const loopApprove=document.getElementById('loop-approve');
+  _setActiveBadge(!!data.active,data.status);
 
   if(!data.active){
-    // No real campaign — show demo view, hide live overlay
     if(overlay) overlay.style.display='none';
-    if(demoTitle) demoTitle.style.display='';
+    if(empty) empty.style.display='';
+    const rj=document.getElementById('active-running-job');
+    if(rj) rj.textContent=data.running_job?'A job is running: '+data.running_job.label+' (see Jobs).':'';
+    _pendingExperiment=null;
+    if(loopApprove) loopApprove.classList.remove('waiting');
     return;
   }
 
-  // Real campaign running — show live overlay, hide demo title
   if(overlay) overlay.style.display='';
-  if(demoTitle) demoTitle.style.display='none';
+  if(empty) empty.style.display='none';
 
   // Update run id state so approve/abort use the real id
   _activeRunId=data.run_id||_activeRunId;
-  if(data.run_id) chatRunId=data.run_id;
+  if(data.run_id){chatRunId=data.run_id;_chatContextRun();}
 
   // Header fields
   const elRunId=document.getElementById('live-run-id');
@@ -2736,6 +2546,10 @@ async function renderLiveActive(data){
   if(approvals.length>0 && gate && body){
     gate.style.display='';
     const ap=approvals[0];
+    _pendingExperiment=ap.experiment!=null?ap.experiment:null;
+    const cli=document.getElementById('live-approve-cli');
+    if(cli) cli.textContent='crucible approve '+(data.run_id||'')+' '+(ap.experiment??'');
+    if(loopApprove) loopApprove.classList.add('waiting');
     const rows=Object.entries(ap.params||{}).map(([k,v])=>
       `<div style="display:flex;gap:10px;font-size:12px;margin:3px 0;">
          <span style="color:var(--lo);min-width:120px;">${he(k)}</span>
@@ -2752,6 +2566,8 @@ async function renderLiveActive(data){
   } else if(gate){
     gate.style.display='none';
     if(body) body.innerHTML='';
+    _pendingExperiment=null;
+    if(loopApprove) loopApprove.classList.remove('waiting');
   }
 
   // Job log
@@ -2788,19 +2604,16 @@ async function loadResults(runId){
   let report;
   try{
     const r=await fetch('/v1/perf/runs/'+runId+'/report');
-    if(!r.ok){
-      // Fall back gracefully — keep the demo data visible
-      return;
-    }
+    if(!r.ok){_resultsUnavailable(r.status===404?'No run '+runId+' on disk.':'Could not load the report (HTTP '+r.status+').');return;}
     report=await r.json();
-  }catch(e){return;}
+  }catch(e){_resultsUnavailable('Could not load the report: '+e.message);return;}
 
   // Header
   const title=document.getElementById('results-title');
   const sub=document.getElementById('results-sub');
   const pill=document.getElementById('results-outcome-pill');
   if(title) title.textContent=(report.run_id||runId)+' · '+(report.headline||'');
-  if(report.run_id) chatRunId=report.run_id;
+  if(report.run_id){chatRunId=report.run_id;_chatContextRun();}
   if(sub){
     const m=report.measurement||{};
     const note=[];
@@ -2814,30 +2627,33 @@ async function loadResults(runId){
     pill.className='pill '+(out==='IMPROVED'?'ok':out==='REVERTED'?'err':'idle');
   }
 
-  // KPI strip
+  // KPI strip. Every card is written on every load, so nothing from an earlier
+  // run (or the page's markup) survives into this one. measurement is empty
+  // unless a change was kept and re-measured: then there is no before/after.
   const m=report.measurement||{};
-  const elBefore=document.getElementById('res-p99-before');
-  const elAfter=document.getElementById('res-p99-after');
-  const elImp=document.getElementById('res-improvement');
-  const elSla=document.getElementById('res-sla-note');
-  if(elBefore && m.p99_ms) elBefore.textContent=m.p99_ms.before!=null?Math.round(m.p99_ms.before)+' ms':'—';
-  if(elAfter && m.p99_ms) elAfter.textContent=m.p99_ms.after!=null?Math.round(m.p99_ms.after)+' ms':'—';
-  if(elImp && m.p99_ms && m.p99_ms.before && m.p99_ms.after){
-    const pct=((m.p99_ms.before-m.p99_ms.after)/m.p99_ms.before*100).toFixed(1);
-    elImp.textContent=pct+'%';
-  }
-  if(elSla) elSla.textContent=report.limits_of_this_result||'';
+  const p=m.p99_ms||null;
+  const why=_whyNoComparison(report);
+  const base=p&&p.before!=null?p.before:report.baseline_p99;
+  _setKpi('res-p99-before',base!=null?Math.round(base)+' ms':'—',base!=null?'measured baseline':'no baseline measured');
+  _setKpi('res-p99-after',p&&p.after!=null?Math.round(p.after)+' ms':'—',p?'measured after the last kept change':why);
+  _setKpi('res-improvement',p&&p.before&&p.after!=null?((p.before-p.after)/p.before*100).toFixed(1)+'%':'—',
+    p?'measured, not predicted':'nothing to compare');
+  const sp=report.spend||{};
+  _setKpi('res-spend',sp.total!=null?_money(sp.total,sp.currency||'USD'):'—',
+    sp.calls?sp.calls+' model call(s), priced from the manifest'+(sp.unpriced_calls?' · '+sp.unpriced_calls+' call(s) on '+(sp.models_without_price||[]).join(', ')+', which has no row in config/pricing.yaml, priced at its default rate':''):'no model call on the manifest');
 
   // Before / after chart
+  const chartCard=document.getElementById('results-chart-card');
+  if(chartCard) chartCard.style.display=p?'':'none';
   _renderBeforeAfterChart(m);
 
   // Experiments table
   const exps=report.experiments||[];
   const liveTrials=document.getElementById('results-trials-live');
   const demoTrials=document.getElementById('results-trials-demo');
+  if(demoTrials){demoTrials.textContent='No experiments in this run. '+why;demoTrials.style.display=exps.length?'none':'';}
+  if(liveTrials) liveTrials.style.display=exps.length?'':'none';
   if(exps.length>0 && liveTrials){
-    demoTrials && (demoTrials.style.display='none');
-    liveTrials.style.display='';
     liveTrials.innerHTML=exps.map((ex,i)=>{
       const verdict=(ex.verdict||'').toUpperCase();
       const vc=verdict==='KEPT'?'ok':verdict==='REVERTED'?'err':verdict==='BASELINE'?'fire':'idle';
@@ -2869,13 +2685,36 @@ async function loadResults(runId){
   if(report.headline && hlCard){
     hlCard.style.display='';
     if(hlText) hlText.textContent=report.headline;
-    if(limText) limText.textContent=report.limits_of_this_result||'';
+    const lim=report.limits_of_this_result;
+    if(limText) limText.textContent=Array.isArray(lim)?lim.map(x=>'• '+x).join('\n'):(lim||'');
   }
 
   // Load run list for picker
   _loadRunPicker();
 }
 
+function _setKpi(id,value,note){
+  const el=document.getElementById(id);if(el) el.textContent=value;
+  const n=document.getElementById(id+'-note')||(id==='res-improvement'?document.getElementById('res-sla-note'):null);
+  if(n) n.textContent=note||'';
+}
+// Why a run has no before/after, in the report's own terms.
+function _whyNoComparison(report){
+  const h=(report.headline||'').toLowerCase();
+  if(h.includes('advisory')) return 'advisory: nothing applied, so nothing re-measured';
+  if(h.includes('already met')) return 'baseline met the SLA: nothing changed';
+  return 'no change kept, so nothing to compare';
+}
+function _resultsUnavailable(message){
+  const title=document.getElementById('results-title');if(title) title.textContent=message;
+  const sub=document.getElementById('results-sub');if(sub) sub.textContent='';
+  ['res-p99-before','res-p99-after','res-improvement','res-spend'].forEach(id=>_setKpi(id,'—',''));
+  const chartCard=document.getElementById('results-chart-card');if(chartCard) chartCard.style.display='none';
+  const live=document.getElementById('results-trials-live');if(live) live.style.display='none';
+  const demo=document.getElementById('results-trials-demo');if(demo){demo.style.display='';demo.textContent=message;}
+  const hl=document.getElementById('results-headline-card');if(hl) hl.style.display='none';
+  _loadRunPicker();
+}
 function _renderBeforeAfterChart(m){
   const canvas=document.getElementById('chartBeforeAfter');
   if(!canvas) return;
@@ -2921,9 +2760,9 @@ async function _loadRunPicker(){
   if(!list) return;
   list.innerHTML=runs.map(r=>{
     const p99=r.p99_before!=null?Math.round(r.p99_before)+' → '+(r.p99_after!=null?Math.round(r.p99_after)+' ms':'?'):'';
-    return `<div class="trial-row" onclick="loadResults('${r.run_id}');toggleRunPicker();" style="cursor:pointer;">
-      <div style="flex:1;font-size:13px;">${r.run_id}</div>
-      <span style="font-size:11px;color:var(--lo);">${r.started_at||''}</span>
+    return `<div class="trial-row" data-run="${ha(r.run_id)}" onclick="loadResults(this.dataset.run);toggleRunPicker();" style="cursor:pointer;">
+      <div style="flex:1;font-size:13px;font-family:var(--f-mono);">${he(r.run_id)}</div>
+      <span style="font-size:11px;color:var(--lo);">${he(KIND_LABEL[r.kind]||r.kind||'')} · ${he(_shortDate(r.started_at))}</span>
       <span style="font-size:11px;color:var(--mid);margin-left:8px;">${p99}</span>
     </div>`;
   }).join('');

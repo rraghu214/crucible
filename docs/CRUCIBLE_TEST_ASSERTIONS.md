@@ -13,6 +13,8 @@ delete the ones you disagree with. What you keep should be things you believe.
 
 # GROUP 1 — The collector
 
+*Status: REVIEWED AND APPROVED by the operator. Recorded 1 November 2026 on the operator's instruction to mark every group approved; this header had no status line before.*
+
 *The collector turns raw metrics into the snapshot the model reads. Everything the
 agent concludes rests on this being right. This is the group where the spike
 already burned us once.*
@@ -153,6 +155,8 @@ def test_snapshot_carries_the_collector_version_that_built_it():
 ---
 
 # GROUP 2 — Authority and the guard
+
+*Status: REVIEWED AND APPROVED by the operator. Recorded 1 November 2026 on the operator's instruction to mark every group approved; this header had no status line before.*
 
 *What the agent is allowed to touch. This is the group that stops the agent
 grading itself.*
@@ -296,6 +300,8 @@ def test_text_inside_telemetry_is_data_not_instruction():
 
 # GROUP 3 — The verdict
 
+*Status: REVIEWED AND APPROVED by the operator. Recorded 1 November 2026 on the operator's instruction to mark every group approved; this header had no status line before.*
+
 *Whether a change is kept or reverted. The line between a verified result and a
 claim.*
 
@@ -398,6 +404,8 @@ def test_a_change_within_measurement_noise_is_inconclusive():
 ---
 
 # GROUP 4 — Diagnosis quality
+
+*Status: REVIEWED AND APPROVED by the operator. Recorded 1 November 2026 on the operator's instruction to mark every group approved; this header had no status line before.*
 
 *Run against saved snapshots. Cheap, so there can be many of them.*
 
@@ -546,6 +554,8 @@ def test_an_unstable_measurement_produces_no_diagnosis():
 
 # GROUP 5 — Evidence honesty
 
+*Status: REVIEWED AND APPROVED by the operator. Recorded 1 November 2026 on the operator's instruction to mark every group approved; this header had no status line before.*
+
 *Whether the agent knows the limits of what it can see. This is the group that
 separates the product from a wrapper around an APM.*
 
@@ -615,6 +625,8 @@ def test_low_trace_sampling_weakens_a_negative_finding():
 
 # GROUP 6 — Manifests and the journal
 
+*Status: REVIEWED AND APPROVED by the operator. Recorded 1 November 2026 on the operator's instruction to mark every group approved; this header had no status line before.*
+
 *The permanent record. If this is wrong, every claim built on it is wrong.*
 
 ---
@@ -681,6 +693,8 @@ def test_a_human_hint_is_recorded_on_the_manifest():
 
 # GROUP 7 — Budget and stopping
 
+*Status: REVIEWED AND APPROVED by the operator. Recorded 1 November 2026 on the operator's instruction to mark every group approved; this header had no status line before.*
+
 *The agent must stop for the right reason, and stopping is not failing.*
 
 ---
@@ -723,6 +737,8 @@ def test_a_campaign_never_spends_past_its_ceiling():
 ---
 
 # GROUP 8 — The scorer
+
+*Status: REVIEWED AND APPROVED by the operator. Recorded 1 November 2026 on the operator's instruction to mark every group approved; this header had no status line before.*
 
 *Reads manifests, calls no model. Everything here should be pure functions over
 saved data.*
@@ -897,6 +913,8 @@ scorer's job done outside the scorer (§4.6).
 
 # GROUP 9 — The target profile and the authority boundary
 
+*Status: REVIEWED AND APPROVED by the operator. Recorded 1 November 2026 on the operator's instruction to mark every group approved; this header had no status line before.*
+
 *Added week 1, alongside `crucible/perf/profile.py`. These cover the profile half
 of Group 2: what the agent may change, and the wall between prose and authority.
 Implemented in `tests/test_perf_profile.py`.*
@@ -1001,6 +1019,8 @@ target exists, the same way `spring-boot.yaml`'s PromQL names were corrected on
 
 # GROUP 10 — Quota arithmetic
 
+*Status: REVIEWED AND APPROVED by the operator. Recorded 1 November 2026 on the operator's instruction to mark every group approved; this header had no status line before.*
+
 *Added week 1, alongside `crucible/perf/quota.py`. Implemented in
 `tests/test_perf_quota.py`.*
 
@@ -1051,6 +1071,8 @@ in a quarter of the time it actually needs.
 ---
 
 # GROUP 11 — Deploy and the push boundary
+
+*Status: REVIEWED AND APPROVED by the operator. Recorded 1 November 2026 on the operator's instruction to mark every group approved; this header had no status line before.*
 
 *Added 13 September 2026 alongside `crucible/perf/deploy.py`; DESIGN.md §19.
 Implemented in `tests/test_perf_deploy.py`. Backfilled into this document in week 2
@@ -1136,6 +1158,8 @@ entirely plausible. Nothing downstream catches this class of error.
 
 # GROUP 12 — The applicator
 
+*Status: REVIEWED AND APPROVED by the operator. Recorded 1 November 2026 on the operator's instruction to mark every group approved; this header had no status line before.*
+
 *Week 2, `crucible/perf/applicator.py`. Implemented in
 `tests/test_perf_applicator.py` (38 assertions). DESIGN.md §4.4, §5, §7, §11.*
 
@@ -1206,6 +1230,8 @@ file, and it would only appear on one platform. `fnmatch` is used rather than
 ---
 
 # GROUP 13 — The approval gate
+
+*Status: REVIEWED AND APPROVED by the operator. Recorded 1 November 2026 on the operator's instruction to mark every group approved; this header had no status line before.*
 
 *Week 2, `crucible/perf/approval.py`. Implemented in `tests/test_perf_approval.py`
 (25 assertions). DESIGN.md principle 4, §19.4.*
@@ -1328,6 +1354,8 @@ never saw.
 ---
 
 # GROUP 14 — The campaign loop
+
+*Status: REVIEWED AND APPROVED by the operator. Recorded 1 November 2026 on the operator's instruction to mark every group approved; this header had no status line before.*
 
 *Week 2, `crucible/perf/campaign.py`. Implemented in `tests/test_perf_campaign.py`
 (64 assertions). DESIGN.md §4.4–4.7, §7, §8, §19.*
@@ -1461,6 +1489,8 @@ crashed one.
 
 # GROUP 15 — The PromQL adapter
 
+*Status: REVIEWED AND APPROVED by the operator. Recorded 1 November 2026 on the operator's instruction to mark every group approved; this header had no status line before.*
+
 *Week 2, `crucible/perf/providers/promql.py`. Implemented in
 `tests/test_perf_promql.py` (27 assertions). DESIGN.md §4.1, §4.8, §5.*
 
@@ -1560,6 +1590,8 @@ one level down.
 
 # GROUP 16 — The CLI
 
+*Status: REVIEWED AND APPROVED by the operator. Recorded 1 November 2026 on the operator's instruction to mark every group approved; this header had no status line before.*
+
 *Week 2, `crucible/perf/commands.py` and `crucible/cli.py`. Implemented in
 `tests/test_perf_cli.py` (36 assertions). DESIGN.md §9, §15.*
 
@@ -1612,6 +1644,8 @@ cold JVM measured p99 150 ms where a warm one measured 98, a ~50% gap against a
 
 # GROUP 17 — The SLA as Policy memory (lock 2 of 2)
 
+*Status: REVIEWED AND APPROVED by the operator. Recorded 1 November 2026 on the operator's instruction to mark every group approved; this header had no status line before.*
+
 *Week 2, `crucible/perf/policy.py`. Implemented in `tests/test_perf_policy.py`
 (14 assertions). AGENTS.md non-negotiable 4, DESIGN.md §4.4.*
 
@@ -1662,6 +1696,8 @@ An agent that could not read its own objective could not report whether it met o
 ---
 
 # GROUP 18 — Diagnosis: the model seam
+
+*Status: REVIEWED AND APPROVED by the operator. Recorded 1 November 2026 on the operator's instruction to mark every group approved; this header had no status line before.*
 
 *Week 2, `crucible/perf/diagnosis.py`. Implemented in `tests/test_perf_diagnosis.py`
 (32 assertions). DESIGN.md §3.2, §4.1–4.3, §5.*
@@ -2556,6 +2592,8 @@ wires trip. The Locust view was chosen for that reason; it is worth your judgeme
 
 # GROUP 24 — Task and fixture definitions
 
+*Status: REVIEWED AND APPROVED by the operator. Recorded 1 November 2026 on the operator's instruction to mark every group approved; this header had no status line before.*
+
 *Week 4, `config/tasks/` and `config/fixtures/`, loaded by
 `crucible.perf.replay.load_task_dir` and `crucible.perf.fixtures.load_specs`.
 Implemented in `tests/test_perf_task_definitions.py` (24 assertions).
@@ -2767,6 +2805,8 @@ produce a smaller benchmark that looks the same size.
 ---
 
 # GROUP 27 — The novel cause path
+
+*Status: REVIEWED AND APPROVED by the operator. Recorded 1 November 2026 on the operator's instruction to mark every group approved; this header had no status line before.*
 
 *Week 3 (late), `crucible/perf/applicator.py` (`novel_cause`), the campaign
 manifest, the scorer's integrity dimension and the report. Assertions live in
@@ -3126,6 +3166,8 @@ manifests on disk.
 ---
 
 # GROUP 28 — The campaign UI: everything the CLI does, no easier path
+
+*Status: REVIEWED AND APPROVED by the operator. Recorded 1 November 2026 on the operator's instruction to mark every group approved; this header had no status line before.*
 
 *Rewritten 11 October 2026. `crucible/ui/nicegui_app.py` (seven pages: Home,
 New, Campaign, History, Benchmark, Jobs, Settings), `crucible/ui/actions.py`
@@ -4704,6 +4746,117 @@ to CSRF. The custom header keeps that property without the token.
 - **Intended:** the site login gives full dashboard control until submission.
 - **The CORS dependency is guarded:** `test_no_cors_middleware_while_the_login_can_grant_control`
   fails if CORS middleware is ever added, so 44.7 is revisited first.
+
+---
+
+# GROUP 45 — Fixes from the trial run of 31 October 2026
+
+*Drafted 1 November 2026 by Claude Code. REVIEWED AND APPROVED by the operator,
+1 November 2026, with the decisions recorded under each assertion.
+`tests/test_ui_trial_fixes.py` (48). Code: `crucible/ui/client/crucible-ui.html`,
+`crucible/ui/perf_ui.py` (preflight callers, `perf_active_campaign`, `_spend`,
+`perf_list_runs`, `perf_run_report`), `crucible/ui/wizard.py` (`_same`).*
+
+*Operator request, 1 November 2026: "make all the changes identified in this
+trial run". The trial showed numbers nobody measured: a run that changed nothing
+displayed "1206 -> 58 ms, 95.2%", Active showed a made-up campaign below a real
+one, and Benchmarks claimed 94.6% (35/37) where the results document says 18/25.
+Those were sample values typed into the page, left wherever the real data had
+nothing to say. The rule now: a page shows what is on disk, or "—" with the
+reason, never a sample.*
+
+### 45.1 Preflight reports the SLA protected when it is
+
+**What it checks.** The Preflight screen and Test connection both show
+`config/slo.yaml is protected` as passing, and an SLA path outside the protected
+patterns still fails.
+
+**Why it exists.** Both dashboard callers passed the absolute path; the profile's
+patterns are relative, so a protected SLA was reported "NOT protected". The CLI,
+given the relative default, was right. A safety check that cries wolf teaches the
+operator to ignore it.
+
+**Operator decision:** "check relative paths too". `preflight_checks` takes the
+repository `root`; an absolute path inside it is checked as its relative path, and
+one outside it still fails. Tested with `config/slo.yaml`, `./config/slo.yaml` and
+the absolute path (all pass) and two paths outside the patterns (both fail).
+
+### 45.2 The wizard leaves a value it would not change exactly as written
+
+**What it checks.** Writing the value already on the line returns the text
+unchanged (`/api/db`, `1.0` vs `1`). A changed value is still written. `true` is
+never treated as equal to `1`. With every field at its current value, the Review
+diff shows only the `# wizard:` provenance line.
+
+**Why it exists.** The wizard re-spelled unchanged values as JSON, so the diff the
+operator approves hid four real changes among lines that changed nothing.
+
+**For review.**
+- Equality is "YAML reads the old text as the same value". Is there a case where
+  equal-as-YAML should still be rewritten?
+- Real changes are still written JSON-quoted (`"trunk-base"`, approved in 32). Only
+  unchanged lines are now left alone.
+
+### 45.3 A running job is found by the Active endpoint
+
+**What it checks.** With a job running, `/v1/perf/campaign/active` returns it.
+
+**Why it exists.** Job status is `running` (lower case); the endpoint compared
+against `"RUNNING"`, so the campaign log never appeared. The dashboard's Jobs list
+had the same mismatch and showed `?` for every job.
+
+### 45.4 The report carries model spend, and "no calls" is not "$0"
+
+**What it checks.** The report's `spend` counts every model call on the manifest
+(including Advisory alternatives with their own call), matches the scorer's
+`score_cost`, counts calls priced at the default rate, and is `None` for a run that
+made no model call.
+
+**Why it exists.** Spend was visible only in a score job's log. The Results screen
+now shows it, priced exactly as the scorer prices it (no model call, §4.6).
+
+**Operator decision:** say it as it is, not "estimated". The report names the
+models in `models_without_price`; the card reads "N call(s) on <model>, which has
+no row in config/pricing.yaml, priced at its default rate".
+
+### 45.5 The run list says what kind of run each is, and keeps ceiling probes apart
+
+**What it checks.** `/v1/perf/runs` gives each run's kind, measured baseline p99,
+endpoint and environment; an Advisory run has no "after"; ceiling probes come back
+in their own list with their knee.
+
+**Why it exists.** Overview, Library and History are now drawn from it instead of
+sample rows. History's baseline column was read by index from a list that only
+holds kept runs, so it could show another run's number.
+
+### 45.6 The dashboard ships no sample run
+
+**What it checks.** The page contains none of the sample identifiers or figures
+(TR-001..004, CP-001, 1206 ms, 95.2%, 35/37, 94.6%, RecoAPI, the sample Active
+header, the sample commit). Approve/Reject send the experiment number the server
+reports as pending. Job status is compared case-insensitively.
+
+**Why it exists.** Approve read an element that never existed, so every decision
+went to experiment 1. Approve, Pause and Abort on the sample campaign posted chat
+messages ("deploying pool=20") without calling the server.
+
+**Operator decisions:**
+- "Preferably API response wherever possible." Every figure element (Results,
+  Overview, History KPIs) must start as "—" in the markup, and whole panels
+  (Benchmarks, profile, Library, recent runs) hold only a placeholder, so a figure
+  can only arrive from a response. The sample-string list stays as a second check.
+- Scripted chat stays, for the demo. **Live AI is now the default**; scripted is the
+  fallback switch if the gateway fails on camera. Scripted answers about a run are
+  read from that run's report (no model, no written-in figure).
+- Simulated runs for narration: not added. The real runs on disk already tell the
+  story (`run-20261017-175240`: pool 2 -> 20, 1200 -> 58 ms, IMPROVED, kept).
+
+**Also changed, not asserted here:** Budget hides the experiment count in Advisory
+and names three proposals; the Review CLI twin shows `--advisory`; the Save reply
+names the selected mode; the mix placeholder reads "optional, e.g."; chat sources
+are one per line; Benchmarks renders screen 18 and Guardrails screen 5 from the
+server; History's compare uses the server's `compare`; the fake Guardrails toggles
+and the static Playbooks and ceiling cards are gone.
 
 ---
 

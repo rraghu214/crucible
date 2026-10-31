@@ -2649,7 +2649,14 @@ async def perf_active_campaign(request: Request):
 
 @router.get("/v1/perf/runs")
 async def perf_list_runs(request: Request):
-    """List completed campaign runs, newest first."""
+    """List completed campaign runs, newest first, and ceiling probes apart.
+
+    Overview and Library are drawn from this, so they show runs on disk rather
+    than sample ones. ``baseline_p99`` is the measured baseline even when no
+    change was kept; ``p99_before``/``p99_after`` exist only when one was.
+    Ceiling probes are listed separately: they are not verdicts (DESIGN.md 20.6)
+    and have no report.
+    """
     from ..perf.report import final_measurement, summarise_outcome
 
     ctx = _context(request)
@@ -2662,10 +2669,21 @@ async def perf_list_runs(request: Request):
             "run_id": c.get("run_id"),
             "started_at": c.get("started_at_epoch_s"),
             "outcome": summarise_outcome(c),
+            "kind": _run_kind(c),
+            "experiments": len(c.get("experiments") or []),
+            "endpoint": (c.get("sla") or {}).get("endpoint"),
+            "environment": (c.get("sla") or {}).get("environment_name"),
+            "baseline_p99": ((c.get("baseline") or {}).get("load") or {}).get("p99_ms"),
             "p99_before": p99.get("before"),
             "p99_after": p99.get("after"),
         })
-    return {"runs": rows}
+    ceilings = [{
+        "run_id": c.get("run_id"),
+        "started_at": c.get("started_at_epoch_s"),
+        "last_passing_users": c.get("last_passing_users"),
+        "first_failing_users": c.get("first_failing_users"),
+    } for c in reversed(_ceilings(ctx))]
+    return {"runs": rows, "ceilings": ceilings}
 
 
 @router.get("/v1/perf/runs/{run_id}/report")
@@ -2684,7 +2702,38 @@ async def perf_run_report(run_id: str, request: Request):
     if campaign is None:
         raise HTTPException(404, f"no campaign {run_id!r}")
     report = build_report(campaign, harness_sha=_harness_sha())
-    return report.as_dict()
+    # The baseline is measured even when no change was kept (Advisory, or nothing
+    # better found); the report's measurement block is then empty by design.
+    baseline_p99 = ((campaign.get("baseline") or {}).get("load") or {}).get("p99_ms")
+    return {**report.as_dict(), "spend": _spend(campaign), "baseline_p99": baseline_p99}
+
+
+def _spend(campaign: dict[str, Any]) -> dict[str, Any]:
+    """Model spend for one run, priced exactly as the scorer prices it.
+
+    From the usage each call recorded on the manifest and config/pricing.yaml;
+    no model is called (DESIGN.md 4.6). ``total`` is None when the run made no
+    model call, so "no calls" never reads as "$0 spent". A call whose model has
+    no row of its own in config/pricing.yaml is priced at the table's default
+    rate (never free), and the model is named in ``models_without_price``.
+    """
+    from ..economics.pricing import Pricing
+    from ..perf.scorer import _load_pricing_yaml, score_cost
+
+    pricing = Pricing.from_mapping(_load_pricing_yaml())
+    calls = []
+    for experiment in campaign.get("experiments") or []:
+        calls.append(experiment.get("diagnosis") or {})
+        calls += [a.get("diagnosis") or {} for a in (experiment.get("advisory") or {}).get("alternatives") or []]
+    calls = [c for c in calls if c]
+    return {
+        "total": score_cost(campaign, pricing).total if calls else None,
+        "currency": pricing.currency,
+        "calls": len(calls),
+        "unpriced_calls": sum(1 for c in calls if not pricing.is_priced(c.get("served_by_model"))),
+        "models_without_price": sorted({str(c.get("served_by_model") or "(model not recorded)") for c in calls
+                                        if not pricing.is_priced(c.get("served_by_model"))}),
+    }
 
 
 @router.get("/v1/perf/campaign/{run_id}/state")
