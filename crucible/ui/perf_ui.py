@@ -1369,6 +1369,7 @@ def screen_benchmark(ctx: PerfContext, q: dict[str, str]) -> dict[str, Any]:
 
     quadrant: dict[str, list[str]] = {"CORRECT": [], "LUCKY": [], "UNLUCKY": [], "WRONG": []}
     scored_runs = 0
+    abstained: list[str] = []
     for c in campaigns:
         truth = manifest_ground_truth(c)
         if truth is None:
@@ -1377,14 +1378,22 @@ def screen_benchmark(ctx: PerfContext, q: dict[str, str]) -> dict[str, Any]:
         for e in c.get("experiments") or []:
             if e.get("refused_by_guard"):
                 continue
+            # Declining to act named no cause and changed nothing: that is not a
+            # wrong diagnosis (principle 2), so it is counted apart, never as WRONG.
+            if not e.get("cause_family") and not (e.get("proposal") or {}).get("changes"):
+                abstained.append(f"{c.get('run_id')} exp {e.get('experiment')}")
+                continue
             q = score_diagnosis(e, truth)
             if q != UNSCORABLE:
                 quadrant[q].append(f"{c.get('run_id')} exp {e.get('experiment')}")
     if scored_runs:
         panels = [s.text(f"{k}: {len(v)}" + (f" -- {', '.join(v)}" if v else "")) for k, v in quadrant.items()]
+
     else:
         panels = [s.text(f"{k}: not yet measured -- no scored live campaign") for k in quadrant]
-    s.add(s.card("Diagnosis against outcome", [s.tabs(list(quadrant), panels), s.text(
+    abstained_note = ([s.text(f"Abstained (no cause named, nothing changed; not in a quadrant): {len(abstained)} -- "
+                              + ", ".join(abstained))] if abstained else [])
+    s.add(s.card("Diagnosis against outcome", [s.tabs(list(quadrant), panels), *abstained_note, s.text(
         f"Every quadrant needs to know whether the fix worked, which only a live campaign can measure: "
         f"{scored_runs} live run(s) started from a fixture are scored here. Zero in a quadrant is a "
         f"measurement once runs are scored. Replay shows the diagnosis half alone: correct on "

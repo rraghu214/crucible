@@ -134,6 +134,21 @@ class TestQuadrantsAreScoredFromTheRecord:
         assert "UNLUCKY: 0" in shown and "WRONG: 0" in shown
         assert "2 live run(s) started from a fixture are scored here" in shown
 
+    def test_an_abstention_is_counted_apart_never_as_wrong(self, tmp_path):
+        """Declining to act on missing evidence is not a wrong diagnosis (principle 2).
+        Seen live: thread_starved with Tomcat thread metrics off."""
+        from crucible.ui.perf_ui import PerfContext, build_screen
+
+        results = tmp_path / "results"
+        results.mkdir()
+        run = _manifest("t", named="", verdict="NOT_MEASURED", kept=False, truth="thread_pool_saturation")
+        run["experiments"][0]["proposal"] = {"changes": []}
+        (results / "t.json").write_text(json.dumps(run), encoding="utf-8")
+        ctx = PerfContext(root=REPO, results_dir=str(results), state_dir=tmp_path / "state")
+        shown = json.dumps(build_screen(18, ctx)["surface"]["dataModel"])
+        assert "WRONG: 0" in shown
+        assert "Abstained (no cause named, nothing changed; not in a quadrant): 1 -- t exp 1" in shown
+
 
 # -- 46.4 ---------------------------------------------------------------------
 

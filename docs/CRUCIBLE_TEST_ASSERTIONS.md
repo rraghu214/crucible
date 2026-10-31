@@ -4864,7 +4864,7 @@ and the static Playbooks and ceiling cards are gone.
 
 *Drafted 1 November 2026 by Claude Code, while the operator was away. **NOT YET
 REVIEWED** by the operator. On the draft branch `capstone/live-quadrants` only.
-`tests/test_live_ground_truth.py` (23). Code: `fixture_ground_truth` and
+`tests/test_live_ground_truth.py` (24). Code: `fixture_ground_truth` and
 `build_campaign(fixture=)` in `crucible/perf/commands.py`; `ground_truth` on
 `Campaign` / `CampaignResult`; `manifest_ground_truth` in `crucible/perf/scorer.py`;
 the quadrant on the Benchmarks screen; `perflab.jvm.heap-max-mb` in
@@ -4913,6 +4913,15 @@ scored.
 **Why it exists.** Until now the quadrant panel was hard-coded empty. Zero in a
 quadrant is a measurement once runs are scored; "not yet measured" is for when none
 are.
+
+An abstention (no cause named, nothing changed) is counted apart on the Benchmarks
+page, never as WRONG. Seen live on `bench46-thread_starved`: Tomcat thread metrics
+were off, the agent saw nulls and declined, which is principle 2 working.
+
+**For review.**
+- The approved scorer (`score_diagnosis`) still scores that abstention as WRONG in
+  `crucible score`, because its rule is "named cause != true cause and not
+  verified". Should the scorer gain an ABSTAINED outcome, as the page now shows?
 
 ### 46.4 The heap is a real lever for gc_pressure
 
