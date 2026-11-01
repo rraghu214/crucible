@@ -325,7 +325,7 @@ def test_every_live_benchmark_sla_loads_and_is_protected(sla):
 
 
 # -- 46.6 ---------------------------------------------------------------------
-# DRAFTED 1 November 2026, for operator review: the model was shown the fault's
+# DRAFTED 1 November 2026, APPROVED by the operator the same day: the model was shown the fault's
 # name through labels (replay snapshots' run_id, the bench SLA's name and file).
 
 

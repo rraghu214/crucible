@@ -19,6 +19,12 @@ you've reviewed Groups 46 and 47.
 
 ## Live campaigns (all Fully Automated, `--approve preapproved`)
 
+**Not a valid measure of diagnosis (found 1 November 2026).** These runs' SLA was named
+after the fault (`bench-cache-miss-severe`), as were the SLA file and the run id, and
+the model saw all three; two replies quote the name. Each run could also read the
+earlier runs' findings in the journal. Re-run blinded (Group 46.6), with neutral ids
+and an empty journal per run: results to follow. Kept as recorded.
+
 Run from a separate worktree on Box B (`~/crucible-draft`), so the public dashboard
 stayed on approved code. Manifests are in `~/crucible-draft/results/bench46-*.json`;
 the runner's log is `~/bench46/run.log`.

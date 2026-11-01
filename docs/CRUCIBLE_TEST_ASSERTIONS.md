@@ -5002,7 +5002,7 @@ goals I would have set."
 
 ### 46.6 Nothing that labels the run reaches the model
 
-*Drafted 1 November 2026 by Claude Code. **NOT YET REVIEWED.** Tests:
+*Drafted 1 November 2026 by Claude Code. **REVIEWED AND APPROVED** by the operator, 1 November 2026 ("I approve 46.6"). Tests:
 `test_a_replay_prompt_never_names_its_fixture` (one per captured snapshot) and
 `test_a_live_benchmark_prompt_never_names_its_fault` (one per bench SLA), in
 `tests/test_live_ground_truth.py`. Code: `blind_for_model` in
