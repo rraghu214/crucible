@@ -1,11 +1,50 @@
 # Live campaign results
 
-## Group 46 live benchmark — 1 November 2026 (Group 46 approved by the operator, 1 November 2026)
+## Run 2 — 1 November 2026: blinded, clean metrics (supersedes every earlier live result)
 
-> The 1 November live benchmark is not a valid measure of diagnosis: the model could
-> read the fault's name in the SLA, its file and the run id. A blinded re-run with
-> neutral ids and an empty journal per run is pending; no live diagnosis claim is
-> made until it is in.
+> Six Fully Automated live campaigns on PerfLab, one per fault the agent can fix (1 November
+> 2026, gemini-3.5-flash-lite, $0.0115 in all): 8 experiments, CORRECT 7, LUCKY 1, UNLUCKY 0,
+> WRONG 0. Every SLA was met and every kept change was a verified fix. The model never saw the
+> fault's name, and every snapshot it decided from was checked against Prometheus first.
+
+Code: Crucible `553f06c`, PerfLab `124c305` (with perf-lab PR #3). Manifests: Box B
+`~/bench48/out/run2-0*.json`, copied to `~/crucible/results/`; backup and raw logs under
+`Capstone/runs/2026-11-01/`. Which run was which fault is in `key.txt`, never shown to a campaign.
+
+| Run | Fault (true cause) | p99 before → after (SLA) | What the agent did | Quadrant |
+|---|---|---|---|---|
+| run2-01 | pool starved (connection_pool_exhaustion) | 1200 → **59 ms** (120) | pool 2 → 20 | CORRECT |
+| run2-02 | thread starved (thread_pool_saturation) | 510 → **59 ms** (120) | threads 4 → 200 | CORRECT |
+| run2-03 | N+1 query (inefficient_query) | 1800 → **80 ms** (400) | exp 1: pool → 50, 1800 → 1600 ms, kept; exp 2: batch fetch → 50 | **LUCKY**, then CORRECT |
+| run2-04 | cache off (cache_miss) | 46 → **9 ms** (20) | cache back on | CORRECT |
+| run2-05 | small heap (gc_pressure) | 2500 → **230 ms** (300) | heap 128 → 1024 MB | CORRECT |
+| run2-06 | small heap + small pool (gc_pressure) | 2500 → **230 ms** (300) | heap → 512, then → 1024 MB; the pool (the decoy) untouched | CORRECT, CORRECT |
+
+**The LUCKY experiment is real.** On the N+1 fault the agent first named the pool (full, with 28
+waiting) and raised it; p99 fell 11%, clear of the 2.08% noise floor, so it was kept. The diagnosis
+was wrong and the change helped anyway, because more connections let more slow queries run at once.
+Outcome-only scoring would have called it a success.
+
+**How each result was checked.** Before every campaign, `audit_metrics.py` compared Actuator with
+Prometheus meter by meter; after every deploy the commit was confirmed, the changed property read
+back from `/actuator/env`, and each heap change confirmed by the JVM's own `jvm.memory.max`
+(494.9 MB for 512, 989.9 MB for 1024). Every decision was made from a snapshot whose request count
+matched Locust's (ratio 1.45-1.59).
+
+**Known limitations.**
+- run2-04's manifest records the read-back as a mismatch ("expected 'True', got 'true'"). The value
+  in force was correct; Crucible compared Python's `True` with the file's `true` as text. A one-line
+  fix, recorded in `docs/ref/DEBT.md`; the manifest is left as it was written.
+- run2-05 is a redo: the first attempt was skipped when the audit flagged a timing artefact (totals
+  read moments apart under GC thrash). No measurement was taken in that attempt.
+- One pass per fault; endpoint names on PerfLab hint at their fault (see 46.6).
+
+---
+
+## Group 46 live benchmark — 1 November 2026 (SUPERSEDED by run 2)
+
+The 1 November overnight live benchmark is not a valid measure of diagnosis: the model could
+read the fault's name in the SLA, its file and the run id. Superseded by run 2 above.
 
 **Not a valid measure of diagnosis (found 1 November 2026).** These runs' SLA was named
 after the fault (`bench-cache-miss-severe`), as were the SLA file and the run id, and

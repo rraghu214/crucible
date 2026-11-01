@@ -22,46 +22,57 @@
       "promql",
       "datadog"
     ],
+    "expect_possible_failure": false,
     "notes": "The signal was observed on this configuration during K1/K3 (docs/K1_RESULT.md, docs/K3_RESULT.md), but on the pre-split repository layout and before the collector's unit conversion existed. It is recorded as unvalidated until it has been re-confirmed on the current box with the current collector -- a previous observation of the same state is evidence, not validation.\n"
   },
   "provider": "promql",
-  "captured_at_epoch_s": 1791722043.9589047,
+  "captured_at_epoch_s": 1793533835.5547338,
   "warmup_s": 120.0,
   "measure_s": 300.0,
   "snapshot": {
     "collector_version": "1.2.0",
-    "captured_at_epoch_s": 1791722043.9589047,
+    "captured_at_epoch_s": 1793533835.5547338,
     "run_id": "fixture-perflab_pool_starved",
     "profile": "spring-boot",
     "target": "http://10.0.0.79:8080",
     "window": {
-      "count": 13801.0,
-      "total_ms": 12562246.152516996,
-      "mean_ms": 910.2417326655312,
-      "max_recent_ms": 2237.007204,
+      "count": 13710.0,
+      "total_ms": 12584875.593809,
+      "mean_ms": 917.9340331005835,
+      "max_recent_ms": 2228.462149,
       "max_recent_ms_note": "rolling ~2-minute maximum read at end of window, NOT the maximum over the measured window. Micrometer's MAX decays, so a spike early in the window has already aged out. Under-reports transient causes such as GC pauses; approximates the true window max only for sustained ones.",
       "warmup_s": 120.0,
       "measure_s": 300.0
     },
     "load_summary": {
       "p50_ms": 1100.0,
-      "p95_ms": 1100.0,
+      "p95_ms": 1200.0,
       "p99_ms": 1200.0,
-      "mean_ms": 1079.440769824487,
-      "max_ms": 2239.2385471612215,
-      "rps": 38.749598795932755,
-      "request_count": 11598,
+      "mean_ms": 1088.8671184133202,
+      "max_ms": 2260.1211639121175,
+      "rps": 38.46708231230469,
+      "request_count": 11514,
       "failure_count": 0,
       "error_rate_pct": 0.0,
       "warmup_s": 120.0,
       "measure_s": 300.0,
-      "ramp_s": 5.0
+      "ramp_s": 5.0,
+      "per_endpoint": {
+        "/api/db": {
+          "p50_ms": 1100.0,
+          "p99_ms": 1200.0,
+          "rps": 38.46708231230469,
+          "request_count": 11514,
+          "failure_count": 0,
+          "error_rate_pct": 0.0
+        }
+      }
     },
     "hikaricp": {
-      "acquire_count": 32591.0,
-      "acquire_mean_ms": 1022.6498254192875,
-      "acquire_max_recent_ms": 2185.506451,
-      "acquire_total_ms": 33329180.46024,
+      "acquire_count": 16161.0,
+      "acquire_mean_ms": 1026.957322975744,
+      "acquire_max_recent_ms": 2176.812719,
+      "acquire_total_ms": 16596657.296611,
       "creation_count": 0.0,
       "creation_mean_ms": null,
       "creation_max_recent_ms": 0.0,
@@ -86,10 +97,10 @@
       "threads_config_max_threads": null
     },
     "http": {
-      "request_count": 36900.0,
-      "request_mean_ms": 949.1217018403795,
-      "request_max_recent_ms": 2237.007204,
-      "request_total_ms": 35022590.797910005
+      "request_count": 18218.0,
+      "request_mean_ms": 957.4973944685474,
+      "request_max_recent_ms": 2228.462149,
+      "request_total_ms": 17443687.532427996
     },
     "endpoint_breakdown": null,
     "runtime_config": {},

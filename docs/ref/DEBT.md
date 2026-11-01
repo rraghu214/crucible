@@ -149,3 +149,22 @@ work. Fix only when touching the file for another reason.
   and format, the guard checks the file against `protected_paths`, and the
   applicator stages and reverts every file it touched. Each experiment still
   commits only what it changed (§19.1b). Not built before submission.
+
+## Found during the run-2 re-measure, 1 November 2026 (not fixed before submission)
+
+- **Property read-back compares a boolean as Python text.** `verify_properties_via_env`
+  compares `str(change.value)` (`'True'`) with what `/actuator/env` returns (`'true'`), so
+  run2-04's manifest records "property mismatch after deploy" for a change that was in force.
+  Fix: compare with `_format_value`, the way the applicator writes the file. The commit check
+  and the measurement were unaffected.
+- **The PromQL adapter returns no GC figures.** Prometheus has `jvm_gc_pause_seconds_*`, split
+  across several series (action, cause, gc); the profile maps it as one series without
+  `aggregate: sum`, and the adapter returns nothing and does not declare it unreadable. Seen in
+  `fixtures/perflab_gc_pressure.promql.json`; costs replay tasks T2 and T12 on that view.
+- **The Datadog adapter reads the latest interval, not the measured window.** On
+  `perflab_gc_pressure` it counts 57 GC pauses where Actuator and Prometheus count 2,338, and its
+  longest request is half theirs. Its maxima agree; its counts and totals do not.
+- **`crucible run --state-dir` does not create the folder**, and the campaign fails at
+  `sqlite3.connect` with "unable to open database file". The run-2 script now creates it.
+- **The Actuator/Prometheus audit lives outside the repo** (`audit_metrics.py`). Candidate for a
+  `crucible preflight` check (Group 48 review question).

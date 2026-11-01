@@ -1,12 +1,48 @@
 # Replay benchmark — results
 
-## v4 results — 1 November 2026, the model blinded (Group 46.6)
+## Run 2 — 1 November 2026: blinded, clean snapshots (supersedes every earlier replay)
 
-> Replay with the model blinded (1 November 2026, one pass, gemini-3.5-flash-lite,
-> 38 cases): diagnosis correct on 30 of 35 cases with a true cause; task grade 31 of
-> 38 (A 7/9, B 12/12, C 9/10, D 2/5, E 1/2); 0 trap properties taken, 8 traps never
-> tempted. Every replay before this one had the fault's name in the prompt and is
-> not a valid measure.
+> Replay on 23 snapshots re-captured on 1 November 2026 with clean metrics (one pass,
+> gemini-3.5-flash-lite, 40 cases, $0.054): diagnosis correct on 31 of 37 cases with a true
+> cause; task grade 32 of 40 (A 8/9, B 12/14, C 9/10, D 2/5, E 1/2); 0 errors, 0 trap
+> properties taken, 0 snapshots refused. The model saw the real settings and never the fault's name.
+
+Raw evidence: [`docs/bench/replay-2026-11-01-run2.json`](bench/replay-2026-11-01-run2.json); the
+snapshots are `fixtures/` (19 faults through Actuator, plus PromQL and Datadog for `pool_starved`
+and `gc_pressure`). Every Actuator snapshot passed two checks: the audit before capture, and
+PerfLab's request count against Locust's afterwards (ratio 1.34-1.59 in all 19).
+`cache_miss_moderate` is not captured: no PerfLab code reads its TTL setting, so the fault does
+not exist.
+
+What it got wrong:
+- **T8, T13 (`inefficient_query_severe`)**: named pool exhaustion, although the snapshot shows
+  `batch_fetch_size = 1` and about 0.5 s held per request. The agent's main weakness, live and replay.
+- **T15 (`lock_contention`)**: named downstream latency. **T16 (`payload`)**: named GC.
+- **T6, T17 (`near_sla`)**: changed the pool on a service inside its SLA.
+- **T2, T12 (`gc_pressure`)**: right on the Actuator view, abstained on the PromQL view, which
+  carries no GC figures (see limitations).
+
+**Known limitations.**
+- The PromQL adapter returns no GC figures (Prometheus has them, split across several series) and
+  does not declare them unreadable. The Datadog adapter reads the latest interval, not the window
+  (57 GC pauses where Actuator counts 2,338). Both recorded in `docs/ref/DEBT.md`; neither affects
+  the Actuator snapshots the live runs decide from.
+- One pass, not three repeats. Eight trap fixtures were never tempted (an untested zero).
+
+**Why every earlier result is superseded.** Earlier replays had the fault's name in every prompt
+(46.6), masked settings, a heap figure that included non-heap memory (48.1), and on some PerfLab
+starts timers read from the Datadog registry 1000x too large (48.2). They are kept below as
+recorded; the 1 November blinded replay moved to `docs/bench/2026-11-01-blind/`.
+
+---
+
+## v4 results — 1 November 2026, the model blinded (SUPERSEDED by run 2: old snapshots)
+
+Replay with the model blinded (1 November 2026, one pass, gemini-3.5-flash-lite,
+38 cases): diagnosis correct on 30 of 35 cases with a true cause; task grade 31 of
+38 (A 7/9, B 12/12, C 9/10, D 2/5, E 1/2); 0 trap properties taken, 8 traps never
+tempted. Every replay before this one had the fault's name in the prompt and is
+not a valid measure.
 
 **Every earlier replay result in this document was graded with the fault's name in
 the prompt.** Each captured snapshot carries `run_id: fixture-perflab_<fault>`, and
@@ -15,7 +51,7 @@ the whole snapshot was sent to the model. Found 1 November 2026; fixed by
 below are kept as they were recorded, and none of them is a valid measure of
 diagnosis.
 
-Raw evidence: [`docs/bench/replay-2026-11-01-blind.json`](bench/replay-2026-11-01-blind.json)
+Raw evidence: [`docs/bench/2026-11-01-blind/replay-2026-11-01-blind.json`](bench/2026-11-01-blind/replay-2026-11-01-blind.json)
 (run on Box B as `results/replay-47.json`, code `13454e4`, same command, fixtures and
 model as v3: `crucible bench --tasks config/tasks/ --fixtures fixtures-46/ --skip-missing-fixtures`).
 This run also had the new SKILL.md section ("a full resource is a symptom"), so the two

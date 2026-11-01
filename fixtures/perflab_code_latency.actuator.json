@@ -13,28 +13,29 @@
       "perflab.slow.delay-ms": 400
     },
     "severity": "severe",
-    "validated_at": "",
+    "validated_at": "2026-10-03",
     "scenario_tag": "slow",
     "providers": [
       "actuator"
     ],
+    "expect_possible_failure": false,
     "notes": "RESOLVED 26 September 2026. `application_code` is now declared in config/profiles/spring-boot.yaml and described in its SKILL.md, so this fixture is capturable. The reasoning is kept below because it is the argument for the family existing, not just a record that it does.\nWHY IT WAS BLOCKED -- the profile had no cause family for this. config/profiles/spring-boot.yaml declares eight families and none of them covers \"the code itself is slow\". The nearest, downstream_latency, is wrong: nothing downstream is involved, and an agent answering that would be marked correct for a wrong reason.\nWithout a family to name, the only answer available to the agent is a bare abstention -- and T5 is explicit that \"I do not have enough evidence\" is a weaker and different answer from \"I know what this is and it is outside my authority\". The report has to be able to tell them apart: the first says the agent could not see, the second says it could.\nIt cost nothing in authority: cause_families is the hypothesis vocabulary, allowed_properties is the authority, and a family the agent can name but cannot act on is the point of this fixture rather than a loophole in it. Nothing on the allowed list fixes slow code, and tests/test_perf_profile.py asserts that.\n"
   },
   "provider": "actuator",
-  "captured_at_epoch_s": 1791061236.3786345,
+  "captured_at_epoch_s": 1793539876.098364,
   "warmup_s": 120.0,
   "measure_s": 300.0,
   "snapshot": {
     "collector_version": "1.2.0",
-    "captured_at_epoch_s": 1791061236.3786345,
+    "captured_at_epoch_s": 1793539876.098364,
     "run_id": "fixture-perflab_code_latency",
     "profile": "spring-boot",
     "target": "http://10.0.0.79:8080",
     "window": {
-      "count": 26862.0,
-      "total_ms": 9900335.492674,
-      "mean_ms": 368.56285804013106,
-      "max_recent_ms": 406.976463,
+      "count": 26863.0,
+      "total_ms": 9904774.500800002,
+      "mean_ms": 368.71438412686604,
+      "max_recent_ms": 413.449439,
       "max_recent_ms_note": "rolling ~2-minute maximum read at end of window, NOT the maximum over the measured window. Micrometer's MAX decays, so a spike early in the window has already aged out. Under-reports transient causes such as GC pauses; approximates the true window max only for sustained ones.",
       "warmup_s": 120.0,
       "measure_s": 300.0
@@ -43,21 +44,31 @@
       "p50_ms": 400.0,
       "p95_ms": 400.0,
       "p99_ms": 400.0,
-      "mean_ms": 402.3629764207988,
-      "max_ms": 436.91062391735613,
-      "rps": 82.38414273014163,
-      "request_count": 24655,
+      "mean_ms": 402.3328593630013,
+      "max_ms": 433.8454119861126,
+      "rps": 82.37531301676282,
+      "request_count": 24652,
       "failure_count": 0,
       "error_rate_pct": 0.0,
       "warmup_s": 120.0,
       "measure_s": 300.0,
-      "ramp_s": 5.0
+      "ramp_s": 5.0,
+      "per_endpoint": {
+        "/api/slow": {
+          "p50_ms": 400.0,
+          "p99_ms": 400.0,
+          "rps": 82.37531301676282,
+          "request_count": 24652,
+          "failure_count": 0,
+          "error_rate_pct": 0.0
+        }
+      }
     },
     "hikaricp": {
-      "acquire_count": 107.0,
-      "acquire_mean_ms": 0.03370084112149532,
+      "acquire_count": 109.0,
+      "acquire_mean_ms": 0.08890048623853211,
       "acquire_max_recent_ms": 0.0,
-      "acquire_total_ms": 3.60599,
+      "acquire_total_ms": 9.690153,
       "creation_count": 0.0,
       "creation_mean_ms": null,
       "creation_max_recent_ms": 0.0,
@@ -69,69 +80,74 @@
       "utilisation_peak_pct": 0.0
     },
     "jvm": {
-      "gc_pause_count": 55.0,
-      "gc_pause_mean_ms": 6.8,
-      "gc_pause_max_recent_ms": 8.0,
-      "gc_pause_total_ms": 374.0,
-      "heap_used_peak_bytes": 233387152.0,
+      "gc_pause_count": 59.0,
+      "gc_pause_mean_ms": 9.3728813559322,
+      "gc_pause_max_recent_ms": 9.0,
+      "gc_pause_total_ms": 552.9999999999999,
+      "heap_used_peak_bytes": 77234504.0,
       "threads_live_peak_threads": 65.0
     },
     "tomcat": {
-      "threads_busy_peak_threads": null,
-      "threads_config_max_threads": null
+      "threads_busy_peak_threads": 44.0,
+      "threads_config_max_threads": 200.0
     },
     "http": {
-      "request_count": 36673.0,
-      "request_mean_ms": 376.87626391680527,
-      "request_max_recent_ms": 406.976463,
-      "request_total_ms": 13821183.226621
+      "request_count": 36715.0,
+      "request_mean_ms": 376.85397814923056,
+      "request_max_recent_ms": 413.449439,
+      "request_total_ms": 13836193.807749
     },
     "endpoint_breakdown": {
-      "/actuator/metrics/{requiredMetricName}": {
-        "request_count": 2093.0,
-        "mean_ms": 0.6281351710463449,
-        "max_ms": 2.295377
-      },
       "/api/slow": {
-        "request_count": 34496.0,
-        "mean_ms": 400.51820455705007,
-        "max_ms": 406.976463
+        "request_count": 34524.0,
+        "mean_ms": 400.5740588457305,
+        "max_ms": 413.449439
       },
       "/api/version": {
         "request_count": 2.0,
-        "mean_ms": 25.7361965,
+        "mean_ms": 32.6667465,
         "max_ms": 0.0
       },
+      "/actuator/metrics/{requiredMetricName}": {
+        "request_count": 2097.0,
+        "mean_ms": 0.770681501669051,
+        "max_ms": 6.3298879999999995
+      },
       "/actuator/health": {
-        "request_count": 1.0,
-        "mean_ms": 2452.631327,
+        "request_count": 2.0,
+        "mean_ms": 1634.2946345,
+        "max_ms": 0.0
+      },
+      "/actuator/env/{toMatch}": {
+        "request_count": 7.0,
+        "mean_ms": 36.663549999999994,
         "max_ms": 0.0
       },
       "/actuator/prometheus": {
-        "request_count": 85.0,
-        "mean_ms": 22.234660670588237,
-        "max_ms": 27.47049
+        "request_count": 89.0,
+        "mean_ms": 26.679533033707862,
+        "max_ms": 27.045763
       }
     },
     "runtime_config": {
       "spring.application.name": "******",
       "server.port": "******",
       "perflab.version": "******",
-      "perflab.cache.enabled": "******",
-      "perflab.downstream.timeout-ms": "******",
-      "spring.datasource.hikari.maximum-pool-size": "******",
-      "spring.datasource.hikari.minimum-idle": "******",
-      "spring.datasource.hikari.connection-timeout": "******",
+      "perflab.cache.enabled": "true",
+      "perflab.downstream.timeout-ms": "5000",
+      "spring.datasource.hikari.maximum-pool-size": "20",
+      "spring.datasource.hikari.minimum-idle": "10",
+      "spring.datasource.hikari.connection-timeout": "30000",
       "spring.datasource.hikari.pool-name": "******",
       "spring.jpa.open-in-view": "******",
-      "spring.jpa.properties.hibernate.default_batch_fetch_size": "******",
-      "spring.jpa.properties.hibernate.jdbc.batch_size": "******",
-      "server.tomcat.threads.max": "******",
-      "server.tomcat.threads.min-spare": "******",
-      "spring.task.execution.pool.core-size": "******",
-      "spring.task.execution.pool.max-size": "******",
-      "spring.task.execution.pool.queue-capacity": "******",
-      "_redacted_count": 117
+      "spring.jpa.properties.hibernate.default_batch_fetch_size": "50",
+      "spring.jpa.properties.hibernate.jdbc.batch_size": "50",
+      "server.tomcat.threads.max": "200",
+      "server.tomcat.threads.min-spare": "10",
+      "spring.task.execution.pool.core-size": "8",
+      "spring.task.execution.pool.max-size": "16",
+      "spring.task.execution.pool.queue-capacity": "100",
+      "_redacted_count": 120
     },
     "baseline_reference": {},
     "available_evidence": {
