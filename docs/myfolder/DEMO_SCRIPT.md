@@ -127,7 +127,7 @@ ssh -i "<path-to-ssh-key>" `
 Open **http://localhost:9113/dashboard**, then:
 1. **Settings → Control token** → paste `CRUCIBLE_CONTROL_TOKEN` (`grep CRUCIBLE_CONTROL_TOKEN ~/crucible/.env`) → Save
 2. **Results** → a real run loads (chart and experiment table)
-3. **Active** → TR-004 demo view (no live banner) when nothing is running
+3. **Active** → "No campaign is running" when nothing is running (no demo content since Group 45)
 
 ---
 
@@ -171,7 +171,7 @@ GLC v5   : warmed (0.4)
 Knowledge: PERF_LAB_PRODUCT.md listed as indexed; knowledge-index/ non-empty (0.5)
 Token    : saved in Settings
 Results  : real KPIs + chart visible
-Active   : TR-004 demo view (no live overlay)
+Active   : "No campaign is running"
 Run ids  : two real run ids noted for Step 13 (0.6)
 Practice : Part P passed
 ```
@@ -465,9 +465,9 @@ about a different one. And it never presents a prediction as a result."
 
 *(Optional: `which runs do I have?` lists them.)*
 
-**Do not ask about TR-002/TR-003.** Those are the static demo rows. The chat
-will correctly say they are not on disk. The **Diff** card is also static demo
-content. Show it as "what a comparison looks like", or compare two real rows.
+Every History row is a real manifest (Group 45 removed the demo rows). To show a
+comparison, tick two real rows and compare: the Diff card is drawn from the
+server's screen 17.
 
 "Comparability is automatic. Two runs on different models or environments are
 flagged, not silently compared."
@@ -480,7 +480,7 @@ never shown as a verdict on a change."
 
 ## Step 14 — Benchmarks + the LUCKY quadrant (2 min) [UI]
 
-**Navigate to:** Benchmarks (static content from the real fixture runs).
+**Navigate to:** Benchmarks (drawn from disk: the replay files and the live manifests).
 
 "Diagnosis is replayed against captured snapshots: two seconds and a fraction of
 a cent each, against fifteen minutes for a live campaign. So I can run hundreds
@@ -597,11 +597,11 @@ wasn't measured."
 | Approve / Reject | **LIVE** | `/v1/perf/runs/{id}/experiments/{n}/decision` |
 | Pause / Resume / Abort | **LIVE** | `/v1/perf/campaign/{id}/pause|resume|abort` (token) |
 | Active tab, live campaign | **LIVE** | Polls `/v1/perf/campaign/active` every 5 s |
-| Active tab, no campaign | **DEMO** | TR-004 pre-loaded; approval animates locally |
+| Active tab, no campaign | **LIVE** | "No campaign is running"; the pending approval comes from the server |
 | Results tab | **LIVE** | `/v1/perf/runs/{id}/report` + Chart.js |
 | History table | **LIVE** | `/v1/perf/screens/17` |
-| History Diff card, ceiling card, Playbooks | **SCRIPTED** | Static TR-002/TR-003/CP-001 content |
-| Overview KPIs, Benchmarks, Guardrails | **SCRIPTED** | Static, matching real runs and `profile.yaml` |
+| History Diff card, ceiling card, Playbooks | **LIVE** | Screen 17 and `/v1/perf/runs` (ceilings); Playbooks says "not built" |
+| Overview KPIs, Library, Benchmarks, Guardrails | **LIVE** | `/v1/perf/runs`, `/v1/perf/services`, screens 18 and 5 |
 | Locust | **N/A** | `--headless`; no web UI |
 | Datadog dashboard | **LIVE** | app.datadoghq.com |
 
@@ -615,12 +615,12 @@ wasn't measured."
 | ✨ buttons greyed out | A document is still indexing: wait for "indexed — N chunks" |
 | Upload chip says `failed:` | Usually the embed cooldown 503. Click Upload & index again; identical text isn't re-embedded |
 | Chat answer has no Sources line | Retrieval found nothing: check `~/.crucible/knowledge-index/` is non-empty |
-| Chat says a run is "not on disk" | The id is wrong or a static demo id (TR-…): use an id from `ls ~/crucible/results/` |
+| Chat says a run is "not on disk" | The id is wrong: use an id from `ls ~/crucible/results/` |
 | Launch refused (409) | A campaign is running or paused: finish it, or `crucible abort <run>` |
 | Launch refused: cap overrun | The cap can't fit the baselines: raise it, or confirm the overrun in the dialog |
 | Run paused at a cap | `crucible resume <run> --cost-cap <higher>` or abort, then `crucible report --run <run>` |
-| Box B unreachable | History shows "Could not load history": explain the API call; static tabs still work |
-| Approval gate already dismissed | Refresh: the demo screen resets on load |
+| Box B unreachable | History shows "Could not load history": explain the API call; every tab reads the server now, so switch to the CLI |
+| Approval gate already dismissed | Refresh: Active re-reads the pending experiment from the server |
 | Write action returns 401 | Token not saved: Settings → Control token → Save |
 | Write action returns 503 | `CRUCIBLE_CONTROL_TOKEN` missing from Box B `.env`: add it, restart serve (0.1) |
 | Active tab shows no live overlay | `curl 127.0.0.1:8113/v1/perf/campaign/active` on Box B; the state file may not exist yet |
