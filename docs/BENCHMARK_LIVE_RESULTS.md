@@ -1,10 +1,12 @@
 # Live campaign results
 
-## Group 46 live benchmark — 1 November 2026 (draft, not yet reviewed)
+## Group 46 live benchmark — 1 November 2026 (Group 46 approved by the operator, 1 November 2026)
 
 Seven Fully Automated campaigns, each started from a fixture with `--fixture`, so the
 manifest records the true cause and the diagnosis is scored. Harness: draft branch
-`capstone/live-quadrants`. Manifests: Box B `~/crucible-draft/results/bench46-*.json`.
+`capstone/live-quadrants`. Manifests: Box B `~/crucible/results/bench46-*.json` (copied from the draft worktree on 1 November;
+backed up locally under `Capstone/runs/2026-11-01/`). The two GC runs predate the `jvm.memory.max`
+in-force check (46.4): their deploys were proved by commit only.
 
 | Fixture (true cause) | p99 before → after (SLA) | What the agent did | Quadrant | Spend |
 |---|---|---|---|---|
@@ -16,10 +18,13 @@ manifest records the true cause and the diagnosis is scored. Harness: draft bran
 | `gc_pressure` (gc_pressure) | 2000 → **220 ms** (300) | heap 128 → 1024 MB (the new lever), IMPROVED, kept | CORRECT | $0.0014 |
 | `gc_and_pool`, lookalike (gc_pressure) | 2300 → **220 ms** (300) | heap 128 → 1536 MB; the pool (the trap) untouched | CORRECT | $0.0014 |
 
-**Quadrants over 8 scored experiments: CORRECT 7, LUCKY 0, UNLUCKY 0, WRONG 1**, plus one
-abstention. Every SLA was met. Total model spend $0.0107, one model throughout
+**Quadrants over 7 scored experiments: CORRECT 6, LUCKY 0, UNLUCKY 0, WRONG 1**, plus one
+abstention. The six runs where the agent acted met their SLA; the abstained run (Tomcat
+metrics off) did not, since nothing was changed. (Corrected 1 November 2026: the first
+version of this note said CORRECT 7 over 8 and "every SLA was met", counting the abstention
+as scored.) Total model spend $0.0107, one model throughout
 (`gemini-3.5-flash-lite`), every change approved as `preapproved` (Fully Automated).
-LUCKY is 0 measured over 8, not "not measured": the GC-plus-pool lookalike was the run
+LUCKY is 0 measured over 7, not "not measured": the GC-plus-pool lookalike was the run
 built to tempt it, and the agent took the heap, not the pool.
 
 ---

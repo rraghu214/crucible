@@ -33,10 +33,13 @@ the runner's log is `~/bench46/run.log`.
 | `gc_pressure` (gc_pressure) | 2000 → **220 ms** (300) | heap 128 → 1024 MB (the new lever), IMPROVED, kept | CORRECT | $0.0014 |
 | `gc_and_pool`, lookalike (gc_pressure) | 2300 → **220 ms** (300) | heap 128 → 1536 MB; the pool (the trap) untouched | CORRECT | $0.0014 |
 
-**Quadrants over 8 scored experiments: CORRECT 7, LUCKY 0, UNLUCKY 0, WRONG 1**, plus one
-abstention. Every SLA was met. Total model spend $0.0107, one model throughout
+**Quadrants over 7 scored experiments: CORRECT 6, LUCKY 0, UNLUCKY 0, WRONG 1**, plus one
+abstention. The six runs where the agent acted met their SLA; the abstained run (Tomcat
+metrics off) did not, since nothing was changed. (Corrected 1 November 2026: the first
+version of this note said CORRECT 7 over 8 and "every SLA was met", counting the abstention
+as scored.) Total model spend $0.0107, one model throughout
 (`gemini-3.5-flash-lite`), every change approved as `preapproved` (Fully Automated).
-LUCKY is 0 measured over 8, not "not measured": the GC-plus-pool lookalike was the run
+LUCKY is 0 measured over 7, not "not measured": the GC-plus-pool lookalike was the run
 built to tempt it, and the agent took the heap, not the pool.
 
 ### Replay, after re-capturing the changed fixtures
@@ -50,7 +53,7 @@ dropped, not reused. The refreshed set is in `~/crucible-draft/fixtures-46/`, an
 
 | | 4 October (v2) | 1 November |
 |---|---|---|
-| Diagnosis correct (cases with a true cause) | 18 / 25 | **35 / 35** |
+| Diagnosis correct (cases with a true cause) | 18 / 25 | **35 / 35** (31 / 31 in classes A-C, the scope the Benchmarks page counts) |
 | Task grade (all cases) | — | **37 / 38**: A 9/9, B 12/12, C 10/10, D 4/5, E 2/2 |
 | Errors / traps taken / refused fixtures | 0 / 0 / 0 | 0 / 0 / 0 |
 | Cost | $0.0179 | $0.048 |
