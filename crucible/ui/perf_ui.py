@@ -923,14 +923,16 @@ def screen_preflight(ctx: PerfContext, q: dict[str, str]) -> dict[str, Any]:
     if not q.get("run"):
         s.add(s.card("Checks", [
             s.text("Not run in this view. Run checks performs the read-only checks: environment kind, protected "
-                   "paths, metrics, the version endpoint and the deploy declaration. The apply/restart/revert "
+                   "paths, metrics, each GET the run will send (once, as the run sends it; writes only from "
+                   "Test connection or the CLI), the version endpoint and the deploy declaration. The apply/restart/revert "
                    "rehearsal restarts the target, so it is only ever `crucible preflight --apply-probe`."),
             s.row([s.button("Run checks", "request_data", {"run": "1"})]),
         ]))
     else:
         # root: the profile's protected_paths are relative to the repository, and
         # the resolved path is checked as its relative one (trial, 31 October).
-        checks = preflight_checks(profile, sla, str(ctx.path(ctx.sla_path)), probe_timeout_s=3.0, root=ctx.root)
+        checks = preflight_checks(profile, sla, str(ctx.path(ctx.sla_path)), probe_timeout_s=3.0, root=ctx.root,
+                                  locustfile=ctx.path(ctx.locustfile), state_dir=ctx.state)
         rows = [{"check": c.name, "result": "pass" if c.ok else ("FAIL" if c.blocking else "warn"),
                  "detail": c.detail} for c in checks]
         blocked = [c for c in checks if not c.ok and c.blocking]
@@ -2181,22 +2183,45 @@ async def perf_wizard_preview(body: WizardBody, request: Request):
 
 
 @router.post("/v1/perf/wizard/check")
-async def perf_wizard_check(request: Request):
-    """Test connection: preflight's read-only checks, the same list the CLI prints."""
+async def perf_wizard_check(request: Request, body: WizardBody | None = None):
+    """Test connection: preflight's checks, the same list the CLI prints.
+
+    With the wizard's form, the checks run against the SLA as Launch would write
+    it, so the endpoints and requests on screen are the ones probed (Group 49),
+    whether or not they have been saved. Nothing is written. Without a form, the
+    saved slo.yaml.
+    """
+    import tempfile
+
     from ..perf.campaign import Sla
     from ..perf.commands import preflight_checks
     from ..perf.profile import TargetProfile
+    from .wizard import WizardRefused, render
 
     ctx = _context(request)
-    sla_path, profile_path, _ = _wizard_paths(ctx)
+    sla_path, profile_path, locustfile = _wizard_paths(ctx)
     try:
-        sla, profile = Sla.load(sla_path), TargetProfile.load(profile_path)
-    except (FileNotFoundError, ValueError, RuntimeError) as exc:
-        return {"checks": [{"name": "configuration loads", "ok": False, "blocking": True, "detail": str(exc)}]}
-    # root: see screen_preflight.
+        profile = TargetProfile.load(profile_path)
+        if body is None:
+            sla = Sla.load(sla_path)
+        else:
+            on_screen = render(_wizard_form(body, "operator"), sla_path, profile_path, locustfile)["sla"]
+            with tempfile.TemporaryDirectory() as tmp:
+                screen_path = Path(tmp) / sla_path.name
+                screen_path.write_text(on_screen, encoding="utf-8")
+                sla = Sla.load(screen_path)
+    except (FileNotFoundError, ValueError, RuntimeError, WizardRefused, HTTPException) as exc:
+        detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+        return {"checks": [{"name": "configuration loads", "ok": False, "blocking": True, "detail": detail}]}
+    # A write is sent to the target as the run would send it, so it needs the
+    # control token like every other action that changes something. Reads do not.
+    if any(r["method"] != "GET" for s in sla.scenarios for r in s.get("requests") or []):
+        await require_control(request.headers.get("authorization"), request.headers.get("x-crucible-ui"))
+    # root: see screen_preflight. sla_path stays the configured one, so the
+    # protected-path check asks about the file Launch writes, not the copy.
     checks = await asyncio.to_thread(preflight_checks, profile, sla, str(sla_path),
                                      workspace=os.getenv("CRUCIBLE_WORKSPACE", "."), apply_probe=False,
-                                     root=ctx.root)
+                                     root=ctx.root, locustfile=locustfile, state_dir=ctx.state, send_writes=True)
     return {"checks": [{"name": c.name, "ok": c.ok, "blocking": c.blocking, "detail": c.detail} for c in checks]}
 
 

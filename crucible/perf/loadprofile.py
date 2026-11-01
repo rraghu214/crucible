@@ -31,7 +31,7 @@ def locust_tasks(path: str | Path) -> list[dict[str, Any]]:
         tree = ast.parse(Path(path).read_text(encoding="utf-8"))
     except (OSError, SyntaxError):
         return []
-    tasks = []
+    tasks, constants = [], _env_constants(tree)
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef):
             continue
@@ -47,7 +47,7 @@ def locust_tasks(path: str | Path) -> list[dict[str, Any]]:
                     weight = int(deco.args[0].value)
         if not is_task:
             continue
-        endpoint = ""
+        endpoint, request_path = "", None
         for call in ast.walk(node):
             if isinstance(call, ast.Call) and getattr(call.func, "attr", "") == "_get":
                 named = next((k.value for k in call.keywords if k.arg == "name"), None)
@@ -55,10 +55,51 @@ def locust_tasks(path: str | Path) -> list[dict[str, Any]]:
                     endpoint = str(named.value)
                 elif call.args and isinstance(call.args[0], ast.Constant):
                     endpoint = str(call.args[0].value)
+                if call.args:
+                    request_path = _request_path(call.args[0], constants)
                 break
         family = (ast.get_docstring(node) or "").split(".")[0].strip()
-        tasks.append({"tag": tag, "endpoint": endpoint, "weight": weight, "family": family})
+        tasks.append({"tag": tag, "endpoint": endpoint, "weight": weight, "family": family,
+                      "request_path": request_path})
     return tasks
+
+
+def _env_constants(tree: ast.Module) -> dict[str, str]:
+    """Module-level ``NAME = os.getenv("VAR", "default")``, optionally wrapped in
+    ``int(...)``, resolved as the load generator would resolve it on this box."""
+    import os
+
+    out: dict[str, str] = {}
+    for stmt in tree.body:
+        if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name)):
+            continue
+        value = stmt.value
+        if isinstance(value, ast.Call) and getattr(value.func, "id", "") == "int" and value.args:
+            value = value.args[0]
+        if (isinstance(value, ast.Call) and getattr(value.func, "attr", "") == "getenv"
+                and len(value.args) == 2 and all(isinstance(a, ast.Constant) for a in value.args)):
+            out[stmt.targets[0].id] = os.environ.get(str(value.args[0].value), str(value.args[1].value))
+    return out
+
+
+def _request_path(node: ast.expr, constants: dict[str, str]) -> str | None:
+    """The path and query a task requests, or ``None`` when it is computed at run
+    time (``/api/catalog?page={page}``). Never a guess: preflight probes exactly
+    this, so a path we cannot reconstruct is not probed rather than approximated."""
+    if isinstance(node, ast.Constant):
+        return str(node.value)
+    if not isinstance(node, ast.JoinedStr):
+        return None
+    parts = []
+    for value in node.values:
+        if isinstance(value, ast.Constant):
+            parts.append(str(value.value))
+        elif isinstance(value, ast.FormattedValue) and isinstance(value.value, ast.Name) \
+                and value.value.id in constants and value.format_spec is None:
+            parts.append(constants[value.value.id])
+        else:
+            return None
+    return "".join(parts)
 
 
 def _same_endpoint(a: str, b: str) -> bool:

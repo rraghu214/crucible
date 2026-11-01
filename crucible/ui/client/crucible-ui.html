@@ -586,7 +586,7 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
       <div class="form-grid2">
         <div class="form-row"><label class="form-label">Target profile</label><input class="form-input" id="wz-profile" disabled><div class="form-hint">config/profiles/&lt;name&gt;.yaml — the runtime adapter</div></div>
         <div class="form-row"><label class="form-label">Target</label><input class="form-input" id="wz-target" disabled><div class="form-hint">From slo.yaml <code>environment</code>; production is refused</div></div>
-        <div class="form-row"><label class="form-label">Endpoint under test</label><select class="form-select" id="wz-endpoint"></select><div class="form-hint">Only endpoints a Locust task drives can be measured — anything else would measure a blend</div></div>
+        <div class="form-row"><label class="form-label">Endpoint under test</label><select class="form-select" id="wz-endpoint"></select><div class="form-hint">The SLA's primary endpoint, from the built-in load script. Several endpoints at once: the <strong>Mix</strong> column in step 3. Any other endpoint, method or data: <strong>Request Templates</strong> in step 3.</div></div>
         <div class="form-row"><label class="form-label">Environment</label><input class="form-input" id="wz-env" disabled></div>
       </div>
     </div>
@@ -1619,7 +1619,16 @@ function _renderChecks(el,checks){
 }
 async function runWizardChecks(el){
   el.textContent='Checking…';
-  try{const r=await fetch('/v1/perf/wizard/check',{method:'POST'});const d=await r.json();return _renderChecks(el,d.checks||[]);}
+  // The form on screen, so the endpoints and requests checked are the ones shown, saved or not (Group 49).
+  // A write request is sent for real (as the run sends it), so say so first (DESIGN.md 15).
+  const body=wizardBody();const writes=(body.requests||[]).filter(q=>q.method!=='GET');
+  if(writes.length&&!confirm('Test connection will send '+writes.map(q=>q.method+' '+q.endpoint).join(', ')+
+      ' to '+_wzVal('wz-target')+' ('+_wzVal('wz-env')+') once, with the first row of its data. This changes the target. Continue?')){
+    el.textContent='Not run: the write requests were not confirmed.';return false;}
+  try{const r=await fetch('/v1/perf/wizard/check',{method:'POST',headers:getAuthHeaders(),body:JSON.stringify(body)});
+    const d=await r.json();
+    if(!r.ok) return _renderChecks(el,[{name:'form is valid',ok:false,blocking:true,detail:typeof d.detail==='string'?d.detail:JSON.stringify(d.detail)}]);
+    return _renderChecks(el,d.checks||[]);}
   catch(e){el.textContent='Could not run checks: '+e.message;return false;}
 }
 async function testGithubConn(){
