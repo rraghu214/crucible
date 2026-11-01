@@ -62,7 +62,8 @@ Box B `~/crucible-draft/results/replay-46.json` (not kept in docs/bench: it is n
 `perflab_gc_pressure` (Actuator, Datadog) and both `thread_starved` fixtures were
 re-captured, because their old snapshots carried the old GC spec or no thread
 metrics, and the bench correctly refused to grade against them. PromQL could not be
-re-captured (Prometheus is not running on Box A); the stale PromQL snapshot was
+re-captured (corrected 1 November 2026: Prometheus was running; the capture script
+never passed `--promql-url`, so the capture had no address); the stale PromQL snapshot was
 dropped, not reused. The refreshed set is in `~/crucible-draft/fixtures-46/`, and
 `~/crucible/results/` is unchanged.
 

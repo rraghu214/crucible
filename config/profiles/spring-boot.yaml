@@ -411,5 +411,8 @@ redaction_allowlist:
   - spring.jpa.properties.hibernate.jdbc.batch_size
   - spring.jpa.properties.hibernate.default_batch_fetch_size
   - spring.jpa.open-in-view
+  # Added 1 November 2026 (operator): every allowed property must be readable in
+  # the snapshot, or the agent cannot see the value it is reasoning about.
+  - perflab.jvm.heap-max-mb
 
 skill_file: spring-boot.SKILL.md
