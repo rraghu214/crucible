@@ -5074,6 +5074,73 @@ I will use in future." Group 47 is approved.
 
 ---
 
+# GROUP 48 — What Actuator reports is what Crucible reads
+
+*Drafted 1 November 2026 by Claude Code. **REVIEWED AND APPROVED** by the operator, 1 November 2026 ("tests reviewed and approved"). Branch
+`capstone/actuator-heap-tag`. Tests: `TestActuatorTagFilters` (3) and
+`TestATimerNotInSecondsIsDeclaredNotConverted` (4) in
+`tests/test_perf_actuator_provider.py`. Code: `ActuatorMetricsProvider(tags=)`, its
+`unreadable` record, `TargetProfile.actuator_tags`, the `actuator:` block in
+`config/profiles/spring-boot.yaml`, and `unreadable_metrics` set on the snapshot in
+`build_measure` and `build_multi_measure`. Target side: perf-lab PR #3.*
+
+Found 1 November 2026 during the re-capture: snapshots with a GC pause total of
+8,946,000 ms in a 300 s window, and "heap used" larger than the heap.
+
+### 48.1 Heap used is the heap
+
+**What it checks.** Actuator's `jvm.memory.used` is read with `?tag=area:heap`, the
+filter the PromQL and Datadog views already apply (`labels`/`tags: {area: heap}`).
+A meter with no declared filter is read as before.
+
+**Why it exists.** Actuator sums every tag combination unless asked. Unfiltered,
+`heap_used_peak_bytes` was heap plus non-heap: 201.8 MB where the heap held 52.3 MB
+and non-heap 149.7 MB, measured on Box A. On a 128 MB heap that reads as a heap
+permanently over its limit, which is the GC signal SKILL.md tells the agent to look
+for. Assertion 15.5's review note had flagged this for PromQL; Actuator was never
+checked.
+
+### 48.2 A timer not reported in seconds is declared, never converted
+
+**What it checks.** If Actuator reports a timer with any `baseUnit` but `seconds`, the
+provider returns nothing for it and records it in `unreadable` with the reported unit
+and the raw values. The snapshot carries it under `unreadable_metrics`, which the
+prompt shows the model as "collected, unit unknown". Gauges (no `TOTAL_TIME`) are not
+affected.
+
+**Why it exists.** Micrometer keeps PerfLab's two registries (Prometheus, Datadog) in
+an `IdentityHashMap`-backed set, and Spring Boot's `MetricsEndpoint` answers from the
+first that has the meter. The order changes per JVM start. When Datadog came first,
+`/actuator/metrics` reported milliseconds counted over the last 10 s, and Crucible
+read them as cumulative seconds: 5 of 16 captures on 1 November, and the
+`gc_pressure` capture of 31 October. Refused, not converted, because the window is
+wrong as well as the unit (DESIGN.md 4.8). perf-lab PR #3 fixes the cause; this is
+the second lock, so a target with the same setup cannot mislead the agent.
+
+Also fixed in passing: `unreadable_metrics` was never set by the collector, so the
+prompt's section for unreadable metrics was always empty. PromQL and Datadog refusals
+reached only a free-text note, and on the campaign path not even that.
+
+**For review.**
+- Refusing a millisecond timer outright, rather than dividing by 1000, is deliberate:
+  the count and total also cover only the last step, so a converted value would still
+  be wrong. Is a declared gap the behaviour you want, or should Crucible fall back to
+  `/actuator/prometheus` for that meter?
+- The audit script used for the re-run (`audit_metrics.py`, outside the repo) checks
+  Actuator against `/actuator/prometheus` after every deploy. Should that become a
+  `crucible preflight` check?
+
+### 46.7 Every allowed property survives redaction into the snapshot
+
+*Drafted 1 November 2026, **REVIEWED AND APPROVED** by the operator the same day, on branch `capstone/actuator-heap-tag`
+(`test_every_allowed_property_survives_redaction_into_the_snapshot`).*
+
+The heap lever was allowed but missing from `redaction_allowlist`, so the agent could
+change a value it could never see. The fix (adding it) is on `capstone/perf-agent`
+(`1f53973`); this test keeps the two lists in step.
+
+---
+
 # Review decisions — week 1
 
 Raised by Claude Code while implementing, decided by the operator on 10 September 2026.

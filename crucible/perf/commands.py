@@ -376,7 +376,7 @@ def _check_metrics(profile: TargetProfile, sla: Sla, timeout_s: float = 5.0) -> 
     try:
         from .providers import ActuatorMetricsProvider
 
-        provider = ActuatorMetricsProvider(sla.target_base_url, timeout_s=timeout_s)
+        provider = ActuatorMetricsProvider(sla.target_base_url, timeout_s=timeout_s, tags=profile.actuator_tags)
         role = profile.snapshot_metrics.get("pool_acquire", "")
         raw = provider.fetch(role) if role else None
         provider.close()
@@ -825,7 +825,7 @@ def build_measure(
     from .runner import LocustRunner, Scenario, measurement_window
     from .watchdog import for_scenario
 
-    provider_client = ActuatorMetricsProvider(sla.target_base_url)
+    provider_client = ActuatorMetricsProvider(sla.target_base_url, tags=profile.actuator_tags)
     runner = LocustRunner(
         results_dir=Path(results_dir), metrics_provider=provider_client, profile=profile
     )
@@ -852,6 +852,7 @@ def build_measure(
         if state_dir is not None:
             runner.watchdog = for_scenario(scn, sla, rid, state_dir=state_dir)
         load = runner.run(scn, rid)
+        provider_client.unreadable.clear()
         raw = {
             name: provider_client.fetch(name)
             for name in profile.snapshot_metrics.values()
@@ -878,8 +879,11 @@ def build_measure(
                 trace_sampling_rate_pct=traces["trace_sampling_rate_pct"],
                 endpoint_breakdown=bool(breakdown),
                 gauge_sampling=bool(load.gauge_samples),
+                notes=[f"unreadable metric {k}: {v['reason']}" for k, v in provider_client.unreadable.items()],
             ),
         )
+        if provider_client.unreadable:
+            snapshot["unreadable_metrics"] = dict(provider_client.unreadable)
         return load, snapshot
 
     return measure
@@ -923,7 +927,7 @@ def build_multi_measure(
     from .providers import ActuatorMetricsProvider, JaegerTraceProvider, trace_evidence
     from .runner import LocustRunner, Scenario, measurement_window
 
-    actuator = ActuatorMetricsProvider(sla.target_base_url)
+    actuator = ActuatorMetricsProvider(sla.target_base_url, tags=profile.actuator_tags)
     runner = LocustRunner(
         results_dir=Path(results_dir), metrics_provider=actuator, profile=profile
     )
@@ -974,6 +978,8 @@ def build_multi_measure(
         runtime_config: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Build one snapshot from ``provider`` using a completed load's window."""
+        if isinstance(getattr(provider, "unreadable", None), dict):
+            provider.unreadable.clear()
         raw = {name: provider.fetch(name) for name in profile.snapshot_metrics.values()}
         breakdown = (
             provider.endpoint_breakdown() if hasattr(provider, "endpoint_breakdown") else None
@@ -1004,7 +1010,7 @@ def build_multi_measure(
                 f"gauge peaks for {provider_name!r} are post-run point reads, "
                 "not mid-run samples; peaks may understate pressure during the window"
             )
-        return build_snapshot(
+        snapshot = build_snapshot(
             {k: v for k, v in raw.items() if v},
             run_id=rid,
             profile_name=profile.name,
@@ -1018,6 +1024,9 @@ def build_multi_measure(
             redaction_allowlist=profile.redaction_allowlist,
             evidence=ev,
         )
+        if unreadable:
+            snapshot["unreadable_metrics"] = dict(unreadable)
+        return snapshot
 
     def multi_measure(scn: Scenario, rid: str) -> Any:
         """Run load once, then build one snapshot per configured provider."""

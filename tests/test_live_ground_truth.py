@@ -361,3 +361,14 @@ def test_a_live_benchmark_prompt_never_names_its_fault(sla):
     # The targets and the evidence still reach the model.
     assert loaded.endpoint in prompt and str(int(loaded.p99_ms)) in prompt
     assert "pending_peak_connections" in prompt
+
+
+# -- 46.7 ---------------------------------------------------------------------
+# DRAFTED 1 November 2026, approved by the operator the same day.
+
+
+def test_every_allowed_property_survives_redaction_into_the_snapshot():
+    """The agent reasons about the value it may change; a redacted one is invisible.
+    The heap lever was missing from redaction_allowlist until 1 November 2026."""
+    profile = TargetProfile.named("spring-boot")
+    assert set(profile.allowed_properties) <= set(profile.redaction_allowlist)

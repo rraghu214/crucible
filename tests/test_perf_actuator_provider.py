@@ -106,3 +106,72 @@ class TestFetchAllEnv:
         provider = ActuatorMetricsProvider("http://app:8080/", client=client)
         provider.fetch_all_env()
         client.get.assert_called_once_with("http://app:8080/actuator/env")
+
+
+# -- Group 48, drafted 1 November 2026, approved by the operator the same day ---
+
+
+class TestActuatorTagFilters:
+    """heap_used_peak_bytes must be the heap. Actuator sums every tag combination
+    unless asked, so an unfiltered jvm.memory.used read 267 MB on a 128 MB heap."""
+
+    def test_a_declared_tag_is_sent_as_actuators_own_filter(self):
+        client = _mock_client(json_body={"measurements": [{"statistic": "VALUE", "value": 1.0}]})
+        provider = ActuatorMetricsProvider("http://app:8080", client=client,
+                                           tags={"jvm.memory.used": {"area": "heap"}})
+        provider.fetch("jvm.memory.used")
+        client.get.assert_called_once_with("http://app:8080/actuator/metrics/jvm.memory.used",
+                                           params=[("tag", "area:heap")])
+
+    def test_a_meter_with_no_declared_tag_is_read_unfiltered(self):
+        client = _mock_client(json_body={"measurements": []})
+        provider = ActuatorMetricsProvider("http://app:8080", client=client,
+                                           tags={"jvm.memory.used": {"area": "heap"}})
+        provider.fetch("hikaricp.connections.pending")
+        client.get.assert_called_once_with("http://app:8080/actuator/metrics/hikaricp.connections.pending",
+                                           params=[])
+
+    def test_the_spring_boot_profile_filters_the_heap_gauge_to_the_heap(self):
+        from crucible.perf.profile import TargetProfile
+
+        profile = TargetProfile.named("spring-boot")
+        assert profile.actuator_tags["jvm.memory.used"] == {"area": "heap"}
+        # The same filter the PromQL and Datadog views already apply.
+        assert profile.promql["jvm.memory.used"]["labels"] == {"area": "heap"}
+        assert profile.datadog["jvm.memory.used"]["tags"] == {"area": "heap"}
+
+
+class TestATimerNotInSecondsIsDeclaredNotConverted:
+    """Found 1 November 2026: on some starts PerfLab's /actuator/metrics answered from
+    its Datadog registry, in milliseconds over the last 10 s, so timers read 1000x."""
+
+    def _timer(self, unit):
+        return {"baseUnit": unit, "measurements": [
+            {"statistic": "COUNT", "value": 0.0}, {"statistic": "TOTAL_TIME", "value": 0.0},
+            {"statistic": "MAX", "value": 70.27}]}
+
+    def test_a_millisecond_timer_is_refused_and_declared(self):
+        provider = ActuatorMetricsProvider("http://app:8080", client=_mock_client(json_body=self._timer("milliseconds")))
+        assert provider.fetch("http.server.requests") is None
+        declared = provider.unreadable["http.server.requests"]
+        assert declared["reported_unit"] == "milliseconds"
+        assert declared["unit"] == "unknown"
+        assert declared["raw"]["MAX"] == 70.27  # carried, never dropped
+
+    def test_a_seconds_timer_is_read(self):
+        provider = ActuatorMetricsProvider("http://app:8080", client=_mock_client(json_body=self._timer("seconds")))
+        assert provider.fetch("http.server.requests")["MAX"] == 70.27
+        assert provider.unreadable == {}
+
+    def test_a_gauge_in_bytes_is_not_a_timer_and_is_read(self):
+        body = {"baseUnit": "bytes", "measurements": [{"statistic": "VALUE", "value": 5.0}]}
+        provider = ActuatorMetricsProvider("http://app:8080", client=_mock_client(json_body=body))
+        assert provider.fetch("jvm.memory.used") == {"VALUE": 5.0}
+
+    def test_the_declaration_reaches_the_model(self):
+        from crucible.perf.diagnosis import build_prompt
+
+        snapshot = {"unreadable_metrics": {"http.server.requests": {
+            "unit": "unknown", "reported_unit": "milliseconds", "reason": "not seconds"}}}
+        prompt = build_prompt(snapshot, {"p99_ms": 120})
+        assert "http.server.requests" in prompt and "milliseconds" in prompt
