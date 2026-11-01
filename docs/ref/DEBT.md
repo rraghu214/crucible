@@ -187,3 +187,8 @@ work. Fix only when touching the file for another reason.
   opens a PR from the sandbox branch to the base branch, so the owner decides whether the
   change becomes the application's own. The PR is the human gate (principle 4); Crucible
   never merges it, and never writes the base branch (§19.1a). Low priority.
+- **No browser tests.** Group 53's contract tests take each request body from the page's
+  source and send it to the real route, which catches a page and server that disagree. They
+  do not run the page: a click handler that never fires, or a value read from the wrong
+  element, still passes. Operator, 2 November 2026: add browser tests (e.g. Playwright) for
+  the campaign path (launch, approve, pause, resume, abort) after submission. Low priority.
