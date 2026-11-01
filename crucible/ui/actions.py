@@ -183,7 +183,7 @@ def pause_args(*, run_id: str, reason: str = "", clear: bool = False, state_dir:
 
 def resume_args(
     *, run_id: str, state_dir: str = "", profile: str = "", sla: str = "", scenario: str = "",
-    workspace: str = "",
+    workspace: str = "", cost_cap: float | None = None, wall_clock_cap: float | None = None,
 ) -> list[str]:
     args = ["resume", _name(run_id, "run id")]
     _opt(args, "state-dir", state_dir)
@@ -191,6 +191,8 @@ def resume_args(
     _opt(args, "sla", sla)
     _opt(args, "scenario", scenario)
     _opt(args, "workspace", workspace)
+    _opt(args, "cost-cap", cost_cap)
+    _opt(args, "wall-clock-cap", wall_clock_cap)
     return args
 
 

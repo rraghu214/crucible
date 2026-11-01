@@ -177,6 +177,8 @@ class Sla:
     #: The collection's hooks (§10): uploaded .py files per stage, a timeout and
     #: the variables explicitly passed through. Empty means no hooks.
     hooks: dict[str, Any] = field(default_factory=dict)
+    #: The operator's experiment cap (``plan.max_experiments``); None when not saved.
+    max_experiments: int | None = None
     source_path: Path | None = None
 
     @classmethod
@@ -215,6 +217,7 @@ class Sla:
             at_load=dict(objective.get("at_load") or {}),
             scenarios=_parse_scenarios(data.get("scenarios"), resolved),
             hooks=_parse_hooks(data.get("hooks"), resolved),
+            max_experiments=_parse_max_experiments((data.get("plan") or {}).get("max_experiments"), resolved),
             source_path=resolved,
         )
 
@@ -240,6 +243,14 @@ class Sla:
         if error_rate_pct is not None and error_rate_pct > self.error_rate_pct:
             return False
         return True
+
+
+def _parse_max_experiments(raw: Any, source: Path) -> int | None:
+    if raw is None:
+        return None
+    if isinstance(raw, bool) or not isinstance(raw, int) or not 1 <= raw <= 50:
+        raise CampaignRefused(f"{source}: plan.max_experiments must be a whole number from 1 to 50, got {raw!r}")
+    return raw
 
 
 _SCENARIO_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,39}$")
@@ -1070,7 +1081,18 @@ class Campaign:
             self.audit_log = AuditLog(self.state_dir, self.run_id)
 
     def _emit(self, kind: str, **fields: object) -> None:
-        """Fire the on_event callback if one is registered. Never raises."""
+        """Print one log line for the event, then fire the on_event callback. Never raises.
+
+        The line is what the Jobs and Active logs show. Without it the log went
+        silent from "waiting for operator decision" to the end of the run, while
+        the campaign applied, deployed and measured (trial, 2 November 2026,
+        Group 53). Every field is relayed, nested ones as compact JSON (operator:
+        "whatever details are available of the run, just relay it out").
+        """
+        shown = ", ".join(f"{k}={v}" if isinstance(v, (str, int, float, bool)) or v is None
+                          else f"{k}={json.dumps(v, default=str, separators=(',', ':'))}"
+                          for k, v in fields.items())
+        print(f"[campaign] {kind}" + (f": {shown}" if shown else ""), flush=True)
         if self.on_event is None:
             return
         try:
@@ -1266,6 +1288,7 @@ class Campaign:
             if _resume_state.get("pending_manifest"):
                 pending = ExperimentManifest(**_resume_state["pending_manifest"])
         else:
+            self._emit("measuring", window="baseline")
             baseline_load, baseline_snapshot = self.measure(self.scenario, f"{self.run_id}-baseline")
             if baseline_load.aborted:
                 # A watchdog abort during the baseline leaves a partial window
@@ -1894,6 +1917,8 @@ class Campaign:
         proposal = self._with_current_values(proposal)
 
         request = ApprovalRequest.from_proposal(proposal, self.run_id, manifest.experiment)
+        # What the agent proposes and why, in the log as on the approval card.
+        self._emit("proposed", **{k: v for k, v in request.as_dict().items() if k not in ("run_id",)})
         try:
             decision = self.approval_gate.request(request)
         except ApprovalTimeout as timeout:
@@ -1921,7 +1946,8 @@ class Campaign:
                 old_value=_ch.get("previous"),
                 new_value=_ch.get("value"),
             )
-        self._emit("applying", experiment=manifest.experiment, cause=proposal.cause_family)
+        self._emit("applying", experiment=manifest.experiment, cause=proposal.cause_family,
+                   commit=apply_result.commit or "", changes=apply_result.as_dict().get("changes") or [])
         if apply_result.manual_step:
             # A manual restart means the change is written but NOT YET IN FORCE.
             # Carrying on would measure the previous configuration and attribute
@@ -1987,6 +2013,7 @@ class Campaign:
 
         # Re-measure. A fresh run of the ACTUAL proposed value -- never an
         # adjacent one, and never the prediction (section 4.5).
+        self._emit("measuring", experiment=manifest.experiment, commit=manifest.deployed_commit or "")
         after_load, after_snapshot = self.measure(
             self.scenario, f"{self.run_id}-exp{manifest.experiment:02d}"
         )
@@ -2142,6 +2169,8 @@ class Campaign:
         self.deploy_log.record(deploy_result)
         manifest.deploy = deploy_result.as_dict()
         manifest.deployed_commit = deploy_result.commit
+        self._emit("deployed", experiment=manifest.experiment, commit=deploy_result.commit or "",
+                   target_running=deploy_result.observed_commit or "", verified=deploy_result.verified)
         if not deploy_result.verified:
             # Section 19.6. Measuring now would attribute the previous
             # configuration's numbers to this change, and the resulting figure
@@ -2184,6 +2213,8 @@ class Campaign:
                     manifest.verdict = NOT_MEASURED
                     manifest.verdict_reason = metric_detail
                     raise CampaignAborted(f"experiment {manifest.experiment}: {metric_detail}")
+        self._emit("in_force", experiment=manifest.experiment,
+                   property_read_back=getattr(deploy_result, "property_verified", None) is True)
         return True
 
     def _keep_or_revert(

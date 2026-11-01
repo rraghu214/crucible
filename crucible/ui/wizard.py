@@ -65,6 +65,8 @@ class WizardForm:
     scenarios: list[dict[str, Any]] | None = None
     #: The hooks block for slo.yaml; None leaves it as it is.
     hooks: dict[str, Any] | None = None
+    #: plan.max_experiments for slo.yaml; None leaves it as it is.
+    max_experiments: int | None = None
 
 
 def _scalar(value: Any) -> str:
@@ -159,7 +161,23 @@ def current(sla_path: Path, profile_path: Path, locustfile: Path) -> dict[str, A
         "hooks": sla.hooks,
         "endpoints": [{"endpoint": t["endpoint"], "tag": t["tag"], "family": t["family"]}
                       for t in locust_tasks(locustfile) if t["endpoint"]],
+        # The saved scenarios, in the wizard's own row format. Without them the page
+        # showed its built-in rows, so a reload put burst_100u back after burst_50u
+        # had been saved (trial, 2 November 2026, Group 53).
+        "scenarios": [_scenario_row(s) for s in sla.scenarios],
+        "experiments": sla.max_experiments or 5,
+        "requests": next((s["requests"] for s in sla.scenarios if s.get("requests")), []),
+        "data": next((s.get("data") or {} for s in sla.scenarios if s.get("requests")), {}),
     }
+
+
+def _scenario_row(scenario: dict[str, Any]) -> dict[str, Any]:
+    """A declared scenario as the wizard edits it: ramp from the spawn rate, mix as text."""
+    users, rate = int(scenario["users"]), scenario.get("spawn_rate")
+    mix = ", ".join(f"{e}={s['weight']}" + (f"@{s['p99_ms']:g}" if s.get("p99_ms") else "")
+                    for e, s in (scenario.get("mix") or {}).items())
+    return {"name": scenario["name"], "users": users, "duration_s": int(scenario["measure_s"]),
+            "ramp_s": round(users / rate) if rate else 0, "mix": mix}
 
 
 def render(form: WizardForm, sla_path: Path, profile_path: Path, locustfile: Path) -> dict[str, str]:
@@ -188,6 +206,12 @@ def render(form: WizardForm, sla_path: Path, profile_path: Path, locustfile: Pat
         new_sla = set_value(new_sla, ["scenarios"], form.scenarios)
     if form.hooks is not None:
         new_sla = set_value(new_sla, ["hooks"], form.hooks)
+    if form.max_experiments is not None:
+        try:
+            new_sla = set_value(new_sla, ["plan", "max_experiments"], form.max_experiments)
+        except WizardRefused:
+            # A file written before the plan block existed: add it rather than refuse.
+            new_sla = new_sla.rstrip("\n") + f"\n\nplan:\n  max_experiments: {form.max_experiments}\n"
     new_sla = _stamp(new_sla, "objective:", note)
 
     old_profile = profile_path.read_text(encoding="utf-8")
