@@ -189,9 +189,13 @@ class TestAbsenceIsDeclaredNotDrawnAsZero:
         assert "No campaign manifests" in _texts(build_screen(17, ctx))
 
     def test_a_class_with_no_task_is_not_measured_rather_than_zero(self, ctx):
-        """0 / 0 and "not measured" are different statements. There is no class
-        B or E task in config/tasks/, and the screen must not read as a
-        failed class."""
+        """0 / 0 and "not measured" are different statements. The 26 September
+        replay graded no class B or E case, and the screen must not read as a
+        failed class. (Pinned to that replay on 1 November 2026, when the newer
+        replay in docs/bench/ graded every class: DRAFTED, for operator review.)"""
+        from dataclasses import replace
+
+        ctx = replace(ctx, bench_dir="docs/bench/2026-09-26")
         shown = _texts(build_screen(18, ctx))
 
         assert "0 / 0" not in shown

@@ -1395,19 +1395,27 @@ def screen_benchmark(ctx: PerfContext, q: dict[str, str]) -> dict[str, Any]:
         f"Every quadrant needs to know whether the fix worked, which only a live campaign can measure: "
         f"{scored_runs} live run(s) started from a fixture are scored here. Zero in a quadrant is a "
         f"measurement once runs are scored. Replay shows the diagnosis half alone: correct on "
-        f"{_correct_count(replay)}.")]))
+        f"{_correct_count(runs)}.")]))
     claims = [c for c in (_claim(ctx, ctx.replay_results_doc), _claim(ctx, ctx.live_results_doc)) if c]
     s.add(s.card("The claim this supports", [s.text(c) for c in claims] or [
         s.text("No results document yet -- no claim.")]))
     return s.done()
 
 
-def _correct_count(replay: dict[str, Any] | None) -> str:
-    if not replay:
+def _correct_count(runs: list[dict[str, Any]]) -> str:
+    """Named cause against true cause, over every case that has one, in every class.
+
+    The replay's own rule (``ReplayRunner``): a healthy fixture has no true cause and
+    an errored case has no answer, so neither is counted. Operator, 1 November 2026:
+    the page shows the same figure as docs/BENCHMARK_REPLAY_RESULTS.md.
+    """
+    scored = [c for run in runs for c in run.get("cases", [])
+              if c.get("ground_truth_cause_family") and not c.get("error")]
+    if not scored:
         return "not measured"
-    graded = sum(r["graded"] for r in replay["per_case"] if r["task_class"] in ("A", "B", "C"))
-    passed = sum(r["passed"] for r in replay["per_case"] if r["task_class"] in ("A", "B", "C"))
-    return f"{passed} of {graded} cases with a ground-truth cause (classes A-C)"
+    correct = sum(1 for c in scored if c.get("diagnosed_cause_family") == c.get("ground_truth_cause_family"))
+    over = f" over {len(runs)} runs" if len(runs) > 1 else ""
+    return f"{correct} of {len(scored)} cases with a ground-truth cause (all classes{over})"
 
 
 # ---------------------------------------------------------------------------

@@ -228,6 +228,31 @@ def summarise_evidence_gaps(snapshot: dict[str, Any]) -> list[str]:
     return gaps
 
 
+#: SLA fields that label the investigation rather than describe the target.
+#: A benchmark names its SLA, its file, its scenarios and its hooks after the
+#: fault it set up, so any of them can hand the model the answer (found
+#: 1 November 2026: replies quoted "bench-cache-miss-severe").
+_SLA_LABELS = ("name", "source_path", "environment_name", "scenarios", "hooks")
+
+
+def _without_run_ids(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {k: _without_run_ids(v) for k, v in value.items() if k != "run_id"}
+    if isinstance(value, list):
+        return [_without_run_ids(v) for v in value]
+    return value
+
+
+def blind_for_model(snapshot: dict[str, Any], sla: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """What the model may see: the measurements and the targets, never a label.
+
+    A run id or SLA name carries no evidence, and on a benchmark it names the
+    fault (every replay fixture's snapshot carries ``run_id: fixture-<fixture id>``).
+    A diagnosis that can read the answer is not being tested (assertion 46.2).
+    """
+    return _without_run_ids(snapshot), {k: v for k, v in sla.items() if k not in _SLA_LABELS}
+
+
 def build_prompt(
     snapshot: dict[str, Any],
     sla: dict[str, Any],
@@ -259,6 +284,7 @@ def build_prompt(
     measurements. Rendered in a separate section so the model can weigh it
     without confusing it for an operator instruction.
     """
+    snapshot, sla = blind_for_model(snapshot, sla)
     sections = [
         "SLA for this investigation (you cannot change it, and you are not being "
         "asked whether it is reasonable):\n" + json.dumps(sla, indent=2, default=str),
