@@ -4895,6 +4895,17 @@ seeing the result.
   fixture's `bottleneck_config` with the workspace's `application.properties` and
   refuse on a mismatch?
 
+**Operator decision, 1 November 2026: "preferably yes".** Done.
+`fixture_state_mismatches` compares every `bottleneck_config` property with the
+workspace's config file (`endpoint` is skipped: it says where the load goes, not a
+property). `build_campaign` refuses with `CampaignRefused` and names each mismatch,
+before anything runs. A property the file does not set is a mismatch. Tests:
+`TestTheWorkspaceMustBeInTheFixturesState` (5, drafted, for review).
+
+**For review (new).** The check reads the workspace, not the running target. What
+Box A is running is proved by the deploy check (§19.6), which every campaign runs
+anyway.
+
 ### 46.2 The recorded cause never reaches the model
 
 **What it checks.** A manifest whose `ground_truth` holds a marker string, read back
@@ -4922,6 +4933,18 @@ were off, the agent saw nulls and declined, which is principle 2 working.
 - The approved scorer (`score_diagnosis`) still scores that abstention as WRONG in
   `crucible score`, because its rule is "named cause != true cause and not
   verified". Should the scorer gain an ABSTAINED outcome, as the page now shows?
+
+**Operator decision, 1 November 2026: yes.** `score_diagnosis` returns `ABSTAINED`
+when an experiment names no cause and changes nothing; it is not one of the four
+quadrants. The Benchmarks page now takes it from the scorer instead of its own
+check. Naming no cause but changing something is still graded (WRONG if it did not
+verify). Without a ground truth it stays UNSCORABLE. Tests: two added to
+`TestQuadrantsAreScoredFromTheRecord` (drafted, for review).
+
+Tomcat thread metrics are now on permanently (operator, same day):
+`server.tomcat.mbeanregistry.enabled=true` on perf-lab branch `tomcat-thread-metrics`
+(e1aefdc, PR to `main` for the operator to merge) and on `perftest_sandbox`
+(00c3d78, deployed and verified on Box A).
 
 ### 46.4 The heap is a real lever for gc_pressure
 
@@ -4953,6 +4976,9 @@ matches the profile's protected paths (`config/bench/**`, added).
 - The targets were chosen by Claude Code from the fixtures' captured broken-state
   p99: /api/db 120 ms (pool and threads), /api/orders 400 ms, /api/catalog 20 ms,
   /api/churn 300 ms. Are those the goals you would have set?
+
+**REVIEWED AND APPROVED** by the operator, 1 November 2026: "yes, would have been the
+goals I would have set."
 
 ---
 
@@ -4987,6 +5013,9 @@ never had. It is representational, and now it says honestly what it represents.
 **For review.**
 - `perf-lab-py` is a name Claude Code chose for the Python sample. Is it the name
   you use?
+
+**REVIEWED AND APPROVED** by the operator, 1 November 2026: "yes, that can be the name
+I will use in future." Group 47 is approved.
 
 ---
 

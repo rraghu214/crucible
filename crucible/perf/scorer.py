@@ -59,6 +59,10 @@ WRONG = "WRONG"
 #: No ground truth was supplied. Distinct from the four real quadrants so a
 #: caller cannot mistake "we didn't check" for "we checked and it was right".
 UNSCORABLE = "UNSCORABLE"
+#: The agent named no cause and changed nothing. Not a quadrant: declining to act
+#: on evidence it could not see is principle 2 working, not a wrong diagnosis
+#: (operator decision, 1 November 2026, review of 46.3).
+ABSTAINED = "ABSTAINED"
 
 
 class ScorerError(RuntimeError):
@@ -197,6 +201,8 @@ def score_diagnosis(experiment: dict[str, Any], ground_truth_cause_family: str |
     """
     if ground_truth_cause_family is None:
         return UNSCORABLE
+    if not experiment.get("cause_family") and not (experiment.get("proposal") or {}).get("changes"):
+        return ABSTAINED
     correct_diagnosis = experiment.get("cause_family") == ground_truth_cause_family
     verified = experiment.get("verdict") == IMPROVED and bool(experiment.get("kept"))
     if correct_diagnosis and verified:

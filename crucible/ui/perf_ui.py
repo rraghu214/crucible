@@ -1365,7 +1365,7 @@ def screen_benchmark(ctx: PerfContext, q: dict[str, str]) -> dict[str, Any]:
 
     # Live runs started from a fixture carry their true cause (crucible run
     # --fixture); each of their experiments is scored by the scorer's own rule.
-    from ..perf.scorer import UNSCORABLE, manifest_ground_truth, score_diagnosis
+    from ..perf.scorer import ABSTAINED, UNSCORABLE, manifest_ground_truth, score_diagnosis
 
     quadrant: dict[str, list[str]] = {"CORRECT": [], "LUCKY": [], "UNLUCKY": [], "WRONG": []}
     scored_runs = 0
@@ -1378,13 +1378,11 @@ def screen_benchmark(ctx: PerfContext, q: dict[str, str]) -> dict[str, Any]:
         for e in c.get("experiments") or []:
             if e.get("refused_by_guard"):
                 continue
-            # Declining to act named no cause and changed nothing: that is not a
-            # wrong diagnosis (principle 2), so it is counted apart, never as WRONG.
-            if not e.get("cause_family") and not (e.get("proposal") or {}).get("changes"):
-                abstained.append(f"{c.get('run_id')} exp {e.get('experiment')}")
-                continue
             q = score_diagnosis(e, truth)
-            if q != UNSCORABLE:
+            # Declining to act is not a wrong diagnosis (principle 2): counted apart.
+            if q == ABSTAINED:
+                abstained.append(f"{c.get('run_id')} exp {e.get('experiment')}")
+            elif q != UNSCORABLE:
                 quadrant[q].append(f"{c.get('run_id')} exp {e.get('experiment')}")
     if scored_runs:
         panels = [s.text(f"{k}: {len(v)}" + (f" -- {', '.join(v)}" if v else "")) for k, v in quadrant.items()]

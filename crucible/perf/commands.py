@@ -1189,6 +1189,30 @@ def fixture_ground_truth(fixture_id: str, fixture_dir: str | Path = "config/fixt
             "recorded": "from the fixture file, before the run started"}
 
 
+def fixture_state_mismatches(fixture_id: str, config_path: str | Path,
+                             fixture_dir: str | Path = "config/fixtures") -> list[str]:
+    """Where the workspace's config file differs from the fixture's ``bottleneck_config``.
+
+    Operator decision, 1 November 2026 (review of 46.1): ``--fixture`` says which
+    fault the target was put in, and the run records that fault as its true cause.
+    If the workspace is not actually in that state, the recorded cause is a claim
+    nobody measured, so the run refuses instead (principle 1). Empty means it matches.
+    """
+    from .applicator import _format_value, read_property  # noqa: PLC0415
+    from .fixtures import load_specs  # noqa: PLC0415
+
+    spec = {s.id: s for s in load_specs(Path(fixture_dir))}[fixture_id]
+    text = Path(config_path).read_text(encoding="utf-8")
+    mismatches = []
+    for prop, wanted in spec.bottleneck_config.items():
+        if prop == "endpoint":  # where the load goes, not a property in the file
+            continue
+        found = read_property(text, prop)
+        if found != _format_value(wanted):
+            mismatches.append(f"{prop}: fixture {_format_value(wanted)}, workspace {found or 'not set'}")
+    return mismatches
+
+
 def build_campaign(
     *,
     profile_name: str,
@@ -1237,6 +1261,13 @@ def build_campaign(
     # does not matter to it, and it needs no deploy pipeline at all.
     if profile.deploy.automated and workspace and not advisory:
         _check_workspace_sync(Path(workspace), profile)
+
+    ground_truth = fixture_ground_truth(fixture) if fixture else {}
+    if fixture and workspace and profile.config_file:
+        mismatches = fixture_state_mismatches(fixture, Path(workspace) / profile.config_file)
+        if mismatches:
+            raise CampaignRefused(f"the workspace is not in fixture {fixture!r}'s state, so its true cause "
+                                  f"would be recorded unmeasured: {'; '.join(mismatches)}")
 
     scenario = Scenario(
         name=scenario_name,
@@ -1327,7 +1358,7 @@ def build_campaign(
         # scripted test campaign never sets this and skips the wait entirely.
         warm_up_gateway=gateway_client.warm_up,
         stakeholder_request=stakeholder_request,
-        ground_truth=fixture_ground_truth(fixture) if fixture else {},
+        ground_truth=ground_truth,
         guarded_files=tuple(p for p in (sla.source_path, profile.source_path) if p),
         # §10 hooks: uploaded .py files in <state>/hooks, run in the target's
         # workspace with an allowlisted environment (Group 41).

@@ -26,7 +26,7 @@ import pytest
 
 from crucible.perf.applicator import path_is_protected
 from crucible.perf.campaign import CampaignResult
-from crucible.perf.commands import fixture_ground_truth
+from crucible.perf.commands import fixture_ground_truth, fixture_state_mismatches
 from crucible.perf.profile import TargetProfile
 
 REPO = Path(__file__).resolve().parents[1]
@@ -77,6 +77,51 @@ class TestTheRunRecordsItsTrueCause:
         assert args.fixture == "perflab_pool_starved"
 
 
+class TestTheWorkspaceMustBeInTheFixturesState:
+    """Operator, 1 November 2026 (46.1): a recorded true cause the target was never
+    put in is a claim nobody measured, so the run refuses on a mismatch."""
+
+    FIXTURES = REPO / "config" / "fixtures"
+
+    def test_a_matching_workspace_passes(self, tmp_path):
+        props = tmp_path / "application.properties"
+        props.write_text(f"{HEAP}=128\n{POOL}=4\nserver.port=8080\n", encoding="utf-8")
+        assert fixture_state_mismatches("perflab_gc_and_pool", props, self.FIXTURES) == []
+
+    def test_a_workspace_in_another_state_is_named(self, tmp_path):
+        """The pool fixture, but the workspace still has the healthy pool of 20."""
+        props = tmp_path / "application.properties"
+        props.write_text(f"{POOL}=20\n", encoding="utf-8")
+        (mismatch,) = fixture_state_mismatches("perflab_pool_starved", props, self.FIXTURES)
+        assert mismatch == f"{POOL}: fixture 2, workspace 20"
+
+    def test_a_property_the_file_does_not_set_is_a_mismatch(self, tmp_path):
+        props = tmp_path / "application.properties"
+        props.write_text(f"{POOL}=4\n", encoding="utf-8")
+        assert fixture_state_mismatches("perflab_gc_and_pool", props, self.FIXTURES) == [
+            f"{HEAP}: fixture 128, workspace not set"]
+
+    def test_booleans_compare_the_way_the_file_writes_them(self, tmp_path):
+        props = tmp_path / "application.properties"
+        props.write_text("perflab.cache.enabled=false\n", encoding="utf-8")
+        assert fixture_state_mismatches("perflab_cache_miss_severe", props, self.FIXTURES) == []
+
+    def test_the_campaign_refuses_before_anything_runs(self, tmp_path, monkeypatch):
+        from crucible.perf.commands import CampaignRefused, build_campaign
+
+        workspace = tmp_path / "ws"
+        config = workspace / TargetProfile.named("spring-boot").config_file
+        config.parent.mkdir(parents=True)
+        config.write_text(f"{POOL}=20\n", encoding="utf-8")
+        monkeypatch.chdir(REPO)
+        with pytest.raises(CampaignRefused, match="not in fixture 'perflab_pool_starved'"):
+            build_campaign(profile_name="spring-boot", sla_path="config/slo.yaml", scenario_name="s",
+                           users=1, warmup_s=0, measure_s=1, max_experiments=1, run_id="r",
+                           state_dir=tmp_path / "state", workspace=str(workspace), approve_mode="file",
+                           approval_timeout_s=1, model="m", provider="p", advisory=True,
+                           fixture="perflab_pool_starved")
+
+
 # -- 46.2 ---------------------------------------------------------------------
 
 
@@ -117,6 +162,23 @@ class TestQuadrantsAreScoredFromTheRecord:
         (tmp_path / "r.json").write_text(json.dumps(_manifest(
             "r", named="connection_pool_exhaustion", verdict="IMPROVED", kept=True, truth=None)), encoding="utf-8")
         assert score_journal(tmp_path).scores[0].diagnosis == ("UNSCORABLE",)
+
+    def test_an_abstention_is_its_own_outcome_in_the_scorer(self, tmp_path):
+        """Operator, 1 November 2026 (46.3): `crucible score` says ABSTAINED, never WRONG."""
+        from crucible.perf.scorer import score_journal
+
+        run = _manifest("t", named="", verdict="NOT_MEASURED", kept=False, truth="thread_pool_saturation")
+        run["experiments"][0]["proposal"] = {"changes": []}
+        (tmp_path / "t.json").write_text(json.dumps(run), encoding="utf-8")
+        assert score_journal(tmp_path).scores[0].diagnosis == ("ABSTAINED",)
+
+    def test_naming_no_cause_but_changing_something_is_not_an_abstention(self, tmp_path):
+        """A change was made, so it is graded: no cause named is not the true cause."""
+        from crucible.perf.scorer import score_journal
+
+        run = _manifest("t", named="", verdict="WORSE", kept=False, truth="thread_pool_saturation")
+        (tmp_path / "t.json").write_text(json.dumps(run), encoding="utf-8")
+        assert score_journal(tmp_path).scores[0].diagnosis == ("WRONG",)
 
     def test_the_benchmarks_page_counts_them(self, tmp_path):
         from crucible.ui.perf_ui import PerfContext, build_screen
