@@ -1775,7 +1775,14 @@ def _endpoint_text(per_endpoint: dict[str, Any]) -> str:
 def _campaign_detail(run: dict[str, Any]) -> list[str]:
     baseline = run.get("baseline") or {}
     load = baseline.get("load") or {}
-    lines = [f"Scenario {run.get('scenario')}; stopped: {run.get('stopped_reason') or '--'}",
+    sla = run.get("sla") or {}
+    # The run's own SLA, from its manifest. Without it the model judged a past run
+    # against today's slo.yaml: run2-05 "met the SLA of <= 120 ms at 230 ms", when
+    # its SLA was 300 ms (trial, 1 November 2026, Group 50).
+    lines = [f"This run's own SLA (judge this run against it, never the current configuration): "
+             f"'{sla.get('name', '?')}', {sla.get('endpoint', '?')} p99 <= {sla.get('p99_ms', '?')} ms, "
+             f"errors <= {sla.get('error_rate_pct', '?')}%",
+             f"Scenario {run.get('scenario')}; stopped: {run.get('stopped_reason') or '--'}",
              f"Baseline (measured): p99 {load.get('p99_ms')} ms, errors {load.get('error_rate_pct')}%, "
              f"SLA met: {baseline.get('sla_met')}"]
     evidence = json.dumps(baseline.get("snapshot") or {}, default=str)
@@ -1823,7 +1830,10 @@ def _campaign_detail(run: dict[str, Any]) -> list[str]:
                      f"{_change_text(proposal.get('changes'))}; predicted p99 {experiment.get('predicted_p99_ms')} ms; "
                      f"MEASURED p99 {before} -> {after} ms; verdict {experiment.get('verdict')} "
                      f"({experiment.get('verdict_reason') or '--'}); "
-                     f"{'kept' if experiment.get('kept') else 'reverted'}")
+                     f"{'kept' if experiment.get('kept') else 'reverted'}; "
+                     # As the campaign recorded it when it measured; never recomputed here (Group 50).
+                     f"SLA met (recorded): before {experiment.get('sla_met_before')}, "
+                     f"after {experiment.get('sla_met_after')}")
         lines.append(f"     reasoning: {proposal.get('reasoning')}")
         if experiment.get("per_endpoint"):
             lines.append(f"     per endpoint: {_endpoint_text(experiment['per_endpoint'])}")
@@ -1905,7 +1915,10 @@ def _safe_reply(text: str) -> str:
     document text, so a document could otherwise inject script into the
     operator's browser, where the control token lives. Allowlist, never blocklist.
     """
-    escaped = html.escape(text, quote=False)
+    # Unescape first: the model, told to answer in HTML, writes "<=" as "&lt;=",
+    # and escaping that again showed "&lt;=" to the operator (Group 50). Safe,
+    # because everything is escaped again on the next line.
+    escaped = html.escape(html.unescape(text), quote=False)
     return _REPLY_BR.sub("<br>", _REPLY_TAGS.sub(r"<\1\2>", escaped))
 
 
@@ -1917,7 +1930,8 @@ def _chat_facts(ctx: PerfContext) -> str:
     else:
         load = sla.at_load or {}
         lines += [
-            f"- SLA '{sla.name}' ({ctx.sla_path}): {sla.endpoint} p99 <= {sla.p99_ms:g} ms, "
+            f"- Current SLA, for new runs only; each past run carries its own (Runs block) "
+            f"'{sla.name}' ({ctx.sla_path}): {sla.endpoint} p99 <= {sla.p99_ms:g} ms, "
             f"errors <= {sla.error_rate_pct:g}%, at {load.get('users', '?')} users",
             f"- Environment: {sla.environment_name} ({sla.environment_kind}), target {sla.target_base_url}",
             f"- Noise floor: {sla.noise_p99_spread_pct:g}% p99 spread; smaller changes are inconclusive",
