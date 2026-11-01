@@ -266,7 +266,7 @@ def cmd_preflight(
     checks.extend(
         preflight_checks(
             profile, sla, sla_path,
-            workspace=workspace, apply_probe=apply_probe, probe_timeout_s=probe_timeout_s,
+            workspace=workspace, apply_probe=apply_probe, probe_timeout_s=probe_timeout_s, send_writes=True,
         )
     )
 
@@ -306,12 +306,22 @@ def preflight_checks(
     apply_probe: bool = False,
     probe_timeout_s: float = 5.0,
     root: str | Path | None = None,
+    locustfile: str | Path = "locust/locustfile.py",
+    state_dir: Path | None = None,
+    send_writes: bool = False,
 ) -> list[PreflightCheck]:
     """Every check after the profile and SLA have loaded, as data.
+
+    ``send_writes`` lets the endpoint probe send POST/PUT/PATCH/DELETE requests.
+    Only callers the operator invoked deliberately pass it: the CLI and the
+    token-checked Test connection, never a screen anyone can open.
 
     ``root`` is the repository the profile's protected paths are relative to
     (default: the current directory). An absolute SLA path inside it is checked
     as its relative path; one outside it cannot match and is reported as such.
+
+    ``locustfile`` and ``state_dir`` (default: ``CRUCIBLE_STATE_DIR``) are where the
+    endpoint probe finds the requests the run will send and their data files.
 
     Split out of :func:`cmd_preflight` so the Preflight screen shows the same
     checks the CLI prints rather than a second list that could drift from it.
@@ -352,6 +362,9 @@ def preflight_checks(
     # preflight from a machine with no route to the target, and that is worth
     # reporting rather than treating as a broken configuration.
     checks.append(_check_metrics(profile, sla, probe_timeout_s))
+    checks.extend(_check_endpoints_answer(sla, probe_timeout_s, locustfile=locustfile,
+                                          state_dir=state_dir if state_dir is not None else _state_dir(),
+                                          send_writes=send_writes))
     checks.append(_check_version_endpoint(profile, probe_timeout_s))
     checks.append(_check_deploy_config(profile))
 
@@ -390,6 +403,149 @@ def _check_metrics(profile: TargetProfile, sla: Sla, timeout_s: float = 5.0) -> 
         f"no data for {role!r} at {sla.target_base_url} (target down, or no route from here)",
         blocking=False,
     )
+
+
+def _endpoints_to_probe(sla: Sla, locustfile: str | Path, state_dir: Path) -> list[dict[str, str]]:
+    """Every request the load will send, once each, as the run sends it.
+
+    The SLA's endpoint and each mix endpoint are built-in Locust tasks: their path
+    and query are read from the locustfile. Each templated request is rendered with
+    the first row of its data, the way the load generator renders it, and keeps its
+    own method and body. A request that cannot be reproduced carries ``skip``.
+    """
+    import urllib.parse
+
+    from .campaign import _TEMPLATE_VAR
+    from .loaddata import LoadDataError
+    from .loadprofile import _same_endpoint, locust_tasks
+
+    tasks = locust_tasks(locustfile)
+    out: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(probe: dict[str, str]) -> None:
+        key = (probe["method"], probe.get("path") or probe["endpoint"])
+        if key not in seen:
+            seen.add(key)
+            out.append(probe)
+
+    def builtin(endpoint: str) -> dict[str, str]:
+        probe = {"endpoint": endpoint, "method": "GET"}
+        task = next((t for t in tasks if _same_endpoint(t["endpoint"], endpoint)), None)
+        if task is None:
+            return {**probe, "skip": "no Locust task drives it"}
+        if task.get("request_path") is None:
+            return {**probe, "skip": "the load script computes its path at run time, so the exact request "
+                                     "the run sends cannot be reproduced"}
+        return {**probe, "path": task["request_path"], "body": ""}
+
+    if sla.endpoint:
+        add(builtin(sla.endpoint))
+    for scenario in sla.scenarios:
+        for endpoint in scenario.get("mix") or {}:
+            add(builtin(endpoint))
+        requests = scenario.get("requests") or []
+        if not requests:
+            continue
+        try:
+            values, problem = _first_row_values(state_dir, scenario.get("data") or {}), ""
+        except LoadDataError as exc:
+            values, problem = {}, str(exc)
+        for request in requests:
+            probe = {"endpoint": request["endpoint"], "method": request["method"]}
+            if problem:
+                add({**probe, "skip": f"its data cannot be read: {problem}"})
+                continue
+            query = _TEMPLATE_VAR.sub(lambda m: urllib.parse.quote(values.get(m.group(1), ""), safe=""),
+                                      request["query"])
+            body = _TEMPLATE_VAR.sub(lambda m: values.get(m.group(1), ""), request["body"])
+            add({**probe, "path": request["endpoint"] + ("?" + query if query else ""), "body": body})
+    return out
+
+
+def _first_row_values(state_dir: Path, data: dict[str, dict[str, str]]) -> dict[str, str]:
+    """Each ``${var}`` -> its column's value in the first row of its data file."""
+    from .loaddata import LoadDataError, _rows, resolve
+
+    values = {}
+    for var, spec in resolve(state_dir, data).items():
+        path = Path(spec["file"])
+        rows = _rows(path.name, path.read_text(encoding="utf-8"))
+        if not rows:
+            raise LoadDataError(f"{path.name} has no rows")
+        values[var] = str(rows[0].get(spec["column"], ""))
+    return values
+
+
+def _check_endpoints_answer(
+    sla: Sla, timeout_s: float = 5.0, *, locustfile: str | Path = "locust/locustfile.py",
+    state_dir: Path | None = None, send_writes: bool = False,
+) -> list[PreflightCheck]:
+    """Does each request the load will send actually get an answer? Group 49.
+
+    "load profile drives the SLA endpoint" proves only that the load script names
+    the path. A wrong path, a bad query or missing auth would make the whole run
+    measure errors, so a 4xx or an unfollowed 3xx blocks. No answer only warns,
+    like "metrics reachable": preflight may run from a machine with no route. A
+    5xx only warns: a broken endpoint is sometimes the very thing being
+    investigated.
+
+    Each request is sent once, exactly as the run sends it: same path and query,
+    same method and body (operator decision, 1 November 2026). A bare-path probe
+    could answer 400 where the real request succeeds. A write is sent too, so it
+    changes the target once, here, never inside a measurement. A request that
+    cannot be reproduced is reported unprobed, never approximated.
+    """
+    import urllib.error
+    import urllib.request
+
+    probes = _endpoints_to_probe(sla, locustfile, state_dir if state_dir is not None else _state_dir())
+    if not probes:
+        return []
+    if not sla.target_base_url:
+        return [PreflightCheck("SLA endpoint answers", False, "SLA declares no target_base_url", blocking=False)]
+    checks: list[PreflightCheck] = []
+    for probe in probes:
+        method, name = probe["method"], f"{probe['method']} {probe['endpoint']} answers"
+        if "skip" in probe:
+            checks.append(PreflightCheck(name, False, f"not probed: {probe['skip']}", blocking=False))
+            continue
+        if method != "GET" and not send_writes:
+            checks.append(PreflightCheck(
+                name, False, "not probed here: a write is sent only by Test connection or `crucible preflight`",
+                blocking=False))
+            continue
+        url = sla.target_base_url.rstrip("/") + probe["path"]
+        body = probe["body"]
+        # Same Content-Type rule as the load script's templated requests.
+        headers = {"Content-Type": "application/json"} if body.lstrip()[:1] in ("{", "[") else {}
+        req = urllib.request.Request(url, data=body.encode("utf-8") if body else None, headers=headers,
+                                     method=method)
+        started = time.perf_counter()
+        try:
+            with urllib.request.urlopen(req, timeout=timeout_s) as response:
+                status = response.status
+        except urllib.error.HTTPError as exc:
+            status = exc.code
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            # Warns, like "metrics reachable": preflight may run from a machine
+            # with no route to the target (operator, 1 November 2026).
+            checks.append(PreflightCheck(
+                name, False, f"no answer from {url} ({exc}); from the load box, the run would measure "
+                "connection errors", blocking=False))
+            continue
+        took = f"{method} {probe['path']}: HTTP {status} in {(time.perf_counter() - started) * 1000:.0f} ms"
+        if 200 <= status < 300:
+            checks.append(PreflightCheck(name, True, took))
+        elif status >= 500:
+            checks.append(PreflightCheck(
+                name, False, f"{took}; the endpoint is failing, which may be what you are investigating",
+                blocking=False))
+        else:
+            checks.append(PreflightCheck(
+                name, False, f"{took} from {sla.target_base_url}; wrong path, query or auth, the run would "
+                "measure errors"))
+    return checks
 
 
 def _check_version_endpoint(profile: TargetProfile, timeout_s: float = 5.0) -> PreflightCheck:

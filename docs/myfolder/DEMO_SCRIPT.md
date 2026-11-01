@@ -490,6 +490,20 @@ Scoring grid: "Six dimensions. The LUCKY quadrant matters most: wrong diagnosis,
 fix worked anyway. Counting that as success fails the next look-alike fixture.
 Scoring diagnosis separately from outcome is what catches it."
 
+**The numbers (run 2, 1 November 2026, the benchmark of record; gemini-3.5-flash-lite):**
+"Live: six Fully Automated campaigns, one per planted fault, eight experiments.
+Seven CORRECT, one LUCKY, no UNLUCKY, no WRONG, and every SLA met, for just over a
+cent ($0.0115). The LUCKY one is real: on the N+1 query fault the agent first
+raised the pool. That made it 11% faster, so on outcome alone it counts as a
+success. The scorer marks it LUCKY because the pool was not the cause. The second
+experiment fixed the query and was scored CORRECT."
+
+"Replay: 23 clean snapshots, 40 cases. Diagnosis correct on 31 of 37 cases that
+have a true cause, and 32 of 40 on the task grade, for five cents ($0.054)."
+
+Point at the task classes if asked: A 8/9, B 12/14, C 9/10, D 2/5, E 1/2. D and E
+are the weak classes; say so rather than skipping them.
+
 **On evaluation:**
 "Every test assertion is drafted with its reasoning and reviewed by me before
 it's committed, more than 40 groups in `docs/CRUCIBLE_TEST_ASSERTIONS.md`. The

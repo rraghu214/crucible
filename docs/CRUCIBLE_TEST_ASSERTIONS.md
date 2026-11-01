@@ -5141,6 +5141,86 @@ change a value it could never see. The fix (adding it) is on `capstone/perf-agen
 
 ---
 
+# GROUP 49 — Preflight sends each request the run will send, and reads the answer
+
+*Drafted 1 November 2026 by Claude Code, redrafted the same day after the operator's
+first review. **REVIEWED AND APPROVED** by the operator, 1 November 2026 ("Group 49
+Approved"). The three review questions below were not answered separately; the drafted
+behaviour stands. Branch
+`capstone/preflight-endpoint-answers`. Tests: `tests/test_preflight_endpoint.py`
+(`TestTheAnswerDecidesTheResult` 6, `TestTheProbeIsTheRequestTheRunSends` 8,
+`test_preflight_checks_includes_it`, `TestTestConnectionChecksWhatIsOnScreen` 4).
+Code: `_endpoints_to_probe`, `_first_row_values` and `_check_endpoints_answer` in
+`crucible/perf/commands.py`; `request_path` on each task from `locust_tasks`
+(`crucible/perf/loadprofile.py`); `perf_wizard_check` takes the wizard form
+(`crucible/ui/perf_ui.py`); `runWizardChecks` sends it (`crucible-ui.html`).*
+
+Asked by the operator, 1 November 2026: can Test connection check that
+`http://10.0.0.79:8080/api/db` answers? Nothing did. "load profile drives the SLA
+endpoint" proves only that the load script names the path.
+
+Operator decisions on the first draft (1 November 2026): no answer warns (keeps
+`test_an_unreachable_target_warns_rather_than_failing`); 3xx blocks; the probe must be
+the real request, writes included, because a bare-path GET can answer 400 where the run
+succeeds; Test connection checks what is on screen; the control token is needed only
+when the session is not logged in.
+
+### 49.1 The answer decides the result
+
+**What it checks.** 2xx passes, with the request, status and time. 4xx (404, 401) and a
+3xx blocks. 5xx warns. No connection or a timeout warns and names the URL. A missing
+`target_base_url` warns.
+
+**Why it exists.** A wrong path, query or auth makes the whole run measure errors, found
+only after a full baseline. A 5xx is not blocking because a broken endpoint is sometimes
+the very thing being investigated. No connection only warns: preflight may run from a
+machine with no route to the target, such as the laptop.
+
+### 49.2 The probe is the request the run sends, once
+
+**What it checks.**
+- A built-in task is probed with the path and query the locustfile sends
+  (`/api/orders?size=50`, `/api/payload?rows=5000`). The query follows the same
+  `PERFLAB_*` environment variables the load generator reads.
+- A path the load script computes at run time (`/api/catalog?page={page}`) is reported
+  "not probed", never approximated.
+- A templated request is rendered with the first row of its data, query URL-encoded and
+  body as written, and sent with its own method. A JSON body gets
+  `Content-Type: application/json`, the same rule as the load script.
+- Data that cannot be read is reported "not probed", with the reason.
+- A write (POST/PUT/PATCH/DELETE) is sent only by callers the operator invoked
+  deliberately: `crucible preflight` and Test connection. The Preflight screen, a GET
+  page, reports it "not probed here".
+- Each (method, path) is sent once across all scenarios.
+
+**Why it exists.** Probing anything but the real request misleads in both directions.
+A write changes the target, so it happens once, before any measurement, and only on an
+explicit action.
+
+### 49.3 Test connection checks what is on screen
+
+**What it checks.** With the wizard's form, the route renders the SLA exactly as Launch
+would write it, loads it from a temporary copy and checks that. `slo.yaml` is not
+written. Without a form, the saved SLA is checked. If the SLA contains a write, the
+route needs the control token, or, on a dashboard request, a logged-in session
+(assertion 44.7). Before sending a write, the dashboard asks the operator to confirm,
+naming the target and the environment (DESIGN.md §15).
+
+**Why it exists.** It used to check the saved file only, so an endpoint or request
+edited on screen but not saved was never what got tested.
+
+**For review.**
+- 49.2: `/api/catalog` (the cache_miss endpoint) is the one built-in task left
+  unprobed, because its page comes from the clock. Accept the warning, or probe a fixed
+  page (`?page=0`), which is one of the five pages the run sends?
+- 49.2: a write probe changes the target before the baseline, for example one inserted
+  row. Is once per Test connection acceptable, given that a `before_each` hook is where a
+  reset belongs (§10)?
+- 49.3: the protected-path check still asks about the configured `slo.yaml`, not the
+  temporary copy. Is that the right file to ask about?
+
+---
+
 # Review decisions — week 1
 
 Raised by Claude Code while implementing, decided by the operator on 10 September 2026.
