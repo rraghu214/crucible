@@ -12,6 +12,8 @@
 
 name: spring-boot
 runtime: jvm
+# The service, for people. Display only: grants nothing.
+service: perf-lab
 
 # Declared by the profile, never by a global constant. `gc` is a JVM/CLR concept;
 # CPython's analogue is `gil_contention` and Node's is `event_loop_block`. A
@@ -94,6 +96,29 @@ allowed_properties:
     type: int
     min: 100
     max: 30000
+  # The JVM's maximum heap, in MB. Operator decision, 1 November 2026: gc_pressure
+  # needed a real lever; until then the agent could name GC and do nothing about
+  # it. Heap size is a JVM flag, read before Spring starts, so it cannot be a
+  # Spring property -- but it lives in application.properties anyway, because
+  # that is the one file the agent edits and the one file each experiment
+  # commits. Box A's deploy hook (scripts/box_a_post_receive.sh) reads this line
+  # and passes -Xmx<n>m to java; Spring ignores the key. Bounds: Box A has 5.9 GB
+  # and the JVM's own default is ~1.5 GB; below 128 MB PerfLab does not start.
+  # Proof it is in force: the commit check (the jar carries the sha of the
+  # commit that set it) plus in_force below. Reading the key back from
+  # /actuator/env proves only that the file landed, so the campaign reads the
+  # heap ceiling the JVM reports and measures nothing until it matches (operator
+  # decision, 1 November 2026). jvm.memory.max for area:heap reads ~3% under
+  # -Xmx on Box A's Serial GC, because one survivor space is not counted.
+  perflab.jvm.heap-max-mb:
+    type: int
+    min: 128
+    max: 1536
+    in_force:
+      metric: jvm.memory.max
+      tag: "area:heap"
+      scale: 1048576
+      tolerance_pct: 5
 
 # The first half of the SLA protection. The second half is the Policy memory kind,
 # which the agent has no write permission for. Both exist because a file guard can
@@ -101,6 +126,7 @@ allowed_properties:
 # be weakened independently of the other (DESIGN.md section 4.4).
 protected_paths:
   - config/slo.yaml
+  - config/bench/**
   - config/profiles/**
   - locust/**
   - tests/**

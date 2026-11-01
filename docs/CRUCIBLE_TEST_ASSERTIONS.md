@@ -4860,6 +4860,185 @@ and the static Playbooks and ceiling cards are gone.
 
 ---
 
+# GROUP 46 — Live runs record their true cause; GC gets a real lever
+
+*Drafted 1 November 2026 by Claude Code, while the operator was away. **REVIEWED AND
+APPROVED** by the operator, 1 November 2026 (except the six `jvm.memory.max` tests, see 46.4).
+`tests/test_live_ground_truth.py` (24). Code: `fixture_ground_truth` and
+`build_campaign(fixture=)` in `crucible/perf/commands.py`; `ground_truth` on
+`Campaign` / `CampaignResult`; `manifest_ground_truth` in `crucible/perf/scorer.py`;
+the quadrant on the Benchmarks screen; `perflab.jvm.heap-max-mb` in
+`config/profiles/spring-boot.yaml`; `scripts/box_a_post_receive.sh`;
+`config/bench/`.*
+
+*Operator decisions, 1 November 2026: "Our live runs must record the true cause...
+shouldn't it just be an inherent behaviour?"; "We should be ok to change the GC
+fixes. Lets give it a real lever."; "running more live campaigns on other faults,
+even if it takes 25 mins".*
+
+### 46.1 A run started from a fixture records the fixture's true cause
+
+**What it checks.** `crucible run --fixture <id>` copies `cause_family` from
+`config/fixtures/<id>.yaml` onto the manifest as `ground_truth`, before the run
+starts. A healthy fixture records `None`. An unknown fixture refuses the run. A run
+with no fixture records `{}`.
+
+**Why it exists.** The quadrants need the true cause, and Crucible cannot work it
+out: that would be its diagnosis grading itself (principle 3). The fixture file
+already records it, written by whoever designed the fault, before any run. So the
+cause is copied, not typed: no free-text flag that could be mistyped or set after
+seeing the result.
+
+**For review.**
+- `--fixture` names the state the operator put the target in; Crucible does not
+  check that the target really is in that state. Should the campaign compare the
+  fixture's `bottleneck_config` with the workspace's `application.properties` and
+  refuse on a mismatch?
+
+**Operator decision, 1 November 2026: "preferably yes".** Done.
+`fixture_state_mismatches` compares every `bottleneck_config` property with the
+workspace's config file (`endpoint` is skipped: it says where the load goes, not a
+property). `build_campaign` refuses with `CampaignRefused` and names each mismatch,
+before anything runs. A property the file does not set is a mismatch. Tests:
+`TestTheWorkspaceMustBeInTheFixturesState` (5, drafted, for review).
+
+**For review (new).** The check reads the workspace, not the running target. What
+Box A is running is proved by the deploy check (§19.6), which every campaign runs
+anyway.
+
+### 46.2 The recorded cause never reaches the model
+
+**What it checks.** A manifest whose `ground_truth` holds a marker string, read back
+through the journal (the one path from old manifests into a prompt), renders
+without the marker.
+
+**Why it exists.** A diagnosis that can read the answer is not being tested.
+
+### 46.3 The scorer and the Benchmarks page score live runs from the record
+
+**What it checks.** The scorer's four outcomes from the manifest's record (named
+cause vs true cause, IMPROVED and kept or not); a run with no record stays
+UNSCORABLE; the Benchmarks page counts each quadrant and says how many runs were
+scored.
+
+**Why it exists.** Until now the quadrant panel was hard-coded empty. Zero in a
+quadrant is a measurement once runs are scored; "not yet measured" is for when none
+are.
+
+An abstention (no cause named, nothing changed) is counted apart on the Benchmarks
+page, never as WRONG. Seen live on `bench46-thread_starved`: Tomcat thread metrics
+were off, the agent saw nulls and declined, which is principle 2 working.
+
+**For review.**
+- The approved scorer (`score_diagnosis`) still scores that abstention as WRONG in
+  `crucible score`, because its rule is "named cause != true cause and not
+  verified". Should the scorer gain an ABSTAINED outcome, as the page now shows?
+
+**Operator decision, 1 November 2026: yes.** `score_diagnosis` returns `ABSTAINED`
+when an experiment names no cause and changes nothing; it is not one of the four
+quadrants. The Benchmarks page now takes it from the scorer instead of its own
+check. Naming no cause but changing something is still graded (WRONG if it did not
+verify). Without a ground truth it stays UNSCORABLE. Tests: two added to
+`TestQuadrantsAreScoredFromTheRecord` (drafted, for review).
+
+Tomcat thread metrics are now on permanently (operator, same day):
+`server.tomcat.mbeanregistry.enabled=true` on perf-lab branch `tomcat-thread-metrics`
+(e1aefdc, PR to `main` for the operator to merge) and on `perftest_sandbox`
+(00c3d78, deployed and verified on Box A).
+
+### 46.4 The heap is a real lever for gc_pressure
+
+**What it checks.** `perflab.jvm.heap-max-mb` is an allowed int, 128-1536 MB. Box A's
+deploy hook reads it from `application.properties` and passes `-Xmx` after
+`PERFLAB_JAVA_OPTS` (HotSpot honours the last). The GC fixtures set their state
+through it; the pool is now the judgement trap on `perflab_gc_pressure`; SKILL.md
+names the lever.
+
+**Why it exists.** The agent could name GC and do nothing. The task text said
+"abstain", while the grader required a proposal for class B, so those cases failed
+whatever the model did. Now both say "raise the heap".
+
+**For review.**
+- The key sits in `application.properties` but Spring does not read it; only the
+  hook does. Is that acceptable, or should it be a separate `jvm.options` file
+  (needs a multi-file applicator)?
+- Proof it is in force is the commit check plus `jvm.memory.max` in the snapshot.
+  Should the campaign refuse to measure until `jvm.memory.max` matches?
+- T2 and T12 were changed to expect the heap proposal. The traps changed with them.
+  Confirm this is the goalpost you meant to move.
+
+**Operator decisions, 1 November 2026.**
+- *Where the key lives:* "even if it is in application.properties or groovy file, it
+  should be able to edit it if it has the permissions to edit." The heap stays in
+  `application.properties` for now. Editing a property in any permitted file is
+  recorded in `docs/ref/DEBT.md` as the next step for the applicator.
+- *`jvm.memory.max`:* yes, refuse to measure until it matches. Built: the profile
+  declares `in_force` on the heap property (metric `jvm.memory.max`, tag `area:heap`,
+  MB to bytes, 5% tolerance). After the commit check, `verify_in_force_metrics` reads
+  the metric from Actuator. A mismatch or an unreadable metric stops the experiment
+  as NOT_MEASURED, before any measurement. Measured on Box A: `-Xmx1024m` reads
+  989.9 MB (3.3% under, because Serial GC does not count one survivor space), and the
+  JVM's default heap reads 1498 MB. The overnight GC manifests did not carry this
+  proof: their snapshots record heap *used*, not heap max, so the profile comment
+  had overstated it.
+- *T2 and T12:* approved.
+- *Tests:* all of Group 46's tests are approved. The six added for the
+  `jvm.memory.max` check (`TestTheHeapMustBeInForceBeforeMeasuring` (5) and
+  `test_a_change_whose_target_metric_does_not_match_is_never_measured` in
+  `tests/test_perf_campaign.py`) are drafted, for review.
+
+### 46.5 Each live benchmark SLA is protected
+
+**What it checks.** Every `config/bench/slo-*.yaml` loads, is not production, and
+matches the profile's protected paths (`config/bench/**`, added).
+
+**For review.**
+- The targets were chosen by Claude Code from the fixtures' captured broken-state
+  p99: /api/db 120 ms (pool and threads), /api/orders 400 ms, /api/catalog 20 ms,
+  /api/churn 300 ms. Are those the goals you would have set?
+
+**REVIEWED AND APPROVED** by the operator, 1 November 2026: "yes, would have been the
+goals I would have set."
+
+---
+
+# GROUP 47 — Library and Overview name the service, not the runtime
+
+*Drafted 1 November 2026 by Claude Code, while the operator was away. **REVIEWED AND
+APPROVED** by the operator, 1 November 2026. Draft branch only. `tests/test_ui_services.py` (4).
+Code: `TargetProfile.service`; `service:` in both profiles; `/v1/perf/services`;
+`loadLibrary` / `loadOverview` in the dashboard.*
+
+*Operator, 1 November 2026: "include the service name properly. perf-lab, as well
+the sample python one we had.. it helps for representational purposes".*
+
+### 47.1 Each profile names its service; the page lists them by it
+
+**What it checks.** `spring-boot.yaml` declares `service: perf-lab`, `fastapi.yaml`
+`service: perf-lab-py`. `/v1/perf/services` lists both, the active one first, with
+runs counted from each manifest's own `profile` field. Library draws one card per
+service from it.
+
+**Why it exists.** The card read "spring-boot target": that is the runtime adapter,
+not the service.
+
+### 47.2 A profile with no pipeline is shown as a profile, not a live service
+
+**What it checks.** The FastAPI profile (deploy manual, no branch) comes back
+`live: false` with no target or environment, and the card says "profile only".
+
+**Why it exists.** The old sample card ("RecoAPI") gave it collections and runs it
+never had. It is representational, and now it says honestly what it represents.
+
+**For review.**
+- `perf-lab-py` is a name Claude Code chose for the Python sample. Is it the name
+  you use?
+
+**REVIEWED AND APPROVED** by the operator, 1 November 2026: "yes, that can be the name
+I will use in future." Group 47 is approved.
+
+---
+
 # Review decisions — week 1
 
 Raised by Claude Code while implementing, decided by the operator on 10 September 2026.

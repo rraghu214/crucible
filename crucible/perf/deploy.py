@@ -39,6 +39,7 @@ import re
 import subprocess
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import asdict, dataclass, field
 from typing import Any, Protocol
@@ -182,6 +183,10 @@ class DeployResult:
     #: ``True`` = rung-2 verification passed; ``None`` = not attempted (no provider).
     property_verified: bool | None = None
     property_reason: str = ""
+    #: The target's own metric for a change that declares one (rung 1); ``None``
+    #: when no change declared one.
+    metric_verified: bool | None = None
+    metric_reason: str = ""
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -480,6 +485,50 @@ def verify_properties_via_env(
     if read_errors:
         return False, "property read-back unavailable: " + "; ".join(read_errors)
     return True, "all changed properties confirmed via /actuator/env"
+
+
+def verify_in_force_metrics(
+    changes: "Any",
+    allowed: "dict[str, Any]",
+    base_url: str,
+    *,
+    timeout_s: float = 5.0,
+) -> tuple[bool | None, str]:
+    """Rung-1 proof: read the target's own metric for each change that declares one.
+
+    ``(None, "")`` when no change declares an ``in_force`` metric. Otherwise
+    ``verified`` is True only when every declared metric reads within its
+    tolerance of the applied value; an unreadable metric is not verified, because
+    the campaign refuses to measure a change it cannot see in effect.
+    """
+    problems: list[str] = []
+    confirmed: list[str] = []
+    for change in changes:
+        bounds = allowed.get(str(change.prop))
+        spec = getattr(bounds, "in_force", None)
+        if spec is None:
+            continue
+        query = f"?tag={urllib.parse.quote(spec.tag, safe=':')}" if spec.tag else ""
+        url = f"{base_url.rstrip('/')}/actuator/metrics/{spec.metric}{query}"
+        try:
+            payload = json.load(urllib.request.urlopen(url, timeout=timeout_s))
+            actual = float(payload["measurements"][0]["value"]) / spec.scale
+        except (urllib.error.URLError, OSError, ValueError, KeyError, IndexError, TypeError) as exc:
+            problems.append(f"{change.prop}: {spec.metric} unreadable ({exc})")
+            continue
+        expected = float(change.value)
+        off_pct = abs(actual - expected) / expected * 100 if expected else float("inf")
+        if off_pct > spec.tolerance_pct:
+            problems.append(f"{change.prop}: expected {expected:g}, {spec.metric} reads {actual:.1f} "
+                            f"({off_pct:.1f}% off, tolerance {spec.tolerance_pct:g}%)")
+        else:
+            confirmed.append(f"{change.prop}: {spec.metric} reads {actual:.1f} for {expected:g} "
+                             f"({off_pct:.1f}% off)")
+    if not problems and not confirmed:
+        return None, ""
+    if problems:
+        return False, "change not in force on the target: " + "; ".join(problems)
+    return True, "in force on the target: " + "; ".join(confirmed)
 
 
 @dataclass

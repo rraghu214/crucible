@@ -1363,12 +1363,39 @@ def screen_benchmark(ctx: PerfContext, q: dict[str, str]) -> dict[str, Any]:
         "Graded by crucible.perf.scorer.score_replay, which calls no model. Class C carries two caveats in "
         "docs/BENCHMARK_REPLAY_RESULTS.md: the trap was never tempted, and T3's prompt is not sent.")]))
 
-    quadrant = {"CORRECT": [], "LUCKY": [], "UNLUCKY": [], "WRONG": []}
-    panels = [s.text(f"{k}: " + ("not yet measured -- no scored live campaign" if not v else ", ".join(v)))
-              for k, v in quadrant.items()]
-    s.add(s.card("Diagnosis against outcome", [s.tabs(list(quadrant), panels), s.text(
-        "Every quadrant needs to know whether the fix worked, which only a live campaign can measure. Replay "
-        f"shows the diagnosis half alone: correct on {_correct_count(replay)}.")]))
+    # Live runs started from a fixture carry their true cause (crucible run
+    # --fixture); each of their experiments is scored by the scorer's own rule.
+    from ..perf.scorer import ABSTAINED, UNSCORABLE, manifest_ground_truth, score_diagnosis
+
+    quadrant: dict[str, list[str]] = {"CORRECT": [], "LUCKY": [], "UNLUCKY": [], "WRONG": []}
+    scored_runs = 0
+    abstained: list[str] = []
+    for c in campaigns:
+        truth = manifest_ground_truth(c)
+        if truth is None:
+            continue
+        scored_runs += 1
+        for e in c.get("experiments") or []:
+            if e.get("refused_by_guard"):
+                continue
+            q = score_diagnosis(e, truth)
+            # Declining to act is not a wrong diagnosis (principle 2): counted apart.
+            if q == ABSTAINED:
+                abstained.append(f"{c.get('run_id')} exp {e.get('experiment')}")
+            elif q != UNSCORABLE:
+                quadrant[q].append(f"{c.get('run_id')} exp {e.get('experiment')}")
+    if scored_runs:
+        panels = [s.text(f"{k}: {len(v)}" + (f" -- {', '.join(v)}" if v else "")) for k, v in quadrant.items()]
+
+    else:
+        panels = [s.text(f"{k}: not yet measured -- no scored live campaign") for k in quadrant]
+    abstained_note = ([s.text(f"Abstained (no cause named, nothing changed; not in a quadrant): {len(abstained)} -- "
+                              + ", ".join(abstained))] if abstained else [])
+    s.add(s.card("Diagnosis against outcome", [s.tabs(list(quadrant), panels), *abstained_note, s.text(
+        f"Every quadrant needs to know whether the fix worked, which only a live campaign can measure: "
+        f"{scored_runs} live run(s) started from a fixture are scored here. Zero in a quadrant is a "
+        f"measurement once runs are scored. Replay shows the diagnosis half alone: correct on "
+        f"{_correct_count(replay)}.")]))
     claims = [c for c in (_claim(ctx, ctx.replay_results_doc), _claim(ctx, ctx.live_results_doc)) if c]
     s.add(s.card("The claim this supports", [s.text(c) for c in claims] or [
         s.text("No results document yet -- no claim.")]))
@@ -2645,6 +2672,40 @@ async def perf_active_campaign(request: Request):
         "manual_steps": manual,
         "job": _job_dict(job) if job else None,
     }
+
+
+@router.get("/v1/perf/services")
+async def perf_services(request: Request):
+    """Every service this install has a profile for, for Library and Overview.
+
+    One per profile in config/profiles/. ``live`` is true only when the profile
+    declares a deploy pipeline and a branch: a template profile with no target
+    (the FastAPI sample) says so rather than looking like a configured service.
+    Runs are counted from the manifests' own ``profile`` field.
+    """
+    ctx = _context(request)
+    campaigns, _ = _campaigns(ctx)
+    sla, _ = _load_sla(ctx)
+    out = []
+    for profile in _profiles(ctx):
+        deploy = profile.deploy
+        live = getattr(deploy, "mode", "") == "pipeline" and bool(getattr(deploy, "branch", ""))
+        mine = [c for c in campaigns if c.get("profile") == profile.name]
+        active = profile.name == ctx.profile_name
+        out.append({
+            "service": profile.service or profile.name,
+            "profile": profile.name,
+            "runtime": profile.runtime,
+            "live": live,
+            "active": active,
+            "target": (sla.target_base_url if sla else "") if active else "",
+            "environment": (f"{sla.environment_name} ({sla.environment_kind})" if sla else "") if active else "",
+            "endpoint": (sla.endpoint if sla else "") if active else "",
+            "deploy": f"{getattr(deploy, 'remote', '')} -> {getattr(deploy, 'branch', '')}" if live else "manual",
+            "runs": len(mine),
+        })
+    out.sort(key=lambda svc: (not svc["active"], svc["service"]))
+    return {"services": out}
 
 
 @router.get("/v1/perf/runs")

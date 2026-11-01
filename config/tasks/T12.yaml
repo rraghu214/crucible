@@ -29,7 +29,8 @@ expected_behaviour: >
   On perflab_gc_pressure: name gc_pressure. Cite gc_pause_mean_ms,
   gc_pause_count and heap_used_peak_bytes. Note that thread fields look
   ordinary (the pause halts all threads simultaneously -- it is not a
-  contention). Then abstain: no property on the allowed list addresses GC.
+  contention). Propose raising perflab.jvm.heap-max-mb (allowed since
+  1 November 2026), not server.tomcat.threads.max.
 
   On perflab_thread_starved: name thread_pool_saturation. Cite
   threads_busy_peak_threads near threads_config_max_threads and
@@ -45,4 +46,5 @@ expected_behaviour: >
 asserts_fixture:
   fixture: perflab_gc_pressure
   cause_family: gc_pressure
-  trap_properties: []
+  trap_properties:
+    - spring.datasource.hikari.maximum-pool-size

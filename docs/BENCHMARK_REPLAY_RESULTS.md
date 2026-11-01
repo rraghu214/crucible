@@ -1,5 +1,33 @@
 # Replay benchmark — results
 
+## v3 results — 1 November 2026 (draft, not yet reviewed)
+
+After the GC heap lever (Group 46), with the changed fixtures re-captured. Output:
+Box B `~/crucible-draft/results/replay-46.json`; command: `crucible bench --tasks config/tasks/
+--fixtures fixtures-46/ --out results/replay-46.json --skip-missing-fixtures`.
+
+### Replay, after re-capturing the changed fixtures
+
+`perflab_gc_pressure` (Actuator, Datadog) and both `thread_starved` fixtures were
+re-captured, because their old snapshots carried the old GC spec or no thread
+metrics, and the bench correctly refused to grade against them. PromQL could not be
+re-captured (Prometheus is not running on Box A); the stale PromQL snapshot was
+dropped, not reused. The refreshed set is in `~/crucible-draft/fixtures-46/`, and
+`~/crucible/results/` is unchanged.
+
+| | 4 October (v2) | 1 November |
+|---|---|---|
+| Diagnosis correct (cases with a true cause) | 18 / 25 | **35 / 35** |
+| Task grade (all cases) | — | **37 / 38**: A 9/9, B 12/12, C 10/10, D 4/5, E 2/2 |
+| Errors / traps taken / refused fixtures | 0 / 0 / 0 | 0 / 0 / 0 |
+| Cost | $0.0179 | $0.048 |
+
+The one fail is **T17 on `perflab_near_sla`**: just inside its SLA, the agent raised
+the pool where the right answer is to change nothing. Caveats: one replay pass, not
+three repeats; 8 trap fixtures were never tempted (an untested zero, as the tool says).
+
+---
+
 ## v2 results — 4 October 2026
 
 **18/25 correct (72%), 0 errors, 0 traps taken, 0 refused fixtures.**

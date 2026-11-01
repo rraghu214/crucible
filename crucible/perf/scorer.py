@@ -59,6 +59,10 @@ WRONG = "WRONG"
 #: No ground truth was supplied. Distinct from the four real quadrants so a
 #: caller cannot mistake "we didn't check" for "we checked and it was right".
 UNSCORABLE = "UNSCORABLE"
+#: The agent named no cause and changed nothing. Not a quadrant: declining to act
+#: on evidence it could not see is principle 2 working, not a wrong diagnosis
+#: (operator decision, 1 November 2026, review of 46.3).
+ABSTAINED = "ABSTAINED"
 
 
 class ScorerError(RuntimeError):
@@ -197,6 +201,8 @@ def score_diagnosis(experiment: dict[str, Any], ground_truth_cause_family: str |
     """
     if ground_truth_cause_family is None:
         return UNSCORABLE
+    if not experiment.get("cause_family") and not (experiment.get("proposal") or {}).get("changes"):
+        return ABSTAINED
     correct_diagnosis = experiment.get("cause_family") == ground_truth_cause_family
     verified = experiment.get("verdict") == IMPROVED and bool(experiment.get("kept"))
     if correct_diagnosis and verified:
@@ -486,6 +492,16 @@ class JournalScore:
         }
 
 
+def manifest_ground_truth(manifest: dict[str, Any]) -> str | None:
+    """The true cause a live run recorded from its fixture, or ``None``.
+
+    Written on the manifest before the run started, from ``config/fixtures/``
+    (``crucible run --fixture``). A run against a real service has none, and
+    its diagnosis stays ``UNSCORABLE`` rather than being guessed.
+    """
+    return (manifest.get("ground_truth") or {}).get("cause_family") or None
+
+
 def score_journal(
     directory: str | Path,
     *,
@@ -496,9 +512,10 @@ def score_journal(
     """Score every manifest under ``directory``. Never calls a model.
 
     ``ground_truth`` maps ``run_id`` -> cause family, for callers (the replay
-    benchmark) that know it. A live campaign's own directory has no such map,
-    and every campaign in it scores with diagnosis accuracy ``UNSCORABLE``
-    rather than a guessed answer.
+    benchmark) that know it. Without an entry, the manifest's own
+    ``ground_truth`` (recorded from its fixture) is used; a campaign with
+    neither scores with diagnosis accuracy ``UNSCORABLE`` rather than a guessed
+    answer.
     """
     resolved_pricing = pricing or Pricing.from_mapping(_load_pricing_yaml())
     ground_truth = ground_truth or {}
@@ -513,7 +530,8 @@ def score_journal(
             score_campaign(
                 manifest,
                 pricing=resolved_pricing,
-                ground_truth_cause_family=ground_truth.get(str(manifest.get("run_id", ""))),
+                ground_truth_cause_family=ground_truth.get(str(manifest.get("run_id", "")),
+                                                           manifest_ground_truth(manifest)),
                 trap_properties=trap_properties,
             )
         )

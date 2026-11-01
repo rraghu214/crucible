@@ -838,6 +838,12 @@ class CampaignResult:
     paused_seconds: float = 0.0
     #: Set when this campaign is one scenario of an --all-scenarios series.
     series: dict[str, Any] = field(default_factory=dict)
+    #: The true cause, copied from the fixture the run was started from, before
+    #: the run began (operator decision, 1 November 2026). Empty for a run against
+    #: a real service: nobody knows its cause, so its diagnosis quadrant is
+    #: honestly unscorable. Never shown to the model -- a diagnosis that can read
+    #: the answer is not being tested.
+    ground_truth: dict[str, Any] = field(default_factory=dict)
 
     @property
     def spans_multiple_models(self) -> bool:
@@ -880,6 +886,7 @@ class CampaignResult:
             "cap_hit": self.cap_hit,
             "paused_seconds": self.paused_seconds,
             "series": self.series,
+            "ground_truth": self.ground_truth,
         }
 
     def write(self, directory: Path) -> Path:
@@ -975,6 +982,9 @@ class Campaign:
     #: block and knows the SLA and measurements are the authority, not this.
     #: Never overrides the SLA; never survives into scored output as a fact.
     stakeholder_request: str = ""
+    #: See CampaignResult.ground_truth. Held here only to be written on the
+    #: manifest; nothing on the diagnosis path reads it.
+    ground_truth: dict[str, Any] = field(default_factory=dict)
     #: The SLA and profile files this campaign was started from. Fingerprinted at
     #: start and re-checked before every experiment and every verdict; a change
     #: aborts the run, naming the file (operator decision, 24 October 2026: they
@@ -1103,6 +1113,7 @@ class Campaign:
             guarded_files=fingerprint_files(self.guarded_files),
             caps={"cost_usd": self.cost_cap_usd, "wall_clock_s": self.wall_clock_cap_s},
             series=dict(self.series),
+            ground_truth=dict(self.ground_truth),
         )
         lock = BranchLock(
             state_dir=self.state_dir,
@@ -1183,6 +1194,7 @@ class Campaign:
             guarded_files=dict(resume_state.get("guarded_files") or fingerprint_files(self.guarded_files)),
             caps={"cost_usd": self.cost_cap_usd, "wall_clock_s": self.wall_clock_cap_s},
             series=dict(self.series),
+            ground_truth=dict(resume_state.get("ground_truth") or self.ground_truth),
             paused_seconds=float(resume_state.get("paused_seconds") or 0.0) + max(
                 0.0, time.time() - float(resume_state.get("paused_at_epoch_s") or time.time())),
         )
@@ -1523,6 +1535,7 @@ class Campaign:
             "sla_object": self.sla.as_dict(),
             "paused_seconds": result.paused_seconds,
             "caps": {"cost_usd": self.cost_cap_usd, "wall_clock_s": self.wall_clock_cap_s},
+            "ground_truth": dict(result.ground_truth),
         }
 
     def _spent(self, result: CampaignResult) -> float:
@@ -2155,6 +2168,22 @@ class Campaign:
             manifest.notes.append(
                 f"property read-back (§19.6 rung 2): {prop_detail}"
             )
+            # Rung 1, for a change the application never reads itself (the heap is
+            # a JVM flag): the target's own metric must show it, or nothing is
+            # measured (operator decision, 1 November 2026).
+            from .deploy import verify_in_force_metrics
+            metric_ok, metric_detail = verify_in_force_metrics(
+                apply_result.changes, self.profile.allowed_properties, self.sla.target_base_url
+            )
+            if metric_ok is not None:
+                deploy_result.metric_verified = metric_ok
+                deploy_result.metric_reason = metric_detail
+                manifest.deploy = deploy_result.as_dict()
+                manifest.notes.append(f"target metric (§19.6 rung 1): {metric_detail}")
+                if not metric_ok:
+                    manifest.verdict = NOT_MEASURED
+                    manifest.verdict_reason = metric_detail
+                    raise CampaignAborted(f"experiment {manifest.experiment}: {metric_detail}")
         return True
 
     def _keep_or_revert(

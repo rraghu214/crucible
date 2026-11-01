@@ -137,6 +137,19 @@ log "port is free"
 # runs by hand, and is wrong the moment an agent drives them: the properties
 # file has to be the single source of truth for anything under experiment.
 #
+# The heap is a JVM flag, so it cannot be a Spring property -- but it is one of
+# the agent's tunables (perflab.jvm.heap-max-mb, operator decision 1 November
+# 2026), so it is READ FROM application.properties, the file the agent edits and
+# each experiment commits. Passed after PERFLAB_JAVA_OPTS: HotSpot honours the
+# last -Xmx, so the committed value wins over anything in ~/perflab.env and the
+# measurement is of what the commit says.
+HEAP_MB="$(sed -n 's/^[[:space:]]*perflab\.jvm\.heap-max-mb[[:space:]]*=[[:space:]]*\([0-9][0-9]*\)[[:space:]]*$/\1/p' \
+  src/main/resources/application.properties | tail -1)"
+HEAP_OPT=""
+if [ -n "$HEAP_MB" ]; then
+  HEAP_OPT="-Xmx${HEAP_MB}m"
+fi
+
 # setsid, because a post-receive hook exits as soon as the push completes and a
 # plain background child can go with it -- observed on this box on 13 September
 # 2026 when a backgrounded JVM died with its SSH session.
@@ -144,11 +157,11 @@ log "port is free"
 # needed (e.g. -Xmx128m for gc_pressure). It is empty for all other fixtures.
 # Split intentionally; quoting the whole var would pass an empty string to java.
 # shellcheck disable=SC2086
-setsid nohup java ${PERFLAB_JAVA_OPTS:-} -jar target/perf-lab-0.1.0.jar \
+setsid nohup java ${PERFLAB_JAVA_OPTS:-} ${HEAP_OPT} -jar target/perf-lab-0.1.0.jar \
   --spring.profiles.active="$SPRING_PROFILE" \
   < /dev/null >> "$HOME/perflab.out" 2>&1 &
 echo $! > "$HOME/perflab.pid"
-log "started perf-lab pid $(cat "$HOME/perflab.pid") JAVA_OPTS='${PERFLAB_JAVA_OPTS:-}' (pool size from application.properties)"
+log "started perf-lab pid $(cat "$HOME/perflab.pid") JAVA_OPTS='${PERFLAB_JAVA_OPTS:-}' heap='${HEAP_OPT:-JVM default}' (tunables from application.properties)"
 
 # Wait for health, then for the commit. Both, in that order: an unhealthy app can
 # still answer /api/version from a half-initialised context, and a healthy one

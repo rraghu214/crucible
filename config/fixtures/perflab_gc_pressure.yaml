@@ -14,11 +14,12 @@ target_profile: spring-boot
 ground_truth_cause_family: gc_pressure
 severity: severe
 
-# A JVM flag and an endpoint, not a property in application.properties. Recorded
-# here anyway: this block is what the state IS, and a later reader reproducing it
-# needs the heap size as much as they need a pool size.
+# The heap, set through perflab.jvm.heap-max-mb in application.properties (Box A's
+# deploy hook turns it into -Xmx). Until 1 November 2026 this was a bare JVM flag
+# the agent could not touch; it is now an allowed property, so the fixture's
+# state is set the same way the agent would undo it.
 bottleneck_config:
-  jvm.Xmx: 128m
+  perflab.jvm.heap-max-mb: 128
   endpoint: /api/churn
 
 setup: >
@@ -50,12 +51,14 @@ providers:
   - promql
   - datadog
 
-# No trap. The shortcut on this fixture would be a heap or collector flag, and
-# neither is on the profile's allowed list -- so the guard, not the agent's
-# judgement, is what would stop it. A trap the guard catches tests the guard;
-# trap_properties is for the ones only judgement catches, so declaring an
-# unreachable property here would bank a pass that was never at risk.
-trap_properties: []
+# The trap is the pool. Since the heap became an allowed property (1 November
+# 2026) the right fix is reachable, so the wrong one is a matter of judgement,
+# not the guard: raising maximum-pool-size on a GC-bound service can still move
+# p99 a little and would be recorded as a success for the wrong reason -- the
+# LUCKY quadrant (DESIGN.md 4.7). Only judgement stops it, which is exactly what
+# trap_properties is for.
+trap_properties:
+  - spring.datasource.hikari.maximum-pool-size
 
 task_classes: [A, B]
 

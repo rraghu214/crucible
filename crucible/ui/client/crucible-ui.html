@@ -2126,7 +2126,9 @@ async function loadOverview(){
   try{
     const [d,w]=await Promise.all([_runsList(),fetch('/v1/perf/wizard').then(r=>r.ok?r.json():null).catch(()=>null)]);
     const runs=d.runs||[],ceil=d.ceilings||[];
-    if(el('ov-sub')) el('ov-sub').textContent=(w?w.profile+' · '+w.target+' · '+w.environment:'configuration does not load')+
+    const svc=await fetch('/v1/perf/services').then(r=>r.ok?r.json():{services:[]}).catch(()=>({services:[]}));
+    const act=(svc.services||[]).find(s=>s.active);
+    if(el('ov-sub')) el('ov-sub').textContent=(w?(act?act.service+' · ':'')+w.profile+' · '+w.target+' · '+w.environment:'configuration does not load')+
       (runs.length?' · latest run '+_shortDate(runs[0].started_at):' · no run yet');
     el('ov-runs').textContent=runs.length;
     el('ov-runs-note').textContent=runs.filter(r=>r.kind==='advisory').length+' advisory · '+runs.filter(r=>r.kind!=='advisory').length+' measured';
@@ -2161,22 +2163,25 @@ async function loadLibrary(){
   const cards=document.getElementById('lib-cards'),tree=document.getElementById('libTree');
   if(!cards||!tree) return;
   try{
-    const [d,w]=await Promise.all([_runsList(),fetch('/v1/perf/wizard').then(r=>r.ok?r.json():null).catch(()=>null)]);
+    const [d,sv]=await Promise.all([_runsList(),fetch('/v1/perf/services').then(r=>r.ok?r.json():{services:[]}).catch(()=>({services:[]}))]);
     const runs=d.runs||[],ceil=d.ceilings||[];
     const best=runs.filter(r=>r.p99_after!=null).sort((a,b)=>a.p99_after-b.p99_after)[0];
-    cards.innerHTML=(w?`<div class="card">
-        <div style="font-size:14px;font-weight:700;">${he(w.profile)} target</div>
-        <div style="font-size:11px;color:var(--lo);font-family:var(--f-mono);">${he(w.target)}</div>
-        <div style="display:flex;gap:16px;margin:10px 0;">
-          <div><div style="font-size:10px;color:var(--lo);text-transform:uppercase;letter-spacing:.06em;">Runs</div><div style="font-size:18px;font-weight:700;">${runs.length}</div></div>
-          <div><div style="font-size:10px;color:var(--lo);text-transform:uppercase;letter-spacing:.06em;">Ceiling probes</div><div style="font-size:18px;font-weight:700;">${ceil.length}</div></div>
-          <div><div style="font-size:10px;color:var(--lo);text-transform:uppercase;letter-spacing:.06em;">Best p99</div><div style="font-size:18px;font-weight:700;">${best?Math.round(best.p99_after)+' ms':'—'}</div></div>
+    const stat=(label,value)=>`<div><div style="font-size:10px;color:var(--lo);text-transform:uppercase;letter-spacing:.06em;">${label}</div><div style="font-size:18px;font-weight:700;">${value}</div></div>`;
+    // One card per profile in config/profiles/, named by its service. A profile
+    // with no live target says so instead of showing counts it never had.
+    cards.innerHTML=(sv.services||[]).map(s=>`<div class="card"${s.live?'':' style="opacity:.85;"'}>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="font-size:15px;font-weight:700;font-family:var(--f-mono);">${he(s.service)}</div>
+          <span class="pill ${s.live?'ok':'idle'}" style="font-size:10px;">${s.live?'live target':'profile only'}</span>
         </div>
-        <div style="font-size:11px;color:var(--mid);">${he(w.environment)} · SLA endpoint ${he(w.endpoint)} · deploy ${he(w.remote)} → ${he(w.branch)}</div>
-      </div>`:'<div class="card" style="color:var(--err);">The SLA or profile does not load.</div>')+
+        <div style="font-size:11px;color:var(--lo);">${he(s.profile)} · ${he(s.runtime)}${s.target?' · '+he(s.target):''}</div>
+        <div style="display:flex;gap:16px;margin:10px 0;">${stat('Runs',s.runs)}${s.active?stat('Ceiling probes',ceil.length)+stat('Best p99',best?Math.round(best.p99_after)+' ms':'—'):''}</div>
+        <div style="font-size:11px;color:var(--mid);">${s.live?he(s.environment)+' · SLA endpoint '+he(s.endpoint)+' · deploy '+he(s.deploy)
+          :'No target deployed yet: the profile declares its tunables, metrics and cause families, and deploy is manual.'}</div>
+      </div>`).join('')+
       `<div class="card" style="display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;border-style:dashed;min-height:140px;cursor:pointer;opacity:.7;" onclick="go('new-test')">
         <div style="font-size:24px;">＋</div><div style="font-size:13px;font-weight:600;color:var(--mid);">New test run</div>
-        <div style="font-size:11px;color:var(--lo);text-align:center;max-width:200px;">One service per install today; the profile and SLA live in config/</div></div>`;
+        <div style="font-size:11px;color:var(--lo);text-align:center;max-width:200px;">Runs target the service the SLA points at; profiles live in config/profiles/</div></div>`;
     const row=(icon,label,pill,cls,when,onclick)=>`<div class="lib-run-row" ${onclick}><span style="font-size:12px;">${icon}</span><span style="font-size:12px;flex:1;font-family:var(--f-mono);">${label}</span><span class="pill ${cls}" style="font-size:10px;padding:2px 7px;">${pill}</span><span style="font-size:11px;color:var(--lo);margin-left:8px;">${when}</span></div>`;
     tree.innerHTML=`<div class="card"><div class="card-h"><div class="card-title">Runs on disk</div><div class="card-sub">results/*.json, newest first</div></div>`+
       (runs.map(r=>{const[cls,label]=OUTCOME_PILL[r.outcome]||['idle',r.outcome||'—'];

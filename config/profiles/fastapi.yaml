@@ -22,6 +22,9 @@
 
 name: fastapi
 runtime: cpython
+# The service, for people. Display only. The Python sample of PerfLab: a profile
+# with no live target yet (see the PROVISIONAL note above).
+service: perf-lab-py
 
 # Declared by the profile, never by a global constant (DESIGN.md section 5).
 # `gc_pressure` is a JVM/CLR concept and has no CPython analogue: CPython's

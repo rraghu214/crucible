@@ -44,6 +44,24 @@ def profile_dir(explicit: str | Path | None = None) -> Path:
 
 
 @dataclass(frozen=True)
+class InForceMetric:
+    """The metric the target publishes that shows a property's value in effect.
+
+    For a property the application itself never reads, such as a JVM flag the
+    deploy hook passes at startup, reading the property back proves only that the
+    file landed. The target's own metric proves the change took (DESIGN.md §19.6,
+    rung 1). Operator decision, 1 November 2026: the campaign does not measure
+    until it matches.
+    """
+
+    metric: str
+    tag: str = ""
+    #: metric units per property unit, e.g. 1048576 bytes per MB.
+    scale: float = 1.0
+    tolerance_pct: float = 5.0
+
+
+@dataclass(frozen=True)
 class Bounds:
     """The safe range for one tunable property.
 
@@ -56,6 +74,7 @@ class Bounds:
     maximum: float | None = None
     kind: str = "int"
     allowed_values: list[Any] | None = None
+    in_force: InForceMetric | None = None
 
     def coerce(self, value: Any) -> Any:
         """Parse ``value`` into this bound's type, or raise ``ValueError``."""
@@ -158,6 +177,10 @@ class TargetProfile:
     #: more. A memory permission cannot be sidestepped that way.
     policy_memory_kind: MemoryKind = MemoryKind.POLICY
     source_path: Path | None = None
+    #: The service this profile describes, for people: "perf-lab". The profile's
+    #: ``name`` is the runtime adapter ("spring-boot"); the UI showed that as if it
+    #: were the service. Display only: grants nothing.
+    service: str = ""
 
     # -- loading ----------------------------------------------------------
 
@@ -193,6 +216,12 @@ class TargetProfile:
                 maximum=spec.get("max"),
                 kind=str(spec.get("type", "int")),
                 allowed_values=spec.get("allowed_values"),
+                in_force=InForceMetric(
+                    metric=str(spec["in_force"]["metric"]),
+                    tag=str(spec["in_force"].get("tag", "")),
+                    scale=float(spec["in_force"].get("scale", 1.0)),
+                    tolerance_pct=float(spec["in_force"].get("tolerance_pct", 5.0)),
+                ) if spec.get("in_force") else None,
             )
 
         restart_spec = data.get("restart") or {}
@@ -228,6 +257,7 @@ class TargetProfile:
             # protects. The kind is fixed by the code; the profile does not vote.
             policy_memory_kind=MemoryKind.POLICY,
             source_path=source_path,
+            service=str(data.get("service", "")),
         )
 
     # -- authority --------------------------------------------------------
