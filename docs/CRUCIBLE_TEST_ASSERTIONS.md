@@ -5221,6 +5221,49 @@ edited on screen but not saved was never what got tested.
 
 ---
 
+# GROUP 50 — The chat judges a run by that run's own SLA
+
+*Drafted 1 November 2026 by Claude Code. **REVIEWED AND APPROVED** by the operator,
+2 November 2026: 50.1 answered "give it to the model if that info is not readily
+available; compute nothing in code, as the questions can be varied", so each experiment
+now also carries `sla_met_before`/`sla_met_after` as the manifest recorded them; 50.2
+"looks good". The test added for that answer,
+`test_each_experiment_carries_whether_it_met_the_sla_as_recorded`, was approved the same
+day ("ok, proceed to push and deploy"). Branch `capstone/chat-run-sla`. Tests: `tests/test_chat_run_sla.py` (5). Code: `_campaign_detail`,
+`_chat_facts` and `_safe_reply` in `crucible/ui/perf_ui.py`.*
+
+Found in the trial, 1 November 2026, step 8. Asked about run2-05 (SLA p99 <= 300 ms,
+measured 230 ms), the chat said it "met the SLA of &lt;= 120 ms (achieving 230 ms)".
+
+### 50.1 Each run is judged against its own SLA
+
+**What it checks.** The run block given to the model starts with the run's own SLA,
+read from its manifest, and says to judge the run against it. Each experiment carries
+whether it met the SLA before and after, exactly as the campaign recorded it when it
+measured; the chat code computes nothing. The SLA from today's `slo.yaml` is labelled
+"Current SLA, for new runs only".
+
+**Why it exists.** The only SLA the model saw was today's file, so every past run was
+judged against 120 ms. The benchmark runs each had their own SLA (20 to 400 ms). A
+wrong verdict in the chat is a claim that was never measured (principle 1).
+
+### 50.2 What the model writes as an entity is shown once
+
+**What it checks.** `_safe_reply` unescapes the model's text before escaping it, so
+`&lt;=` is displayed as `<=`. Markup is still escaped: an escaped `<script>` from the
+model comes out escaped, and only the allowlisted tags survive.
+
+**Why it exists.** The model is told to answer in HTML, so it writes `<=` as `&lt;=`.
+Escaped again, the operator saw `&lt;=`.
+
+**For review.**
+- 50.1: the run's SLA is a line of text in the prompt, not a rule the model can't
+  break. Is the instruction ("judge this run against it") enough, or should the run
+  block also state "SLA met: yes/no" computed from the manifest for each experiment?
+- 50.2: is the injection test enough to show that unescaping first opens nothing?
+
+---
+
 # Review decisions — week 1
 
 Raised by Claude Code while implementing, decided by the operator on 10 September 2026.
