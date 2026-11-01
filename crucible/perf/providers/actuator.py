@@ -30,8 +30,14 @@ class ActuatorMetricsProvider:
 
     name = "actuator"
 
-    def __init__(self, base_url: str, timeout_s: float = 5.0, client: Any | None = None) -> None:
+    def __init__(self, base_url: str, timeout_s: float = 5.0, client: Any | None = None,
+                 tags: dict[str, dict[str, str]] | None = None) -> None:
         self.base_url = base_url.rstrip("/")
+        #: Metric name -> tag filter, from the profile's ``actuator:`` block.
+        self.tags = dict(tags or {})
+        #: Timers refused because Actuator did not report them in seconds
+        #: (DESIGN.md 4.8: declared, never guessed). Same shape as PromQL/Datadog.
+        self.unreadable: dict[str, dict[str, Any]] = {}
         self.timeout_s = timeout_s
         self._client = client or httpx.Client(timeout=timeout_s)
 
@@ -44,7 +50,10 @@ class ActuatorMetricsProvider:
         evidence it never gathered.
         """
         try:
-            response = self._client.get(f"{self.base_url}/actuator/metrics/{name}")
+            response = self._client.get(
+                f"{self.base_url}/actuator/metrics/{name}",
+                params=[("tag", f"{k}:{v}") for k, v in self.tags.get(name, {}).items()],
+            )
             if response.status_code == 404:
                 return None
             response.raise_for_status()
@@ -52,7 +61,22 @@ class ActuatorMetricsProvider:
         except (httpx.HTTPError, ValueError):
             return None
         measurements = payload.get("measurements") or []
-        return {m["statistic"]: float(m["value"]) for m in measurements if "statistic" in m}
+        stats = {m["statistic"]: float(m["value"]) for m in measurements if "statistic" in m}
+        unit = payload.get("baseUnit")
+        if "TOTAL_TIME" in stats and unit != "seconds":
+            # The collector converts timers from seconds. Found 1 November 2026:
+            # on some starts PerfLab's /actuator/metrics answered from its Datadog
+            # registry, in milliseconds counted over the last 10 s, and the 1000x
+            # figures looked plausible. Refused, not converted: the window is wrong too.
+            self.unreadable[name] = {
+                "unit": "unknown",
+                "reported_unit": unit or "(none)",
+                "raw": stats,
+                "reason": f"Actuator reported this timer in {unit or 'no unit'!r}, not seconds; "
+                          "excluded from every derived value rather than converted.",
+            }
+            return None
+        return stats
 
     def fetch_env(self, name: str) -> Any | None:
         """One resolved configuration property from ``/actuator/env``.

@@ -233,6 +233,14 @@ gauges:
   tomcat_threads_busy: tomcat.threads.busy
   tomcat_threads_config_max: tomcat.threads.config.max
 
+# Tag filters for Actuator, the counterpart of `labels:` under promql/datadog
+# below. Actuator sums every tag combination of a meter unless asked, so a bare
+# `jvm.memory.used` is heap PLUS non-heap. Found 1 November 2026: every snapshot's
+# heap_used_peak_bytes read ~240 MB on a healthy run and 267 MB on a 128 MB heap.
+actuator:
+  jvm.memory.used:
+    area: heap
+
 # The SAME logical metrics as above, as Prometheus publishes them.
 #
 # Declared, not derived. Micrometer's Prometheus registry renames every meter:

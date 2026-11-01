@@ -165,6 +165,11 @@ class TargetProfile:
     #: backend and the client library that fed it, not something safe to
     #: derive from the Micrometer name alone.
     datadog: dict[str, Any] = field(default_factory=dict)
+    #: Metric name -> Actuator tag filter, e.g. ``jvm.memory.used: {area: heap}``.
+    #: Actuator sums every tag combination unless asked, so an unfiltered
+    #: ``jvm.memory.used`` is heap plus non-heap, which ``heap_used_peak_bytes``
+    #: is not (found 1 November 2026: 267 MB "heap" on a 128 MB heap).
+    actuator_tags: dict[str, dict[str, str]] = field(default_factory=dict)
     redaction_allowlist: tuple[str, ...] = ()
     skill_file: str = ""
     #: Which memory kind holds this profile's policy (the SLA, the load profile,
@@ -249,6 +254,8 @@ class TargetProfile:
             snapshot_metrics={str(k): str(v) for k, v in (data.get("snapshot_metrics") or {}).items()},
             promql=dict(data.get("promql") or {}),
             datadog=dict(data.get("datadog") or {}),
+            actuator_tags={str(k): {str(t): str(v) for t, v in (tags or {}).items()}
+                           for k, tags in (data.get("actuator") or {}).items()},
             redaction_allowlist=tuple(str(k) for k in (data.get("redaction_allowlist") or [])),
             skill_file=str(data.get("skill_file", "")),
             # Not read from the file. A profile that could nominate its own policy
