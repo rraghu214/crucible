@@ -152,6 +152,19 @@ class TestRefusals:
         assert commands.cmd_run(**base, state_dir=str(state), all_scenarios=True) == commands.REFUSED
         assert builds == []
 
+    def test_a_scenario_refused_at_start_ends_the_job_as_refused(self, setup, monkeypatch):
+        """Group 51 (trial, 2 November 2026). DRAFTED by Claude Code, REVIEWED AND APPROVED by the operator, 2 November 2026.
+        A dirty workspace refused the scenario, the job exited 0, and the Jobs page
+        showed a green "Done" for a run that never started."""
+        _, state, builds, _, base = setup
+
+        def refuse(*args, **kwargs):
+            raise CampaignRefused("workspace has uncommitted changes")
+
+        monkeypatch.setattr(commands, "build_campaign", refuse)
+        assert commands.cmd_run(**base, state_dir=str(state), run_id="s7", all_scenarios=True) == commands.REFUSED
+        assert "refused" in _plan(state, "s7")["status"]
+
     @pytest.mark.parametrize("bad", [
         'scenarios: [{"name": "a", "users": 0}]',
         'scenarios: [{"name": "a", "users": 5}, {"name": "a", "users": 6}]',
