@@ -5295,6 +5295,32 @@ did.
 
 ---
 
+# GROUP 52 — The Active page shows the running job's log
+
+*Drafted 2 November 2026 by Claude Code. **REVIEWED AND APPROVED** by the operator,
+2 November 2026 ("Group 52, if it fixes the issue, then proceed"). Also: the ↺ button on the
+log card got a tooltip. Branch `capstone/active-log`. Tests: `tests/test_active_log.py` (2). Code: the job-log block of
+`pollActiveCampaign` in `crucible/ui/client/crucible-ui.html`.*
+
+Found in the trial, 2 November 2026, step 9: the log card on Active stayed an empty grey
+bar for the whole run, and the operator could read the log only from Jobs.
+
+### 52.1 The job output is plain text, and every page reads it as text
+
+**What it checks.** `/v1/perf/jobs/{id}/output` answers `text/plain`. Each place the
+dashboard fetches it (Jobs and Active) reads the body with `.text()`, never `.json()`.
+Active shows the last 80 lines, refreshed with the rest of the page every 5 s.
+
+**Why it exists.** Active called `.json()` on plain text. The parse threw, the `catch`
+swallowed it, and nothing said the log was missing. Verified: with the fix reverted, the
+page test fails.
+
+**For review.**
+- The test reads the page's source, not a browser. Is a source check enough here, given
+  that the failure was a silent `catch`?
+
+---
+
 # Review decisions — week 1
 
 Raised by Claude Code while implementing, decided by the operator on 10 September 2026.
