@@ -31,13 +31,12 @@ code. Distinguishable from pool exhaustion by *where* the wait is: thread
 saturation shows a large gap between request arrival and controller entry, while
 pool exhaustion shows the wait inside `acquire`.
 
-**Known gap, stated so you do not hunt for it.** The thread meters
-(`tomcat.threads.busy`, `tomcat.threads.config.max`) are NOT in this snapshot —
-the profile maps their names to this family but does not sample them, so there
-are no thread fields at all rather than null ones. If you suspect this family,
-the honest answer is that you cannot confirm it from the evidence gathered, and
-that is what to say. Inferring it from the ABSENCE of pool and GC signals is a
-guess dressed as an elimination.
+The thread gauges are in the snapshot's `tomcat` block:
+`threads_busy_peak_threads` at `threads_config_max_threads` during load means every
+request thread was in use. If either is `null`, they were not sampled (the target may
+not publish them), and the honest answer is that you cannot confirm this family from
+the evidence gathered. Inferring it from the ABSENCE of pool and GC signals is a guess
+dressed as an elimination.
 
 **gc_pressure** — `gc_pause_total_ms` a material fraction of the measured window,
 heap used tracking close to heap max, and latency spikes that are periodic rather
@@ -82,6 +81,28 @@ outcome**, scored as such — the same shape as `lock_contention` above. What is
 not correct is a bare abstention: "I do not have enough evidence" and "I know
 what this is and it is outside my authority" are different answers, and the
 report has to be able to tell them apart.
+
+## A full resource is a symptom until you know why it is full
+
+Any bounded resource (connection pool, request threads, an executor) can read 100%
+for two different reasons: it is **too small** for the work, or each use **holds it
+too long** because the work done while holding it is slow. The gauges look the
+same either way: everything in use, requests waiting. Only the first is fixed by
+making the resource bigger. In the second, a bigger resource admits more of the
+same slow work at once and leaves latency where it was, or makes it worse.
+
+Before proposing a bigger resource, estimate how long each request holds it. By
+Little's law, slots in use ≈ throughput × hold time, so hold time ≈ slots in use ÷
+requests per second (for example 20 connections busy at 38 rps is about 0.5 s
+held per request). Compare that with what the work inside should cost:
+- **Held about as long as the work should take, and waiting piles up in front:** the
+  resource is too small. Enlarge it.
+- **Held far longer than the work should take:** the work is slow. Look at what runs
+  while it is held: queries per request and batch settings in `runtime_config`,
+  downstream calls, GC pauses, blocking code. Name that as the cause and change that.
+
+If you already enlarged the resource and the latency did not move, it was the
+symptom. Do not enlarge it again; find what is holding it.
 
 ## If none of the nine fits
 

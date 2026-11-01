@@ -322,3 +322,42 @@ def test_every_live_benchmark_sla_loads_and_is_protected(sla):
     loaded = Sla.load(sla)
     assert loaded.environment_kind != "production"
     assert path_is_protected(f"config/bench/{sla.name}", TargetProfile.named("spring-boot").protected_paths)
+
+
+# -- 46.6 ---------------------------------------------------------------------
+# DRAFTED 1 November 2026, APPROVED by the operator the same day: the model was shown the fault's
+# name through labels (replay snapshots' run_id, the bench SLA's name and file).
+
+
+def _fixture_snapshots():
+    return sorted((REPO / "fixtures").glob("*.json"))
+
+
+@pytest.mark.parametrize("path", _fixture_snapshots(), ids=lambda p: p.name)
+def test_a_replay_prompt_never_names_its_fixture(path):
+    """Every captured snapshot says run_id: fixture-<id>; the prompt must not."""
+    from crucible.perf.campaign import Sla
+    from crucible.perf.diagnosis import build_prompt
+
+    fixture = json.loads(path.read_text(encoding="utf-8"))
+    fixture_id = fixture["spec"]["id"] if isinstance(fixture.get("spec"), dict) else path.name.split(".")[0]
+    prompt = build_prompt(fixture["snapshot"], Sla.load(REPO / "config" / "slo.yaml").as_dict())
+    assert fixture_id not in prompt
+    assert "fixture-" not in prompt
+
+
+@pytest.mark.parametrize("sla", sorted((REPO / "config" / "bench").glob("slo-*.yaml")), ids=lambda p: p.name)
+def test_a_live_benchmark_prompt_never_names_its_fault(sla):
+    """The bench SLA's name and file were named after the fault; the run id too."""
+    from crucible.perf.campaign import Sla
+    from crucible.perf.diagnosis import build_prompt
+
+    loaded = Sla.load(sla)
+    snapshot = {"run_id": "bench46-cache_miss_severe-baseline", "load_summary": {"run_id": "x-gc_pressure"},
+                "hikaricp": {"pending_peak_connections": 3.0}}
+    prompt = build_prompt(snapshot, loaded.as_dict())
+    for label in (loaded.name, sla.stem, sla.name, "bench46", "cache_miss_severe", "gc_pressure"):
+        assert label not in prompt, label
+    # The targets and the evidence still reach the model.
+    assert loaded.endpoint in prompt and str(int(loaded.p99_ms)) in prompt
+    assert "pending_peak_connections" in prompt

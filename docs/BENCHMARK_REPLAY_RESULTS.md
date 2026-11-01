@@ -1,9 +1,54 @@
 # Replay benchmark — results
 
-## v3 results — 1 November 2026 (draft, not yet reviewed)
+## v4 results — 1 November 2026, the model blinded (Group 46.6)
+
+**Every earlier replay result in this document was graded with the fault's name in
+the prompt.** Each captured snapshot carries `run_id: fixture-perflab_<fault>`, and
+the whole snapshot was sent to the model. Found 1 November 2026; fixed by
+`blind_for_model` (no run id or SLA label reaches the model, assertion 46.6). v1-v3
+below are kept as they were recorded, and none of them is a valid measure of
+diagnosis.
+
+Raw evidence: [`docs/bench/replay-2026-11-01-blind.json`](bench/replay-2026-11-01-blind.json)
+(run on Box B as `results/replay-47.json`, code `13454e4`, same command, fixtures and
+model as v3: `crucible bench --tasks config/tasks/ --fixtures fixtures-46/ --skip-missing-fixtures`).
+This run also had the new SKILL.md section ("a full resource is a symptom"), so the two
+changes are not separated.
+
+| | v3 (name visible) | **v4 (blinded)** |
+|---|---|---|
+| Diagnosis correct (cases with a true cause, all classes) | 35 / 35 | **30 / 35** |
+| Task grade (all cases) | 37 / 38 | **31 / 38**: A 7/9, B 12/12, C 9/10, D 2/5, E 1/2 |
+| Errors / traps taken / refused fixtures | 0 / 0 / 0 | 0 / 0 / 0 |
+| Cost | $0.048 | $0.050 |
+
+What it got wrong:
+- **T8, T13 (`inefficient_query_severe`)**: named connection pool exhaustion and raised
+  the pool, the same mistake as the live run. The snapshot holds the evidence that
+  separates them (about 0.47 s held per request against 0.05 s on `pool_starved`), and
+  the model did not use it.
+- **T9 (`cache_miss_severe`)**: declined. It cannot see that the cache is off: every
+  setting in these snapshots reads `******` (see below).
+- **T15 (`lock_contention`)**, **T16 (`payload`)**: proposed a change where none
+  applies (downstream timeout; heap).
+- **T6, T17 (`near_sla`)**: changed the pool on a service already inside its SLA.
+
+**Known limitations of this run.**
+- **Settings are masked in every snapshot.** Box A's `perftest_sandbox` branch was
+  created before perf-lab `8af82d6` (25 October), which shows Crucible's tunables in
+  `/actuator/env`, and was never brought up to date. So `runtime_config` reads
+  `******` in every fixture and live run to date.
+- **Endpoint names stay visible** (`/api/churn`, `/api/orders`): on PerfLab several
+  are named after the fault they host.
+- One replay pass, not three repeats. Eight trap fixtures were never tempted (an
+  untested zero).
+
+---
+
+## v3 results — 1 November 2026 (superseded by v4: graded with the fault's name in the prompt)
 
 After the GC heap lever (Group 46), with the changed fixtures re-captured. Output:
-Box B `~/crucible-draft/results/replay-46.json`; command: `crucible bench --tasks config/tasks/
+Box B `~/crucible-draft/results/replay-46.json` (not kept in docs/bench: it is not a valid measure); command: `crucible bench --tasks config/tasks/
 --fixtures fixtures-46/ --out results/replay-46.json --skip-missing-fixtures`.
 
 ### Replay, after re-capturing the changed fixtures
@@ -92,8 +137,8 @@ It will not be overwritten.
 provider (Actuator).** That is a narrower benchmark than `EVALUATION.md` describes,
 and every number below is stated against that narrower set.
 
-Raw evidence: [`docs/bench/replay-2026-09-26-r1.json`](bench/replay-2026-09-26-r1.json),
-[`-r2`](bench/replay-2026-09-26-r2.json), [`-r3`](bench/replay-2026-09-26-r3.json).
+Raw evidence: [`docs/bench/2026-09-26/replay-2026-09-26-r1.json`](bench/2026-09-26/replay-2026-09-26-r1.json),
+[`-r2`](bench/2026-09-26/replay-2026-09-26-r2.json), [`-r3`](bench/2026-09-26/replay-2026-09-26-r3.json).
 Grades come from `crucible.perf.scorer.score_replay`, which calls no model
 (DESIGN.md §4.6). Changing a grading rule rescores these files; it does not re-run
 them.
@@ -114,7 +159,7 @@ them.
 
 ```
 uv run crucible bench --tasks <T1,T3,T4> --fixtures fixtures \
-    --provider gemini --model gemini-3.5-flash-lite --out docs/bench/replay-2026-09-26-rN.json
+    --provider gemini --model gemini-3.5-flash-lite --out docs/bench/2026-09-26/replay-2026-09-26-rN.json
 ```
 
 ### 1.1 The full task set was refused, and why

@@ -5000,6 +5000,41 @@ matches the profile's protected paths (`config/bench/**`, added).
 **REVIEWED AND APPROVED** by the operator, 1 November 2026: "yes, would have been the
 goals I would have set."
 
+### 46.6 Nothing that labels the run reaches the model
+
+*Drafted 1 November 2026 by Claude Code. **REVIEWED AND APPROVED** by the operator, 1 November 2026 ("I approve 46.6"). Tests:
+`test_a_replay_prompt_never_names_its_fixture` (one per captured snapshot) and
+`test_a_live_benchmark_prompt_never_names_its_fault` (one per bench SLA), in
+`tests/test_live_ground_truth.py`. Code: `blind_for_model` in
+`crucible/perf/diagnosis.py`, applied inside `build_prompt`.*
+
+**What it checks.** The diagnosis prompt carries no `run_id` (at any depth in the
+snapshot) and none of the SLA's labels: `name`, `source_path`, `environment_name`,
+`scenarios`, `hooks`. The endpoint, the targets and every measurement still reach
+the model.
+
+**Why it exists.** Found 1 November 2026, after the overnight runs. Every replay
+snapshot carries `run_id: fixture-perflab_<fault>`, and the whole snapshot was sent
+to the model. So every replay result to date was graded with the answer in the
+prompt. The overnight live runs had their SLA named after the fault
+(`bench-cache-miss-severe`), their SLA file and run id too, and two replies quoted
+it. 46.2 kept the *recorded* cause out of the prompt; it did not catch a *name* that
+carries the cause.
+
+**For review.**
+- Endpoint names stay visible (`/api/churn`, `/api/orders`), because the agent needs
+  to know what is slow, and real services name endpoints after what they do. On
+  PerfLab, several are named after the fault they host. That is a benchmark
+  limitation, now stated in the results docs, not something the prompt can hide.
+- The re-run live benchmark gives each campaign an empty journal. A later run in the
+  overnight series could read earlier runs' findings (for example "gc_pressure:
+  heap=1024 -> IMPROVED"), which is the journal working as designed but contaminates
+  a benchmark.
+- `test_a_class_with_no_task_is_not_measured_rather_than_zero` (approved) is pinned
+  to the 26 September replay it was written against (`docs/bench/2026-09-26/`), since
+  the newer replay grades every class. Approved by the operator, 1 November 2026
+  ("if we need to correct this, do so").
+
 ---
 
 # GROUP 47 — Library and Overview name the service, not the runtime

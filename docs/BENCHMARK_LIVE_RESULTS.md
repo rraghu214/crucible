@@ -2,6 +2,12 @@
 
 ## Group 46 live benchmark — 1 November 2026 (Group 46 approved by the operator, 1 November 2026)
 
+**Not a valid measure of diagnosis (found 1 November 2026).** These runs' SLA was named
+after the fault (`bench-cache-miss-severe`), as were the SLA file and the run id, and
+the model saw all three; two replies quote the name. Each run could also read the
+earlier runs' findings in the journal. Re-run blinded (Group 46.6), with neutral ids
+and an empty journal per run: results to follow. Kept as recorded.
+
 Seven Fully Automated campaigns, each started from a fixture with `--fixture`, so the
 manifest records the true cause and the diagnosis is scored. Harness: draft branch
 `capstone/live-quadrants`. Manifests: Box B `~/crucible/results/bench46-*.json` (copied from the draft worktree on 1 November;
