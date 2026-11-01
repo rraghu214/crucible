@@ -4862,8 +4862,8 @@ and the static Playbooks and ceiling cards are gone.
 
 # GROUP 46 — Live runs record their true cause; GC gets a real lever
 
-*Drafted 1 November 2026 by Claude Code, while the operator was away. **NOT YET
-REVIEWED** by the operator. On the draft branch `capstone/live-quadrants` only.
+*Drafted 1 November 2026 by Claude Code, while the operator was away. **REVIEWED AND
+APPROVED** by the operator, 1 November 2026 (except the six `jvm.memory.max` tests, see 46.4).
 `tests/test_live_ground_truth.py` (24). Code: `fixture_ground_truth` and
 `build_campaign(fixture=)` in `crucible/perf/commands.py`; `ground_truth` on
 `Campaign` / `CampaignResult`; `manifest_ground_truth` in `crucible/perf/scorer.py`;
@@ -4967,6 +4967,26 @@ whatever the model did. Now both say "raise the heap".
 - T2 and T12 were changed to expect the heap proposal. The traps changed with them.
   Confirm this is the goalpost you meant to move.
 
+**Operator decisions, 1 November 2026.**
+- *Where the key lives:* "even if it is in application.properties or groovy file, it
+  should be able to edit it if it has the permissions to edit." The heap stays in
+  `application.properties` for now. Editing a property in any permitted file is
+  recorded in `docs/ref/DEBT.md` as the next step for the applicator.
+- *`jvm.memory.max`:* yes, refuse to measure until it matches. Built: the profile
+  declares `in_force` on the heap property (metric `jvm.memory.max`, tag `area:heap`,
+  MB to bytes, 5% tolerance). After the commit check, `verify_in_force_metrics` reads
+  the metric from Actuator. A mismatch or an unreadable metric stops the experiment
+  as NOT_MEASURED, before any measurement. Measured on Box A: `-Xmx1024m` reads
+  989.9 MB (3.3% under, because Serial GC does not count one survivor space), and the
+  JVM's default heap reads 1498 MB. The overnight GC manifests did not carry this
+  proof: their snapshots record heap *used*, not heap max, so the profile comment
+  had overstated it.
+- *T2 and T12:* approved.
+- *Tests:* all of Group 46's tests are approved. The six added for the
+  `jvm.memory.max` check (`TestTheHeapMustBeInForceBeforeMeasuring` (5) and
+  `test_a_change_whose_target_metric_does_not_match_is_never_measured` in
+  `tests/test_perf_campaign.py`) are drafted, for review.
+
 ### 46.5 Each live benchmark SLA is protected
 
 **What it checks.** Every `config/bench/slo-*.yaml` loads, is not production, and
@@ -4984,8 +5004,8 @@ goals I would have set."
 
 # GROUP 47 — Library and Overview name the service, not the runtime
 
-*Drafted 1 November 2026 by Claude Code, while the operator was away. **NOT YET
-REVIEWED** by the operator. Draft branch only. `tests/test_ui_services.py` (4).
+*Drafted 1 November 2026 by Claude Code, while the operator was away. **REVIEWED AND
+APPROVED** by the operator, 1 November 2026. Draft branch only. `tests/test_ui_services.py` (4).
 Code: `TargetProfile.service`; `service:` in both profiles; `/v1/perf/services`;
 `loadLibrary` / `loadOverview` in the dashboard.*
 

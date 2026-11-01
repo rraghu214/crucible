@@ -135,3 +135,17 @@ work. Fix only when touching the file for another reason.
   never reach a hook. Isolation from Crucible's *files* is a documented setup
   step (`docs/HOOKS.md`) and is not yet wired into Crucible (e.g. `sudo -u
   crucible-hooks`).
+
+## Operator direction, 1 November 2026 (Group 46 review)
+
+- **The applicator edits one file, in `.properties` format** (46.4). Operator:
+  "even if it is in application.properties or groovy file, it should be able to
+  edit it if it has the permissions to edit." Today `profile.yaml` names one
+  `config_file` and every allowed property is written into it as `key=value`. A
+  property that lives elsewhere (a `jvm.options` file, a `build.gradle` /
+  Groovy file, YAML) cannot be a lever yet. The heap lever sits in
+  `application.properties`, read by Box A's deploy hook, as a workaround that keeps
+  one file per experiment commit. The fix: each allowed property names its file
+  and format, the guard checks the file against `protected_paths`, and the
+  applicator stages and reverts every file it touched. Each experiment still
+  commits only what it changed (§19.1b). Not built before submission.

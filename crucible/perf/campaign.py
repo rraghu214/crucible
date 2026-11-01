@@ -2168,6 +2168,22 @@ class Campaign:
             manifest.notes.append(
                 f"property read-back (§19.6 rung 2): {prop_detail}"
             )
+            # Rung 1, for a change the application never reads itself (the heap is
+            # a JVM flag): the target's own metric must show it, or nothing is
+            # measured (operator decision, 1 November 2026).
+            from .deploy import verify_in_force_metrics
+            metric_ok, metric_detail = verify_in_force_metrics(
+                apply_result.changes, self.profile.allowed_properties, self.sla.target_base_url
+            )
+            if metric_ok is not None:
+                deploy_result.metric_verified = metric_ok
+                deploy_result.metric_reason = metric_detail
+                manifest.deploy = deploy_result.as_dict()
+                manifest.notes.append(f"target metric (§19.6 rung 1): {metric_detail}")
+                if not metric_ok:
+                    manifest.verdict = NOT_MEASURED
+                    manifest.verdict_reason = metric_detail
+                    raise CampaignAborted(f"experiment {manifest.experiment}: {metric_detail}")
         return True
 
     def _keep_or_revert(

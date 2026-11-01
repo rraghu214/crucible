@@ -1,6 +1,6 @@
 """Live runs record their true cause; GC gets a real lever. Group 46.
 
-DRAFTED by Claude Code, 1 November 2026, while the operator was away. NOT YET REVIEWED by the operator.
+DRAFTED by Claude Code, 1 November 2026, while the operator was away. REVIEWED AND APPROVED by the operator, 1 November 2026, except TestTheHeapMustBeInForceBeforeMeasuring (drafted the same day, for review).
 See `docs/CRUCIBLE_TEST_ASSERTIONS.md` GROUP 46 for the questions to check.
 
 Operator decisions, 1 November 2026: live runs must record the true cause as a
@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pytest
 
-from crucible.perf.applicator import path_is_protected
+from crucible.perf.applicator import Change, path_is_protected
 from crucible.perf.campaign import CampaignResult
 from crucible.perf.commands import fixture_ground_truth, fixture_state_mismatches
 from crucible.perf.profile import TargetProfile
@@ -245,6 +245,71 @@ class TestTheHeapIsARealLever:
 
     def test_the_skill_names_the_lever(self):
         assert HEAP in (REPO / "config" / "profiles" / "spring-boot.SKILL.md").read_text(encoding="utf-8")
+
+
+def _fake_heap_metric(max_bytes: float | None):
+    """Answers /actuator/metrics/jvm.memory.max?tag=area:heap; 404 when ``None``."""
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from threading import Thread
+
+    class _Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_):
+            pass
+
+        def do_GET(self):  # noqa: N802
+            if max_bytes is None or self.path != "/actuator/metrics/jvm.memory.max?tag=area:heap":
+                self.send_response(404)
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(json.dumps({"measurements": [{"statistic": "VALUE", "value": max_bytes}]}).encode())
+
+    srv = HTTPServer(("127.0.0.1", 0), _Handler)
+    Thread(target=srv.serve_forever, daemon=True).start()
+    return srv, f"http://127.0.0.1:{srv.server_address[1]}"
+
+
+class TestTheHeapMustBeInForceBeforeMeasuring:
+    """Operator, 1 November 2026 (46.4): /actuator/env shows only that the file landed;
+    the JVM's own heap ceiling must match, or nothing is measured."""
+
+    MB = 1048576
+
+    def _check(self, max_bytes, value=1024):
+        from crucible.perf.deploy import verify_in_force_metrics
+
+        srv, url = _fake_heap_metric(max_bytes)
+        try:
+            return verify_in_force_metrics([Change(prop=HEAP, value=value)],
+                                           TargetProfile.named("spring-boot").allowed_properties, url)
+        finally:
+            srv.shutdown()
+
+    def test_the_profile_declares_the_metric(self):
+        spec = TargetProfile.named("spring-boot").allowed_properties[HEAP].in_force
+        assert (spec.metric, spec.tag, spec.scale, spec.tolerance_pct) == ("jvm.memory.max", "area:heap", self.MB, 5)
+
+    def test_the_serial_gc_reading_counts_as_in_force(self):
+        """Serial GC leaves one survivor space out of the heap total: ~3.3% under -Xmx."""
+        ok, detail = self._check(990 * self.MB)
+        assert ok is True and "in force" in detail
+
+    def test_the_old_heap_still_running_is_refused(self):
+        """The default ~1.5 GB heap: the deploy hook did not pass the new -Xmx."""
+        ok, detail = self._check(1498 * self.MB)
+        assert ok is False and "expected 1024" in detail
+
+    def test_an_unreadable_metric_is_not_in_force(self):
+        ok, detail = self._check(None)
+        assert ok is False and "unreadable" in detail
+
+    def test_a_change_with_no_declared_metric_is_not_checked(self):
+        from crucible.perf.deploy import verify_in_force_metrics
+
+        assert verify_in_force_metrics([Change(prop=POOL, value=20)],
+                                       TargetProfile.named("spring-boot").allowed_properties,
+                                       "http://127.0.0.1:9") == (None, "")
 
 
 # -- 46.5 ---------------------------------------------------------------------

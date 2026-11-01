@@ -605,6 +605,45 @@ class TestNoMeasurementBeforeTheCommitIsProven:
         # The second measurement must never have happened.
         assert result.experiments[0].after == {}
 
+    def test_a_change_whose_target_metric_does_not_match_is_never_measured(self, sla, workspace):
+        """Group 46.4, operator 1 November 2026. The commit is verified, but the
+        target's own metric still shows the old value, so nothing is measured."""
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+        from threading import Thread
+
+        class _Handler(BaseHTTPRequestHandler):
+            def log_message(self, *_):
+                pass
+
+            def do_GET(self):  # noqa: N802
+                self.send_response(200)
+                self.end_headers()
+                body = ({"measurements": [{"value": 2.0}]} if self.path.startswith("/actuator/metrics/")
+                        else {"property": {"value": "20"}})
+                self.wfile.write(json.dumps(body).encode())
+
+        srv = HTTPServer(("127.0.0.1", 0), _Handler)
+        Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            profile = TargetProfile.from_mapping({
+                "name": "spring-boot", "runtime": "jvm", "cause_families": ["connection_pool_exhaustion"],
+                "config_file": "application.properties", "deploy": {"branch": "perftest_sandbox"},
+                "allowed_properties": {"spring.datasource.hikari.maximum-pool-size": {
+                    "type": "int", "min": 1, "max": 100,
+                    "in_force": {"metric": "hikaricp.connections.max"}}},
+            })
+            from dataclasses import replace
+
+            sla = replace(sla, target_base_url=f"http://127.0.0.1:{srv.server_address[1]}")
+            deployer = _FakeDeployer(results=[DeployResult(commit="abc", deployed=True, verified=True)])
+            result = asyncio.run(_campaign(profile, sla, workspace, p99s=[300.0, 58.0], deployer=deployer).run())
+        finally:
+            srv.shutdown()
+
+        assert "not in force on the target" in result.stopped_reason
+        assert result.experiments[0].verdict == NOT_MEASURED
+        assert result.experiments[0].after == {}
+
     def test_a_verified_deploy_records_the_commit_on_the_experiment(
         self, profile, sla, workspace
     ):

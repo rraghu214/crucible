@@ -1,6 +1,6 @@
 """Library and Overview name the service, not the runtime adapter. Group 47.
 
-DRAFTED by Claude Code, 1 November 2026, while the operator was away. NOT YET REVIEWED by the operator.
+DRAFTED by Claude Code, 1 November 2026, while the operator was away. REVIEWED AND APPROVED by the operator, 1 November 2026.
 See `docs/CRUCIBLE_TEST_ASSERTIONS.md` GROUP 47 for the questions to check.
 
 Operator, 1 November 2026: "include the service name properly. perf-lab, as well
