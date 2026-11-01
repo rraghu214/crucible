@@ -92,8 +92,8 @@ It will not be overwritten.
 provider (Actuator).** That is a narrower benchmark than `EVALUATION.md` describes,
 and every number below is stated against that narrower set.
 
-Raw evidence: [`docs/bench/replay-2026-09-26-r1.json`](bench/replay-2026-09-26-r1.json),
-[`-r2`](bench/replay-2026-09-26-r2.json), [`-r3`](bench/replay-2026-09-26-r3.json).
+Raw evidence: [`docs/bench/2026-09-26/replay-2026-09-26-r1.json`](bench/2026-09-26/replay-2026-09-26-r1.json),
+[`-r2`](bench/2026-09-26/replay-2026-09-26-r2.json), [`-r3`](bench/2026-09-26/replay-2026-09-26-r3.json).
 Grades come from `crucible.perf.scorer.score_replay`, which calls no model
 (DESIGN.md §4.6). Changing a grading rule rescores these files; it does not re-run
 them.
@@ -114,7 +114,7 @@ them.
 
 ```
 uv run crucible bench --tasks <T1,T3,T4> --fixtures fixtures \
-    --provider gemini --model gemini-3.5-flash-lite --out docs/bench/replay-2026-09-26-rN.json
+    --provider gemini --model gemini-3.5-flash-lite --out docs/bench/2026-09-26/replay-2026-09-26-rN.json
 ```
 
 ### 1.1 The full task set was refused, and why
