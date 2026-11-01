@@ -961,7 +961,7 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
     <div id="active-manual-banner" style="display:none;margin-top:8px;padding:10px 14px;border-radius:var(--rs);background:var(--warn-d);color:var(--warn);font-size:12px;font-weight:600;border:1px solid var(--warn);"></div>
     <!-- Job log -->
     <div id="active-log-card" class="card" style="display:none;margin-top:8px;">
-      <div class="card-h"><div class="card-title" id="active-log-title">Campaign log</div><button class="btn btn-ghost btn-sm" onclick="pollActiveCampaign()">↺</button></div>
+      <div class="card-h"><div class="card-title" id="active-log-title">Campaign log</div><button class="btn btn-ghost btn-sm" title="Refresh now (the page also refreshes every 5 s)" aria-label="Refresh the run and its log now" onclick="pollActiveCampaign()">↺</button></div>
       <pre id="active-log-pre" style="font-family:var(--f-mono);font-size:10px;line-height:1.4;overflow-x:auto;white-space:pre-wrap;max-height:200px;overflow-y:auto;background:var(--s2);padding:10px;border-radius:var(--rs);color:var(--mid);margin-top:6px;"></pre>
     </div>
   </div>
@@ -2592,8 +2592,10 @@ async function renderLiveActive(data){
     logCard.style.display='';
     if(logTitle) logTitle.textContent='Job '+data.job.id;
     try{
-      const lr=await fetch('/v1/perf/jobs/'+data.job.id+'/output?tail=80');
-      if(lr.ok){const ld=await lr.json();logPre.textContent=(ld.lines||[]).join('\n');logPre.scrollTop=logPre.scrollHeight;}
+      // The endpoint returns plain text, as the Jobs page reads it. Parsed as JSON
+      // it threw, and the card stayed empty for every run (trial, 2 November 2026, Group 52).
+      const lr=await fetch('/v1/perf/jobs/'+data.job.id+'/output');
+      if(lr.ok){logPre.textContent=(await lr.text()).split('\n').slice(-80).join('\n');logPre.scrollTop=logPre.scrollHeight;}
     }catch(e){}
   }
 
