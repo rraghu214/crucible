@@ -168,3 +168,22 @@ work. Fix only when touching the file for another reason.
   `sqlite3.connect` with "unable to open database file". The run-2 script now creates it.
 - **The Actuator/Prometheus audit lives outside the repo** (`audit_metrics.py`). Candidate for a
   `crucible preflight` check (Group 48 review question).
+
+## Operator direction, 2 November 2026 (trial step 9)
+
+- **The workspace is box configuration, not part of the target.** A dashboard launch finds
+  the target's checkout through `CRUCIBLE_WORKSPACE` in Box B's `.env`
+  (`/home/ubuntu/perf-lab`), added on 2 November when a launch with no workspace fell back
+  to `~/crucible` and was refused as dirty. Operator: one app's path in box-wide
+  configuration "limits my ability to expand this product as a generic harness for testing
+  any apps". Interim, agreed: `~/perf-lab` stays a clean checkout of the target's GitHub
+  repo and the line stays until the fix lands. The fix: the target profile declares its
+  repo (and the deploy remote's URL, no credentials, §19.8), and Crucible keeps its own
+  checkout per service, cloned on first use and fetched before each campaign, on the
+  sandbox branch created from `base_branch`. The clean-workspace check stays. DESIGN.md
+  §19.1b changes with it. Then remove the `.env` line. Low priority.
+- **Kept changes never reach the base branch.** A completed campaign leaves its kept
+  changes on `perftest_sandbox` only. Operator: after every completed campaign, Crucible
+  opens a PR from the sandbox branch to the base branch, so the owner decides whether the
+  change becomes the application's own. The PR is the human gate (principle 4); Crucible
+  never merges it, and never writes the base branch (§19.1a). Low priority.

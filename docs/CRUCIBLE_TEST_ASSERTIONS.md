@@ -5264,6 +5264,37 @@ Escaped again, the operator saw `&lt;=`.
 
 ---
 
+# GROUP 51 — A refused series ends as refused, never "Done"
+
+*Drafted 2 November 2026 by Claude Code. **REVIEWED AND APPROVED** by the operator,
+2 November 2026 ("Group 51 was approved"); the review question on paused series stood as
+drafted. Branch `capstone/series-refusal-exit`. Test:
+`TestRefusals.test_a_scenario_refused_at_start_ends_the_job_as_refused` in
+`tests/test_perf_series.py`. Code: `_continue_series` in `crucible/perf/commands.py`.*
+
+Found in the trial, 2 November 2026, step 9. Launch from the dashboard ran against
+`~/crucible` (Box B's `.env` had no `CRUCIBLE_WORKSPACE`), the clean-workspace check
+refused the scenario, and the job exited 0. The Jobs page showed a green "✓ Done", and
+nothing else said the run never started. The workspace was fixed in Box B's `.env`;
+this fixes what the operator was told.
+
+### 51.1 A scenario refused at the start ends the job as REFUSED
+
+**What it checks.** When a scenario cannot start (the workspace is dirty, or the SLA no
+longer loads), `crucible run --all-scenarios` returns `REFUSED`, so the Jobs page shows
+"✗ Failed". A series that completed, paused or reached a cap still returns `OK`: those
+are honest ends with a report.
+
+**Why it exists.** Principle 1: a run that did not happen must not look like one that
+did.
+
+**For review.**
+- A paused or capped series stays `OK`, so it shows "Done". Should a pause show
+  differently from a completion on the Jobs page, or is the series status in the log
+  enough?
+
+---
+
 # Review decisions — week 1
 
 Raised by Claude Code while implementing, decided by the operator on 10 September 2026.

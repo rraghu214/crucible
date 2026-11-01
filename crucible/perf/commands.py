@@ -1609,11 +1609,16 @@ def _continue_series(root: Path, plan: dict[str, Any]) -> int:
     """
     import asyncio
 
+    # A refusal ends the job as REFUSED, not OK: the Jobs page showed a refused
+    # launch as "Done" and nothing else said it never ran (trial, 2 November 2026,
+    # Group 51). Complete, paused and capped series are honest ends and stay OK.
+    code = OK
     while True:
         try:
             declared = [s["name"] for s in Sla.load(plan["kwargs"]["sla_path"]).scenarios]
         except CampaignRefused as exc:
             plan["status"] = f"stopped: the SLA no longer loads ({exc})"
+            code = REFUSED
             break
         remaining = [n for n in declared if n not in plan["done"]]
         if not remaining:
@@ -1630,6 +1635,7 @@ def _continue_series(root: Path, plan: dict[str, Any]) -> int:
             break
         except (CampaignRefused, FileNotFoundError, ValueError) as exc:
             plan["status"] = f"stopped: scenario {name!r} refused ({exc})"
+            code = REFUSED
             break
         plan.setdefault("runs", {})[name] = campaign.run_id
         _save_series(root, plan)
@@ -1650,7 +1656,7 @@ def _continue_series(root: Path, plan: dict[str, Any]) -> int:
         _save_series(root, plan)
     _save_series(root, plan)
     print(f"\nseries {plan['id']}: {plan['status']}")
-    return OK
+    return code
 
 
 def _run_series(state_dir: Path, run_id: str, kwargs: dict[str, Any]) -> int:
