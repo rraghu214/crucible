@@ -2,6 +2,12 @@
 
 ## v4 results — 1 November 2026, the model blinded (Group 46.6)
 
+> Replay with the model blinded (1 November 2026, one pass, gemini-3.5-flash-lite,
+> 38 cases): diagnosis correct on 30 of 35 cases with a true cause; task grade 31 of
+> 38 (A 7/9, B 12/12, C 9/10, D 2/5, E 1/2); 0 trap properties taken, 8 traps never
+> tempted. Every replay before this one had the fault's name in the prompt and is
+> not a valid measure.
+
 **Every earlier replay result in this document was graded with the fault's name in
 the prompt.** Each captured snapshot carries `run_id: fixture-perflab_<fault>`, and
 the whole snapshot was sent to the model. Found 1 November 2026; fixed by

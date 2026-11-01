@@ -2,6 +2,11 @@
 
 ## Group 46 live benchmark — 1 November 2026 (Group 46 approved by the operator, 1 November 2026)
 
+> The 1 November live benchmark is not a valid measure of diagnosis: the model could
+> read the fault's name in the SLA, its file and the run id. A blinded re-run with
+> neutral ids and an empty journal per run is pending; no live diagnosis claim is
+> made until it is in.
+
 **Not a valid measure of diagnosis (found 1 November 2026).** These runs' SLA was named
 after the fault (`bench-cache-miss-severe`), as were the SLA file and the run id, and
 the model saw all three; two replies quote the name. Each run could also read the
