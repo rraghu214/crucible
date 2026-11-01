@@ -319,6 +319,29 @@ def _active_runs(ctx: PerfContext) -> list[dict[str, Any]]:
     return runs
 
 
+def _paused_runs(ctx: PerfContext) -> list[dict[str, Any]]:
+    """Runs waiting for `crucible resume`: a paused campaign, or a series paused between
+    scenarios. A paused run releases its branch lock, so Active showed "No campaign
+    running" and offered no way back (trial, 2 November 2026, Group 53)."""
+    out = []
+    for path in sorted((ctx.state / "pauses").glob("*.paused.json")):
+        run_id = path.name.removesuffix(".paused.json")
+        manifest = ctx.path(ctx.results_dir) / f"{run_id}.json"
+        try:
+            reason = json.loads(manifest.read_text(encoding="utf-8")).get("pause_reason", "")
+        except (OSError, ValueError):
+            reason = ""
+        out.append({"run_id": run_id, "reason": reason})
+    for path in sorted((ctx.state / "series").glob("*.json")):
+        try:
+            plan = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if str(plan.get("status", "")).startswith("paused:"):
+            out.append({"run_id": str(plan.get("id", path.stem)), "reason": plan["status"]})
+    return out
+
+
 def _knowledge_summary(ctx: PerfContext) -> str:
     # Listing makes no embed call, but the store must be opened with the corpus's
     # own embedder: any other one marks every vector stale and empties its index.
@@ -2120,7 +2143,8 @@ def _wizard_form(body: WizardBody, operator: str) -> Any:
                       restart_command=command, health_url=body.health_url, operator=operator,
                       provenance=body.provenance, spawn_rate=_spawn_rate(body),
                       scenarios=_declared_scenarios(body),
-                      hooks=None if body.hooks is None else body.hooks.as_mapping())
+                      hooks=None if body.hooks is None else body.hooks.as_mapping(),
+                      max_experiments=body.experiments)
 
 
 def _declared_scenarios(body: WizardBody) -> list[dict[str, Any]] | None:
@@ -2637,6 +2661,9 @@ class ResumeBody(BaseModel):
     sla: str = ""
     scenario: str = ""
     workspace: str = ""
+    #: A run paused by a cap resumes with a higher one (DESIGN.md 7); None keeps it.
+    cost_cap_usd: float | None = Field(default=None, gt=0)
+    wall_clock_cap_h: float | None = Field(default=None, gt=0)
 
 
 @router.post("/v1/perf/campaign/{run_id}/resume", dependencies=[Depends(require_control)])
@@ -2648,6 +2675,7 @@ async def perf_resume(run_id: str, body: ResumeBody, request: Request):
             run_id=run_id, state_dir=str(ctx.state),
             profile=body.profile, sla=body.sla,
             scenario=body.scenario, workspace=body.workspace,
+            cost_cap=body.cost_cap_usd, wall_clock_cap=body.wall_clock_cap_h,
         )
     except ActionError as exc:
         raise HTTPException(422, str(exc)) from exc
@@ -2695,7 +2723,8 @@ async def perf_active_campaign(request: Request):
         # surface the latest job that is still running so the UI can track it.
         # RUNNING is "running": comparing to "RUNNING" never matched (trial, 31 October).
         running_jobs = [j for j in list_jobs(ctx.state, limit=20) if j.status == RUNNING]
-        return {"active": False, "running_job": _job_dict(running_jobs[0]) if running_jobs else None}
+        return {"active": False, "running_job": _job_dict(running_jobs[0]) if running_jobs else None,
+                "paused": _paused_runs(ctx)}
 
     run = active[0]
     run_id = str(run.get("run_id", ""))

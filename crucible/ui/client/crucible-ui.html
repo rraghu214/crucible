@@ -971,6 +971,7 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
     <div class="card-title">No campaign running</div>
     <div style="font-size:12px;color:var(--mid);margin-top:6px;">Start one from <a href="#" onclick="go('new-test')">New Test Run</a>. While it runs, this screen shows its id, status, the change it is waiting for you to approve, and its live log. Measured numbers are in <a href="#" onclick="go('results')">Results</a> once it finishes.</div>
     <div id="active-running-job" style="font-size:12px;color:var(--lo);margin-top:6px;"></div>
+    <div id="active-paused" style="margin-top:10px;"></div>
   </div>
   <!-- The loop, as a reference. Only the approval step is ever highlighted, and only
        when the server reports a pending approval. -->
@@ -1576,6 +1577,20 @@ async function loadWizard(){
     _setVal('sla-p99',c.p99_ms);_setVal('sla-err',c.error_rate_pct);_setVal('sla-users',c.users);
     _setVal('sla-noise',c.noise_p99_spread_pct+'% (measured '+c.noise_measured_on+')');
     _setVal('goal-text','Keep '+c.endpoint+' p99 under '+c.p99_ms+' ms at '+c.users+' users');
+    // The saved scenarios, experiment count and request templates, not the page's built-in values (Group 53).
+    if(c.experiments) _setVal('wz-experiments',c.experiments);
+    const list=document.getElementById('scenarioList');
+    if(list&&(c.scenarios||[]).length){
+      list.replaceChildren();
+      c.scenarios.forEach(s=>list.appendChild(_scenarioRow(s.name,s.users,s.duration_s+'s',s.ramp_s+'s',s.mix)));
+      scenCount=c.scenarios.length;scenEdited=false;
+    }
+    const reqs=document.getElementById('reqList'),vars=document.getElementById('varList');
+    if(reqs&&vars&&(c.requests||[]).length){
+      reqs.replaceChildren();vars.replaceChildren();
+      c.requests.forEach(r=>addRequestRow(r.endpoint,r.method,r.query,r.body,r.weight,r.p99_ms));
+      Object.entries(c.data||{}).forEach(([n,m])=>addVarRow(n,m.file,m.column));
+    }
     await loadHooks();
     const hk=c.hooks||{};
     ['before_each','after_each','on_abort'].forEach(st=>_setVal('hook-'+st,hk[st]||''));
@@ -1734,7 +1749,8 @@ function clearToken(){
 async function apiPost(url,body){
   const res=await fetch(url,{method:'POST',headers:getAuthHeaders(),body:JSON.stringify(body)});
   if(!res.ok){
-    let msg;try{const d=await res.json();msg=d.detail||JSON.stringify(d);}catch(e){msg=res.statusText;}
+    // A validation error's detail is a list; shown raw it read "[object Object]" (Group 53).
+    let msg;try{const d=await res.json();msg=typeof d.detail==='string'?d.detail:JSON.stringify(d.detail||d);}catch(e){msg=res.statusText;}
     if(res.status===401||res.status===403) throw new Error('401: wrong or missing control token — set it in Settings');
     if(res.status===503) throw new Error('503: server has no CRUCIBLE_CONTROL_TOKEN configured');
     throw new Error('HTTP '+res.status+': '+msg);
@@ -1748,6 +1764,11 @@ let _activeRunId='';
 // Reject read an element that did not exist, so every decision went to
 // experiment 1 (trial, 31 October 2026).
 let _pendingExperiment=null;
+// The parked values the card shows. Approve sends them back, and the server
+// refuses any difference from what was parked (decide_resume): approval is bound
+// to what the operator saw. The page sent {approved:true} with no action, so
+// every dashboard decision failed with 422 (trial, 2 November 2026, Group 53).
+let _pendingParams={};
 function getActiveRunId(){return _activeRunId;}
 
 /* ── Approval ────────────────────────────────────────────────────────── */
@@ -1776,17 +1797,43 @@ async function doApprove(){
   const {runId,expNum}=t;
   addChatMsg('ai','Sending your approval for experiment '+escHtml(String(expNum))+'…');
   try{
-    await apiPost('/v1/perf/runs/'+runId+'/experiments/'+expNum+'/decision',{responder:'operator',approved:true});
+    await apiPost('/v1/perf/runs/'+runId+'/experiments/'+expNum+'/decision',{action:'approve',args:_pendingParams,responder:'operator'});
     addChatMsg('ai','Approval recorded — deploying to perftest_sandbox. Measurement starts once /actuator/env confirms the property is live.');
   }catch(e){
     addChatMsg('ai','⚠ Approval failed: '+e.message);
   }
 }
+// A paused run releases its lock, so it is listed here, not as the active run.
+// Resume is the CLI's `crucible resume`, with optional higher caps (Group 53).
+function _renderPaused(list){
+  const el=document.getElementById('active-paused');if(!el) return;
+  el.replaceChildren();
+  list.forEach(p=>{
+    const row=_el('div',{className:'card',style:'margin:6px 0;padding:10px;'});
+    row.appendChild(_el('div',{style:'font-size:13px;font-weight:600;',textContent:'Paused: '+p.run_id}));
+    row.appendChild(_el('div',{style:'font-size:12px;color:var(--mid);margin:4px 0 8px;',textContent:p.reason||'(no reason recorded)'}));
+    const cost=_el('input',{type:'number',min:'0',step:'0.01',placeholder:'new cost cap $ (blank keeps)',className:'form-input',style:'max-width:200px;margin-right:6px;'});
+    const wall=_el('input',{type:'number',min:'0',step:'0.1',placeholder:'new wall-clock cap h (blank keeps)',className:'form-input',style:'max-width:230px;margin-right:6px;'});
+    const btn=_el('button',{className:'btn btn-primary btn-sm',textContent:'▶ Resume'});
+    btn.onclick=()=>doResume(p.run_id,cost.value,wall.value);
+    row.appendChild(cost);row.appendChild(wall);row.appendChild(btn);
+    el.appendChild(row);
+  });
+}
+async function doResume(runId,cost,wall){
+  if(!confirm('Resume '+runId+' against '+(_wzVal('wz-target')||'the target')+'? It drives load and may deploy changes.')) return;
+  const body={};if(cost) body.cost_cap_usd=Number(cost);if(wall) body.wall_clock_cap_h=Number(wall);
+  try{
+    const job=await apiPost('/v1/perf/campaign/'+encodeURIComponent(runId)+'/resume',body);
+    addChatMsg('ai','Resuming <code>'+escHtml(runId)+'</code> — job <code>'+escHtml(job.id)+'</code>.');
+    pollActiveCampaign();
+  }catch(e){addChatMsg('ai','⚠ Resume failed: '+escHtml(e.message));}
+}
 async function doReject(){
   const t=await _decisionTarget();if(!t) return;
   const {runId,expNum}=t;
   try{
-    await apiPost('/v1/perf/runs/'+runId+'/experiments/'+expNum+'/decision',{responder:'operator',approved:false});
+    await apiPost('/v1/perf/runs/'+runId+'/experiments/'+expNum+'/decision',{action:'reject',responder:'operator'});
     addChatMsg('ai','Rejected. I\'ll keep the baseline and look for other hypotheses.');
   }catch(e){
     addChatMsg('ai','Rejected — server: '+e.message);
@@ -2530,6 +2577,7 @@ async function renderLiveActive(data){
     if(empty) empty.style.display='';
     const rj=document.getElementById('active-running-job');
     if(rj) rj.textContent=data.running_job?'A job is running: '+data.running_job.label+' (see Jobs).':'';
+    _renderPaused(data.paused||[]);
     _pendingExperiment=null;
     if(loopApprove) loopApprove.classList.remove('waiting');
     return;
@@ -2561,8 +2609,10 @@ async function renderLiveActive(data){
     gate.style.display='';
     const ap=approvals[0];
     _pendingExperiment=ap.experiment!=null?ap.experiment:null;
+    _pendingParams=ap.params||{};
     const cli=document.getElementById('live-approve-cli');
-    if(cli) cli.textContent='crucible approve '+(data.run_id||'')+' '+(ap.experiment??'');
+    // The CLI's real arguments; "crucible approve <run> 1" failed if copied (Group 53).
+    if(cli) cli.textContent='crucible approve '+(data.run_id||'')+' --experiment '+(ap.experiment??'')+' --as <your name>';
     if(loopApprove) loopApprove.classList.add('waiting');
     const rows=Object.entries(ap.params||{}).map(([k,v])=>
       `<div style="display:flex;gap:10px;font-size:12px;margin:3px 0;">
@@ -2580,7 +2630,7 @@ async function renderLiveActive(data){
   } else if(gate){
     gate.style.display='none';
     if(body) body.innerHTML='';
-    _pendingExperiment=null;
+    _pendingExperiment=null;_pendingParams={};
     if(loopApprove) loopApprove.classList.remove('waiting');
   }
 

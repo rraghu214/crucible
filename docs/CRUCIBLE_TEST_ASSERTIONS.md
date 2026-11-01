@@ -5321,6 +5321,82 @@ page test fails.
 
 ---
 
+# GROUP 53 — What the page sends is what the server accepts
+
+*Drafted 2 November 2026 by Claude Code. **REVIEWED AND APPROVED** by the operator,
+2 November 2026, with the decisions below. Branch `capstone/ui-contract`. Tests:
+`tests/test_ui_contract.py` (20). Code: `doApprove`,
+`doReject`, `doResume`, `_renderPaused`, `apiPost`, `loadWizard` and the approval card in
+`crucible-ui.html`; `_paused_runs`, `ResumeBody`, `perf_resume` and the active-campaign
+reply in `perf_ui.py`; `resume_args` in `actions.py`; `current`/`_scenario_row` in
+`wizard.py`; the decision log line in `approval.py`; `Campaign._emit` and the new
+`measuring`, `deployed` and `in_force` events in `campaign.py`.*
+
+Trial, 2 November 2026, step 10. The dashboard's Approve failed with HTTP 422. The server's
+tests posted a hand-written, correct body; the page sent `{approved: true}`. Each side was
+tested alone, never together. The operator asked what else to expect. A comparison of every
+request the page makes (36) with its route found these, all fixed here.
+
+**How the tests work.** Each test takes the request body from the page's own source, fills it
+with what the server itself returned (e.g. the parked params from `/campaign/active`), and
+sends it to the real route. Verified: against the unfixed code, 13 of the 14 fail. The one
+that passes either way checks that the old `{approved: true}` body is refused.
+
+### 53.1 Approve and Reject, as the page builds them, are accepted and bound
+
+Approve sends `action: "approve"` and the parked params the card shows; the server still
+refuses any difference (`decide_resume`). Reject sends `action: "reject"`.
+
+### 53.2 The printed approve command is the real CLI
+
+The card and the run log printed `crucible approve <run> 1` and
+`crucible approve <run> --experiment 1`; the CLI also needs `--as`. Both now print
+`--experiment N --as <your name>`, and the tests parse each with the real CLI parser.
+
+### 53.3 A paused run can be resumed from the dashboard
+
+A paused run releases its branch lock, so Active said "No campaign running" and offered no
+way back, though DESIGN.md §15 requires UI parity and §7 says a cap pauses for a resume with
+a higher cap. Active now lists paused runs and series paused between scenarios, each with its
+reason, optional new caps and a Resume button that asks for confirmation (§15). The resume
+route takes the caps.
+
+### 53.4 The wizard opens with what is saved
+
+The page showed its built-in scenario rows, so a reload put `burst_100u` back after
+`burst_50u` was saved. `GET /v1/perf/wizard` now returns the saved scenarios (ramp from the
+spawn rate, mix as the wizard's own text, which round-trips through its parser) and request
+templates, and the page builds its rows from them.
+
+### 53.5 The run log keeps talking
+
+After "waiting for operator decision" the log said nothing until the end of the run. The
+gate now logs the decision when it is taken, and every campaign event prints one line
+(`[campaign] deployed: experiment=1, commit=…, verified=True`), with new events for
+measuring, deployed and in force.
+
+### 53.6 An error is shown as text
+
+A validation error's `detail` is a list; the page showed `[object Object]`.
+
+**Operator decisions on review, 2 November 2026.**
+- Browser tests (Playwright): not now; recorded in `docs/ref/DEBT.md` as low priority.
+- Resume asks for confirmation: yes, as drafted.
+- The experiment count is saved in `slo.yaml` as `plan.max_experiments` (1 to 50, refused
+  otherwise), read back by the wizard; a file without the block gets one on the next save.
+  `crucible run --experiments` still overrides it.
+- The log relays every field of every event, nested ones as compact JSON, nothing cut
+  short ("whatever details are available of the run, just relay it out"). Two events carry
+  more than before: `proposed` (what the approval card shows: change, reasoning, cause,
+  confidence, evidence) and `applying` (the commit and each change, from what was on disk).
+
+The tests added or changed for these answers (`test_the_experiment_count_is_saved_and_read_back`,
+`test_a_file_without_the_plan_block_gets_one`, `test_an_out_of_range_count_is_refused` ×4,
+`test_each_campaign_event_prints_one_line_with_every_field`) were approved the same day
+("Ok with the tests").
+
+---
+
 # Review decisions — week 1
 
 Raised by Claude Code while implementing, decided by the operator on 10 September 2026.

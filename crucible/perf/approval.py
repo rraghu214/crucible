@@ -233,7 +233,7 @@ class FileApprovalGate:
 
         print(
             f"\n[approval] experiment {request.experiment} proposal ready — "
-            f"run: crucible approve {self.run_id} --experiment {request.experiment}\n"
+            f"run: crucible approve {self.run_id} --experiment {request.experiment} --as <your name>\n"
             f"           written to: {path}\n"
             "[approval] waiting for operator decision …",
             flush=True,
@@ -243,7 +243,12 @@ class FileApprovalGate:
         started = now()
         while True:
             if decision_file.exists():
-                return self._read_decision(decision_file, request)
+                decision = self._read_decision(decision_file, request)
+                # The log went silent after "waiting" and never said the decision
+                # had been taken (trial, 2 November 2026, Group 53).
+                print(f"[approval] experiment {request.experiment}: {decision.state} by "
+                      f"{decision.responder}" + (f" ({decision.reason})" if decision.reason else ""), flush=True)
+                return decision
             if now() - started >= self.timeout_s:
                 raise ApprovalTimeout(
                     f"no decision on experiment {request.experiment} of run "

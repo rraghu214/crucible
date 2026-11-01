@@ -102,3 +102,12 @@ host_contention:
     Oracle Always Free shared vCPU. Measured 2-4% under load on 13 Sept and
     4-6% on 12 Sept; steal varies with co-tenants, so the threshold is set
     above the observed band rather than at the default 5%.
+
+# --- Plan (DESIGN.md 7) -----------------------------------------------------
+#
+# Plans control experiment count; scenarios control duration and repeats. The
+# count is a CAP, not a target: a campaign that meets its SLA stops there. Saved
+# here so the wizard opens with the count the operator last chose (operator
+# decision, 2 November 2026); `crucible run --experiments` still overrides it.
+plan:
+  max_experiments: 5
