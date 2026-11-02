@@ -211,8 +211,9 @@ Don't record a step you haven't seen pass.
   `perftest_sandbox` on GitHub changes nothing the run touches, and the audience would
   not see Crucible recreate it there.
 - **Deleting it on `perftest` would break the demo.** Crucible would recreate it from
-  `main`, and `main` has pool=10, not the broken pool=2. The baseline would show no
-  bottleneck to find.
+  the workspace's *local* `main`. GitHub's `main` has pool=2 since perf-lab PR #5
+  (3 November), but Box B's local `main` is 12 commits behind and still has pool=10,
+  and it lacks `/api/slow`. The baseline would show no bottleneck to find.
 
 To start clean, use the pool=2 reset in 0.3. Each run's experiment commits then
 sit on top of that reset commit.
@@ -231,7 +232,7 @@ dashed box in the README diagram."
 ```
 Pre-read : crucible-product-doc.html sent to trainer
 Box B    : crucible serve running on 8113 (healthz ok)
-Tunnel   : 9113 forwarded (no 8089: Locust is headless)
+Tunnel   : 9113 forwarded (Option A only; Option B uses Cloudflare URL — no tunnel needed)
 Box A    : pool_size = 2.0 confirmed
 GLC v5   : warmed (0.4)
 Knowledge: PERF_LAB_PRODUCT.md listed as indexed; knowledge-index/ non-empty (0.5)
@@ -269,7 +270,8 @@ Postgres, Redis, Prometheus and Jaeger. Box B, this machine, runs Crucible and
 the Locust load generator. GLC v5, hosted on Render, is the LLM gateway.
 Crucible never holds model keys; the gateway rotates them."
 
-**Show the loop:** the Crucible repo's README on GitHub → **Architecture**. "Solid
+**Show the loop:** the Crucible repo's README on GitHub → **How it works** →
+expand **"The full flow: what is built today, and what is planned (dashed)"**. "Solid
 boxes are what runs today. Dashed boxes are designed and not built, and I'd rather
 show you the line between them than blur it." Point at the two gates that matter:
 the operator's approval, and the target proving the commit before anything is measured.
@@ -409,7 +411,7 @@ Wizard step **3 Scenarios**. Click each **Test mode** card:
 - **Semi-Automated**: "You approve each diff. The approval is bound to the exact
   change: you can't approve one thing and deploy another."
 - **Fully Automated**: "No approval prompts, but the agent's authority is the
-  property list and bounds in `profile.yaml`. The guardrails make this safe, not
+  property list and bounds in `spring-boot.yaml`, the target profile. The guardrails make this safe, not
   trust in the model. It still stops after three misses in a row."
 - **Ceiling Probe**: "A different question: how much headroom do I have? Load
   rises in steps up to bounds I set, until the SLA is first missed. Only an
@@ -471,8 +473,8 @@ but `git push origin main` is refused; `git -c core.pager=id log` executes
 programs through git's config and is also refused. The list says which tools
 exist; the constraints inside each tool are separate."
 
-**Layer 2 — property bounds in `profile.yaml`.** "SKILL.md tells the model how
-this runtime fails. It goes into the prompt and grants nothing. `profile.yaml`
+**Layer 2 — property bounds in `config/profiles/spring-boot.yaml`.** "`spring-boot.SKILL.md` tells the model how
+this runtime fails. It goes into the prompt and grants nothing. `spring-boot.yaml`, the target profile,
 grants authority: the allowed properties and their bounds. A SKILL.md saying
 'raise the pool to 10,000' has zero effect — that number fails the guard before
 it reaches the target. Session 17's rule, stated three times in the PDF: a skill
@@ -554,7 +556,7 @@ just the run id — the full outcome is in the Findings card below it."
 Before/After chart: "Two measured windows, identical load. The only difference
 is the pool size."
 
-Trials: "The agent predicted 140 ms. The prediction is tracked as calibration,
+Trials: "The agent predicted [read off the screen]. The prediction is tracked as calibration,
 but the verdict uses only the measurement."
 
 **The stores behind this run (one line each):**
@@ -613,15 +615,18 @@ restarts. In Jenkins or GitHub Actions, the same push would trigger the pipeline
 
 Live AI ON. Type, with a **real run id** from 0.6 (name the run: the chat cannot
 tell which one you mean from the screen alone):
-`Tell me about <advisory-run-id>: what did you propose, why, and was anything measured?`
+`Tell me about run-1793613354320-fully_auto_burst_100u: what did you propose, why, and was anything measured?`
+*(The Advisory run. Its id says fully_auto because of the scenario name it was launched with.)*
 
-→ The answer names the run, the cause, the change (pool size to 50) and the evidence
+→ The answer names the run, the cause, the change (pool size 2 → 20) and the evidence
 (93 pending connections, acquire time about 2.2 s), says nothing was applied or
 measured, and calls the predicted p99 a prediction. (That Advisory run has one
 proposal, so "why #1 above #2" has no answer: do not ask it.)
 
-Then: `Why was experiment 1 kept in <semi-auto-run-id>?`
-→ It quotes the measured before → after (2500 → 69 ms), the run's own SLA (120 ms) and
+Then: `Why was experiment 1 kept in run-1793610533986-burst_100u?`
+*(The 2 November Semi-Automated run, or use the id of the run you just recorded.)*
+→ It quotes the measured before → after (2500 → 68 ms, pool → 50), the run's own SLA
+(150 ms, raised mid-run from 120 ms) and
 the verdict reason, and its **Sources** line names the run manifest
 (`results/<run-id>.json › run manifest`), not a document.
 
@@ -667,84 +672,27 @@ below comes from the files on disk (counted 3 November 2026)."
 | **Snapshot** | One fixture measured under real load and frozen: 2 min warmup discarded, 5 min measured, read through one metrics provider | **23** snapshots: 19 Actuator, 2 PromQL, 2 Datadog (`fixtures/`) | Crucible |
 | **Replay** | The model diagnoses a stored snapshot. No load, no target: about 2 seconds and a fraction of a cent per case | **40** cases: 26 task–fixture pairs, each asked through every provider view of its fixture. 37 have a true cause; **31 correct** | Crucible |
 
-And beside replay, the part replay cannot do: **live** — the whole loop on the real
-target. **6** campaigns, **8** experiments: 7 CORRECT, 1 LUCKY.
+Plus **live**: the whole loop on the real target. **6** campaigns, **8** experiments.
 
-"Task is Session 18's word. Fixture, snapshot and replay are Crucible's. S18's
-'fixture' means visible test cases an agent could memorise, a different thing."
+**Point at the 2×2 grid** (Live card): "Down: was the diagnosis right? Across: did
+the fix work? **LUCKY** is wrong diagnosis, fix worked anyway. Outcome-only scoring
+calls that a win; the same agent fails the next look-alike. Naming and counting it
+is Crucible's addition to Session 18's 'a benchmark is a procedure, not a score'."
 
-*If asked why the Benchmarks page says "26 test cases": those are the task–fixture
-pairs. Replay asks each pair once per provider view, which makes 40. The 1 November
-overnight replay had 38 cases (35 with a true cause); the blinded re-run after the
-unit fix is the 40-case run of record.*
+**Say the numbers** (run 2, 1 November, gemini-3.5-flash-lite):
+- Live: 7 CORRECT, 1 LUCKY, 0 UNLUCKY, 0 WRONG, every SLA met, $0.0115. The LUCKY
+  one: on the N+1 fault it first raised the pool (11% faster, wrong cause); the
+  next experiment fixed the query.
+- Replay: right cause in 31 of 37, task grade 32 of 40, $0.054. Weak classes: D 2/5,
+  E 1/2. Say so.
+- Scored by six dimensions with no model call: outcome, diagnosis, integrity,
+  efficiency, calibration, cost.
 
-"Session 18's lesson: a benchmark is a procedure, not a score — it is a Task, a
-Harness (the environment and allowed tools), a Policy (what the agent may do), a
-Scorer (the rules that turn a run into numbers), and a Manifest (the exact
-versioned record — commit SHA, model ID, scorer version — that lets anyone rerun
-it without calling a model). Never publish the conclusion without keeping the
-observation that produced it."
-
-"The replay/live split is Crucible's application of that principle: capture a
-fixture once, run the agent against it hundreds of times cheaply. 23 snapshots,
-$0.054 each replay run, vs 15 minutes and $0.0115 for six live campaigns."
-
-### The LUCKY quadrant
-
-The page's "Diagnosis against outcome" card lists the six dimensions the scorer
-computes, with no model call: **outcome, diagnosis accuracy, integrity, efficiency,
-calibration, cost** (`crucible/perf/scorer.py`). Verification is not a separate
-dimension: it is inside outcome, as verified fix vs unverified fix.
-
-Scoring grid: "Six dimensions. The LUCKY quadrant matters most: **wrong
-diagnosis, fix worked anyway.** Counting that as a success fails the next
-look-alike fixture. Session 18 flags this as 'visible-fixture fit' — an agent
-that memorises the answer rather than solving the problem. Crucible extends it to
-the performance domain: an agent that raises the pool because it misread a GC
-signal, on a fixture where the pool also happened to be tight, records a success
-and will fail the next fixture that looks similar but isn't. The LUCKY quadrant
-is what catches it."
-
-"**The LUCKY quadrant is not in the course by that name — it is Crucible's
-contribution.** Session 18 introduced the principle; Crucible names the
-failure mode and measures it explicitly on every run."
-
-### The numbers
-
-**Run 2, 1 November 2026, the benchmark of record (gemini-3.5-flash-lite, read from the manifests):**
-
-"Live: six Fully Automated campaigns, one per planted fault, eight experiments.
-Seven CORRECT, one LUCKY, no UNLUCKY, no WRONG, every SLA met, just over a cent
-($0.0115). The LUCKY one is real: on the N+1 query fault the agent first raised
-the pool. That made it 11% faster, so on outcome alone it counts as a success.
-The scorer marks it LUCKY because the pool was not the cause. The second
-experiment fixed the query and was scored CORRECT."
-
-"Replay: 23 clean snapshots, 40 cases. Diagnosis correct on 31 of 37 cases that
-have a true cause, 32 of 40 on the task grade, five cents ($0.054)."
-
-Point at task classes if asked: A 8/9, B 12/14, C 9/10, D 2/5, E 1/2. D and E
-are the weak classes; say so rather than skipping them.
-
-### "1993 tests vs 26 benchmark cases" — if a trainer asks
-
-These test two completely different things:
-
-| | What it tests | Count | How |
-|---|---|---|---|
-| **pytest suite** | Crucible's own code: does the collector, the guard, the applicator, the wizard behave correctly? | 1993 | Unit + integration tests; 2 min |
-| **Benchmark** | The AI agent's reasoning: does it diagnose the right cause given a snapshot? | 26 runnable cases | Replay against captured snapshots |
-
-"1993 tests check the plumbing. 26 benchmark cases check the intelligence.
-Session 18's point: passing tests is not everything — you need to test that the
-right property was actually tested."
-
-### On evaluation
-
-"Every test assertion is drafted with its reasoning and reviewed by me before it
-is committed — more than 40 groups in `docs/CRUCIBLE_TEST_ASSERTIONS.md`. The
-review asks: does the reasoning match the failure it tests for? That is the same
-question Session 18 asks about every task."
+*If asked:*
+- *"26 test cases"* = task–fixture pairs; each is asked once per provider view → 40.
+- *Tests vs benchmark:* the pytest suite (~2,000) checks the code; the 40 + 8
+  benchmark results check the agent's reasoning. Every test assertion is drafted
+  with its reasoning and reviewed by me (`docs/CRUCIBLE_TEST_ASSERTIONS.md`).
 
 ---
 
@@ -794,9 +742,9 @@ ls ~/.crucible/
 |---|---|
 | `knowledge/` | the documents you uploaded, kept as originals so they can be re-indexed |
 | `knowledge-index/knowledge.sqlite` | those documents cut into searchable chunks (16 for PERF_LAB_PRODUCT.md) |
-| `knowledge-index/knowledge.sqlite.faiss` (+ `.ids.json`) | the vector index: how meaning-based search finds a chunk |
+| `knowledge-index/knowledge.sqlite.faiss` (+ `.ids.json`) | the vector index: how meaning-based search finds a chunk. Appears after the Step 2 upload |
 | `memory.sqlite` | the agent's memory: each campaign's locked SLA (Policy) and the audit trail |
-| `memory.sqlite.faiss` (+ `.ids.json`) | the vector index for that memory. Policy and Audit are never embedded |
+| *(no `memory.sqlite.faiss`)* | not a missing file: Policy and Audit are never embedded, so this memory has nothing to vector-index and Crucible removes an empty index |
 | `audit.jsonl` | the append-only log: approvals, applies, refusals, reverts, with times |
 | `approvals/` | a request file for each proposal and your decision file. The campaign waits on these: the human gate, on disk |
 | `ui-jobs/` | one folder per command started from the dashboard, with its log (what Jobs and Active show) |

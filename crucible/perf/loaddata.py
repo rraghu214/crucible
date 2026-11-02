@@ -78,6 +78,16 @@ def listing(state_dir: Path) -> list[dict[str, Any]]:
     return out
 
 
+def remove(state_dir: Path, name: str) -> None:
+    if not _NAME.match(name):
+        raise LoadDataError("data file name must be a plain name ending .csv or .json")
+    path = data_dir(state_dir) / name
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        raise LoadDataError(f"{name}: not found") from None
+
+
 def resolve(state_dir: Path, data: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
     """Check every mapped file exists and has its column; return absolute paths."""
     resolved = {}

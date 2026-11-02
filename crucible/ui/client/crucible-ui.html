@@ -2059,7 +2059,14 @@ async function loadDataFiles(){
   const list=document.getElementById('dataFileList');if(!list)return;
   list.replaceChildren();
   if(!dataFiles.length){list.textContent='None uploaded.';}
-  dataFiles.forEach(f=>list.appendChild(_el('div',{textContent:'📊 '+f.name+' — '+(f.error?('unreadable: '+f.error):(f.rows+' rows · columns: '+f.columns.join(', ')))})));
+  dataFiles.forEach(f=>{
+    const row=_el('div',{style:'display:flex;align-items:center;gap:8px;margin-bottom:2px;'});
+    row.appendChild(_el('span',{textContent:'📊 '+f.name+' — '+(f.error?('unreadable: '+f.error):(f.rows+' rows · columns: '+f.columns.join(', ')))}));
+    const btn=_el('button');btn.textContent='×';btn.title='Remove '+f.name;
+    btn.style.cssText='background:none;border:none;cursor:pointer;color:var(--lo);font-size:14px;padding:0 4px;line-height:1;';
+    btn.onclick=async()=>{try{const r=await fetch('/v1/perf/load-data/'+encodeURIComponent(f.name),{method:'DELETE',headers:getAuthHeaders()});if(!r.ok)throw new Error(await r.text());loadDataFiles();}catch(e){addChatMsg('ai','⚠ Could not remove '+escHtml(f.name)+': '+escHtml(e.message));}};
+    row.appendChild(btn);list.appendChild(row);
+  });
   document.querySelectorAll('#varList select').forEach(sel=>{const v=sel.value;_fillFiles(sel);sel.value=v;});
 }
 function _fillFiles(sel){sel.replaceChildren(_el('option',{value:'',textContent:'— file —'}));dataFiles.filter(f=>!f.error).forEach(f=>sel.appendChild(_el('option',{value:f.name,textContent:f.name})));}
