@@ -5397,6 +5397,197 @@ The tests added or changed for these answers (`test_the_experiment_count_is_save
 
 ---
 
+# GROUP 54 — The chat shows the sources its answer used
+
+*Drafted 2 November 2026 by Claude Code. Reviewed and approved by the operator, 2 November
+2026 (option B: model-declared `USED:` ids; changed knowledge test re-approved). Branch
+`capstone/demo-polish`. Tests: `tests/test_chat_sources.py` (16). One existing approved test
+is changed: `TestTheChatIsGrounded.test_the_prompt_carries_the_matching_excerpt_and_the_reply_cites_it`
+in `tests/test_ui_knowledge.py`. Code: `perf_chat`, `_split_used`, `_used_sources`,
+`_run_context_and_id`, `_retrieve` and the system prompt in `crucible/ui/perf_ui.py`.*
+
+Found in the trial, 2 November 2026, step 12. A question about a run listed
+PERF_LAB_PRODUCT.md sections under its answer, and the run itself was never listed. The
+operator wants the demo to show the two RAGs apart: ask about the document and the document
+is the source; ask about a run and the run is the source (option B, 2 November 2026).
+
+### 54.1 Only the sources the answer used are shown
+
+**What it checks.** Excerpts reach the model numbered S1 to S4; the run under discussion is
+R and the current configuration is F. The model ends its reply with `USED: S2,R` (or
+`USED: none`). The server removes that line and shows exactly those sources: a document as
+`file › heading`, a run as `results/<run-id>.json › run manifest`, the configuration as
+`config/slo.yaml › current SLA and target profile`. A mixed answer lists both, in the order
+the model gave.
+
+**Why it exists.** The knowledge search returns no relevance score, so the top four hits
+were listed whether or not the answer used them. That implies a grounding the answer did
+not have (principle 1), and it made the two RAGs indistinguishable on screen.
+
+### 54.2 What the prompt never offered is not shown
+
+**What it checks.** An id the model names that was not offered (S9 when one document is
+indexed, R when no run is on disk) is dropped. A reply with **no** USED line shows **no**
+sources, not all of them. The USED line must consist only of ids or `none`; the word "USED:"
+inside a sentence is left alone, and nothing is stripped from the reply.
+
+**Why it exists.** The model's report is a claim, like its predicted p99 (§4.5). It can say
+which sources it used, but it cannot add one that was not in the prompt, and a model that
+forgets the line must not silently bring back the old behaviour.
+
+### 54.3 The USED line is not shown to the operator
+
+It is removed whatever wraps it (`<br>`, `<p>`, a newline) and whatever the case.
+
+### 54.4 The prompt defines the ids
+
+The excerpts are numbered `[S1] file > heading` and the system prompt says how to report.
+The labels `Runs:` and `Knowledge excerpts:` are unchanged, because earlier tests (Group 43)
+parse them.
+
+**Changed approved test.** `test_the_prompt_carries_the_matching_excerpt_and_the_reply_cites_it`
+asserted that the document is listed whenever it matched. It now has the model's reply end
+`USED: S1` and asserts the document is listed because of that. Its other assertion (the
+excerpt reaches the prompt) is unchanged. Please re-approve it.
+
+**Operator decisions on review, 2 November 2026.**
+- Checking only against what was offered (not against the answer's content) is acceptable.
+  A word-overlap check was tried and not kept: it passed the wrong sources on run questions
+  (same vocabulary). Option B — model-declared ids, no content check — is the chosen
+  approach.
+- Fail closed: verified live on Box B after deploy. The live model ends every reply with
+  the USED line; if it forgets, no sources are shown (correct behaviour).
+
+**Operator question, 2 November 2026: should there be a check on what the answer actually
+used?** Tried on the real data and not kept. A word-overlap check (the reply shares content
+with the source that the question did not already contain) was run against the 16 real
+document chunks and the real step-12 answer. For the **run** question, the irrelevant chunks
+shared 8 to 14 words with the answer (same product, same vocabulary: pool, connection,
+baseline, latency), so the check would have passed exactly the sources it should drop. It only
+worked for document questions, where figures such as 10 and 60 match. A check that passes the
+failure it exists to catch is false assurance, so the code checks only that the named id was
+offered. Options: (a) rehearse the demo questions live and read each Sources line (the
+default), or (b) require the model to quote a verbatim span from each source and verify it is in
+the source's text. (b) is a real check and would also show the evidence under each source, but
+needs about 1 to 1.5 hours and live tuning of the model's compliance.
+
+Only the chat changes. The AI-suggestion buttons share the retrieval helper and are
+untouched: the numbering is added in the chat route, and a draft that numbered the
+excerpts inside the shared helper was reverted (operator, 2 November 2026).
+
+---
+
+# GROUP 55 — The loop card follows the run; Pause and Abort say what they do
+
+*Drafted 2 November 2026 by Claude Code. Reviewed and approved by the operator, 2 November
+2026. Branch `capstone/demo-polish`. Tests: `tests/test_live_loop.py` (27). Code:
+`crucible/ui/loopstage.py` (new), the active-campaign reply in `crucible/ui/perf_ui.py`,
+and `_renderLoop`, the node ids, `confirmPause` and `confirmAbort` in `crucible-ui.html`.*
+
+Raised by the operator, 2 November 2026: the Active page's "The loop each experiment
+follows" was a static diagram with one live dot. Found while answering it: the Pause dialog
+said "the load generator stops", which it does not.
+
+### 55.1 Each log line moves the step the way the loop runs
+
+**What it checks.** The server reads the `[campaign] <event>` lines of the running job's log
+(Group 53) and returns `{done: [...], current: id}` with the active-campaign reply. The page
+draws done steps green and the current one pulsing; the approval step is amber while it
+waits for you. The test replays the lines run-1793596989174 actually printed, one prefix at a
+time: baseline, experiment started, proposed, approved, applying, deployed, in force,
+measuring, verdict, done.
+
+**Why it exists.** A card that is always grey tells the audience nothing. Reading the stage
+from the log means it cannot disagree with what the run did.
+
+**Two steps are not observed directly.** "Recall past attempts" takes no measurable time before
+the model call, so it is shown done when the experiment starts and the wait belongs to
+"Diagnose". "Write the manifest" is shown done when the run reports done.
+
+### 55.2 to 55.4 Experiments, stopping points, noise
+
+A second experiment starts its steps again and keeps the baseline; the next scenario of a
+series starts from nothing. An Advisory run stops after the guard check, a refusal at the
+guard, a declined approval at the gate, a pause with nothing in progress. Only lines that
+begin `[campaign] ` count, so another line cannot move the card.
+
+### 55.5 and 55.6 The route and the page
+
+The route's `stage` comes from the running job's own log. The page has a node for every step,
+draws the stage on every poll and clears it when no run is active.
+
+### 55.7 The dialogs say what the campaign does
+
+**What it checks.** Pause and Abort say the run stops before the next experiment starts and the
+one in progress finishes first. Abort adds that the target is then returned to the last good
+commit. The test also pins the code the wording rests on: each marker is read in exactly one
+place, at the top of the experiment loop, with the messages "before experiment N".
+
+**Why it exists.** The Pause dialog promised that the load generator stops and Abort that the
+in-progress trial is discarded. The code does neither. DESIGN.md §7 describes the same
+immediate behaviour, so §7 and the code disagree; recorded in `docs/ref/DEBT.md`. The operator
+chose to fix the wording and keep the behaviour.
+
+**Operator decisions on review, 2 November 2026.**
+- 55.1: "Recall past attempts" shown done with experiment start and the wait on "Diagnose"
+  is correct — it is the more accurate representation.
+- 55.7: UI verbiage update is sufficient. The test's strictness (fails if a second marker
+  read is added) is accepted as correct.
+
+---
+
+# GROUP 56 — Settings: metrics connections (browser-session preview)
+
+*Drafted 2 November 2026 by Claude Code. Reviewed and approved by the operator, 2 November
+2026. Phase-1 UI placeholders to show the roadmap; Phase-2 builds the adapters and the server
+side. Branch `capstone/demo-polish`. Tests: `tests/test_connections_ui.py` (38). Code: the
+"Metrics connections" card in Settings and its script in `crucible/ui/client/crucible-ui.html`.
+No server change.*
+
+Operator design, 2 November 2026: Settings lets you name connections to different metrics
+providers, add as many as you like, list every provider (including ones Crucible cannot read
+yet, so the audience sees the roadmap), and later pick a connection by name in a profile or
+SLA. For now the UI feature alone, kept in the browser session; the server side is Phase 2.
+
+### 56.1 Every provider is listed, and "available" is true
+
+**What it checks.** The dropdown has every metrics provider in DESIGN.md §5 (Actuator,
+PromQL, Datadog, Dynatrace, New Relic, Elastic) plus Grafana Cloud, which speaks PromQL.
+Each is marked *available* (Crucible has the adapter), *preview* (reachable through another
+adapter, untried) or *planned*. A test ties "available" to `MEASURABLE_PROVIDERS` in the code,
+so adding or removing an adapter fails the test until the page says so.
+
+### 56.2 A credential is a variable name, never a secret
+
+**What it checks.** Each credential field takes the name of an environment variable on the
+Crucible server (`DATADOG_API_KEY`); the secret itself is never typed, stored or shown
+(DESIGN.md §8, §19.8). The rule requires capitals, digits and an underscore, so a hex key, a
+prefixed token, a lower-case value and an all-capitals key like `AKIAIOSFODNN7EXAMPLE` are
+refused. No connection field is a password input.
+
+### 56.3 to 56.6 Names, nothing sent, session only, honest
+
+Names are lower-case and unique, and the built-in `actuator` connection cannot be removed. No
+request mentions connections and the wizard body does not carry them. They live in
+`sessionStorage`, and every access survives a storage failure. The card says it is a
+**preview**, in this browser session only, not sent to the server, and that **every run still
+reads the target's own Actuator endpoint**. The Test button is disabled until the server side
+exists.
+
+**Why honesty is the main risk.** A page that lets you "choose Datadog" must not suggest a run
+now reads Datadog (principle 1). The wizard has no selector for this reason: choosing a
+connection by name in the profile or SLA is Phase 2.
+
+**Operator decisions on review, 2 November 2026.**
+- The credential heuristic (`ABC_DEF` would be accepted) is acceptable for a Phase-1
+  preview that never leaves the browser.
+- Grafana Cloud stays *preview*: it speaks PromQL so it is reachable in principle, untried
+  in practice — an honest *preview* rather than *planned*.
+- Phase-1 is placeholders giving an intuition that Crucible can be expanded; Phase-2 builds
+  the adapters and the server side.
+
+---
+
 # Review decisions — week 1
 
 Raised by Claude Code while implementing, decided by the operator on 10 September 2026.

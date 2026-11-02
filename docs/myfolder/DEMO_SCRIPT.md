@@ -146,7 +146,7 @@ have already seen work. Times are approximate.
 | P6 | Budget | Rows follow mode, experiments and scenarios; a wall-clock cap below the baselines shows ⚠ |
 | P7 | Review | Preflight list includes "load profile drives the SLA endpoint ✓"; the diff box shows exactly what Launch writes |
 | P8 | **🚀 Launch** (Advisory) | Jobs shows `crucible run --advisory --all-scenarios`; finishes with verdict NOT_MEASURED and up to 3 ranked alternatives, each with a diff; nothing pushed to `perftest_sandbox` |
-| P9 | Chat (Live AI ON): *why did you rank #1 above #2?* | Names the run, quotes cause, `from -> to` change and baseline evidence (pending connections), calls 140 ms a *prediction* |
+| P9 | Chat (Live AI ON): *Tell me about `<advisory-run-id>`: what did you propose, why, and was anything measured?* | Names the run, quotes the cause, the change and baseline evidence (pending connections), says nothing was applied or measured, calls the predicted p99 a *prediction*; Sources names the run manifest |
 | P10 | Back to wizard → **Semi-Automated** → Launch | Active tab shows the live overlay within ~5 s; the approval gate shows the exact diff |
 | P11 | While it runs: raise p99 in the wizard → **💾 Save changes** | The campaign pauses at the next experiment; Resume records an `amendments` entry |
 | P12 | **Approve** in the UI | Gate → "Change applied — measuring now"; after the window, verdict + kept/reverted |
@@ -435,11 +435,26 @@ approval, the caps and any mid-run edits. Reproducible by construction."
 
 ## Step 12 — Datadog + CI/CD (1 min) [EXPLAIN]
 
-"Three metrics backends: Actuator direct from the JVM, Prometheus via PromQL,
-and Datadog. In Datadog you'd see `hikaricp.connections.pending` spike during
-the pool=2 baseline and flatten after the fix: the same numbers the agent used.
+"Crucible reads the target's metrics directly from its Actuator endpoint, and has
+adapters for Prometheus (PromQL) and Datadog. PerfLab also publishes the same
+meters to Datadog, so an independent tool saw the same run: request volume is low
+during the pool=2 baseline, drops to zero while the target restarts, then is about
+nine times higher after the fix. Crucible measured 38 to 375 requests a second, 9.9
+times. Same meters, different observer."
 
-The deploy interface is the sandbox branch. Here a post-receive hook builds and
+*Do not say Crucible fetched these through Datadog's API: this run read Actuator.
+A live run reading Datadog needs a provider setting and a window fix (DEBT.md).
+Datadog's own counts are per rollup bucket, so don't quote them as per-minute.*
+
+**Settings → Metrics connections (preview).** "This is where you name the places Crucible can
+read metrics from: add as many as you like, and later pick one by name in a profile or SLA. The list
+is the roadmap: Actuator, Prometheus and Datadog are built; Grafana Cloud should work through the
+Prometheus adapter; Dynatrace, New Relic and Elastic are planned. A credential is never typed: you give
+the name of an environment variable on the server, so the secret is never stored or shown."
+
+*It is a preview: connections live in the browser session only and no run reads them yet. Say so.*
+
+"The deploy interface is the sandbox branch. Here a post-receive hook builds and
 restarts. In Jenkins or GitHub Actions, the same push would trigger the pipeline."
 
 ---
@@ -448,14 +463,24 @@ restarts. In Jenkins or GitHub Actions, the same push would trigger the pipeline
 
 **Navigate to:** History & Diff. The run table is live from Box B.
 
-Live AI ON. Type, with a **real run id** from 0.6:
-`Tell me about <advisory-run-id>: why did you rank #1 above #2?`
+Live AI ON. Type, with a **real run id** from 0.6 (name the run: the chat cannot
+tell which one you mean from the screen alone):
+`Tell me about <advisory-run-id>: what did you propose, why, and was anything measured?`
 
-→ The answer names the run, the cause, the change (`2 -> 20`) and the evidence
-(43 pending), and calls the predicted p99 a prediction.
+→ The answer names the run, the cause, the change (pool size to 50) and the evidence
+(93 pending connections, acquire time about 2.2 s), says nothing was applied or
+measured, and calls the predicted p99 a prediction. (That Advisory run has one
+proposal, so "why #1 above #2" has no answer: do not ask it.)
 
 Then: `Why was experiment 1 kept in <semi-auto-run-id>?`
-→ It quotes the measured before → after and the verdict reason.
+→ It quotes the measured before → after (2500 → 69 ms), the run's own SLA (120 ms) and
+the verdict reason, and its **Sources** line names the run manifest
+(`results/<run-id>.json › run manifest`), not a document.
+
+Then show the other RAG: `How many requests must Micrometer meters be initialised within?`
+→ "10 requests", and its **Sources** line names `PERF_LAB_PRODUCT.md › …`, not a run.
+This is the point of the two RAGs: one answer is grounded in the run files, the other
+in the uploaded document, and the Sources line says which.
 
 **Say:**
 "The chat reads the run files on disk. Measured runs, Advisory runs and ceiling
@@ -511,32 +536,91 @@ review asks whether the reasoning matches the failure it tests for."
 
 ---
 
-## Step 15 — Memory taxonomy + backend files (2 min) [EXPLAIN]
+## Step 15 — Memory, the files behind it, and the run's receipt (3 min) [LIVE on Box B]
 
-"Seven memory kinds, each with its own lifetime and write authority.
+This is a critical section: it is where the audience sees that nothing is hidden.
+Everything Crucible knows is a file you can open. (Box B has **no `sqlite3` tool**;
+the commands below use `python3`, which is there. Tested 2 November 2026.)
 
-**Working**: current hypothesis, in-flight snapshot. Dies with the run.
-**Episode**: experiment manifests and the journal.
-**Fact**: confirmed operational knowledge.
-**Playbook**: cause signatures that worked, service-scoped until a human promotes them.
-**Policy**: the SLA. The agent can never write it.
-**Audit**: every refusal and approval. Append-only.
-**Document chunk**: the knowledge corpus, in its own store."
+### 15.1 The memory kinds, and what is built today
 
-**Show on Box B:**
+"The design has seven memory kinds, each with its own lifetime and write authority.
+Five are live. Two are designed and not built yet, and I would rather say so."
+
+| Kind | What it holds | Today |
+|---|---|---|
+| Working | the current hypothesis and in-flight snapshot; dies with the run | live |
+| Episode | what each experiment did: the run manifests (15.4) | live, as files. The journal recalls them at diagnosis ("Recall past attempts") |
+| Policy | the SLA. The agent can never write it | live, one record per campaign |
+| Audit | every approval, apply, refusal and revert. Append-only | live |
+| Document chunk | the knowledge corpus, in its own store | live |
+| Fact | confirmed operational knowledge | **designed, not built** |
+| Playbook | cause signatures that worked, promoted by a human | **designed, not built** (the Playbooks screen says so) |
+
+**Do not claim the agent learns across runs beyond recall.** It reads earlier
+manifests and is told what was tried and measured (experiment 1 of
+`run-1793596989174` was handed 2 earlier attempts on the same pool setting). It does
+not write Facts or Playbooks from what it finds. If asked: "It remembers what was
+measured, and a human decides what becomes a rule. Promotion is the next step."
+
+### 15.2 The files
+
 ```bash
 ls ~/.crucible/
-# memory.sqlite        the agent's memory, plus each campaign's SLA Policy record and audit entries
-# memory.sqlite.faiss  vectors for facts/episodes (Policy and Audit are never embedded)
-# knowledge/           uploaded originals
-# knowledge-index/     the document store (knowledge.sqlite + its own .faiss)
-sqlite3 ~/.crucible/memory.sqlite \
-  "SELECT created_at, kind, substr(text,1,80) FROM records WHERE kind IN ('policy','audit') ORDER BY created_at DESC LIMIT 5;"
 ```
 
-"Choosing the memory kind is a security decision. An agent that can overwrite
-its SLA is not safe to run autonomously. Here it is a structural constraint,
-not a rule someone has to remember."
+| File or folder | In one line |
+|---|---|
+| `knowledge/` | the documents you uploaded, kept as originals so they can be re-indexed |
+| `knowledge-index/knowledge.sqlite` | those documents cut into searchable chunks (16 for PERF_LAB_PRODUCT.md) |
+| `knowledge-index/knowledge.sqlite.faiss` (+ `.ids.json`) | the vector index: how meaning-based search finds a chunk |
+| `memory.sqlite` | the agent's memory: each campaign's locked SLA (Policy) and the audit trail |
+| `memory.sqlite.faiss` (+ `.ids.json`) | the vector index for that memory. Policy and Audit are never embedded |
+| `audit.jsonl` | the append-only log: approvals, applies, refusals, reverts, with times |
+| `approvals/` | a request file for each proposal and your decision file. The campaign waits on these: the human gate, on disk |
+| `ui-jobs/` | one folder per command started from the dashboard, with its log (what Jobs and Active show) |
+| `locks/` | which campaign holds the deploy branch right now: one at a time |
+| `series/` | the progress of a multi-scenario run, so it can resume |
+| `events/`, `graphs/`, `outbox/`, `a2a.sqlite*` | stores inherited from the course harness; not used in this demo: skip |
+
+Presenter notes: `memory.sqlite` also holds 16 document chunks from 22 October, an older
+copy from before the document store was split out (DESIGN.md §14). They were retired on
+2 November (status `superseded`, as a re-index does it; backup in `~/backups/` on Box B), so
+the count below shows only current records. The chat searches `knowledge-index/`.
+
+### 15.3 Memory and audit, live
+
+```bash
+python3 -c 'import sqlite3,os;c=sqlite3.connect("file:"+os.path.expanduser("~/.crucible/memory.sqlite")+"?mode=ro",uri=True);print(c.execute("select kind,count(*) from records where status=\"current\" group by kind").fetchall());[print(r) for r in c.execute("select created_at,kind,substr(text,1,90) from records where kind in (\"policy\",\"audit\") order by created_at desc limit 4")]'
+tail -2 ~/.crucible/audit.jsonl
+```
+
+"The first line counts memory by kind: Policy and Audit. The next lines are the SLA
+written as Policy when the campaign started, and the audit entry for writing it. The
+last two lines are the approval you gave and the pool change it applied, 2 to 50."
+
+"Choosing the memory kind is a security decision. An agent that can overwrite its SLA
+is not safe to run autonomously. Here it is a structural constraint, not a rule
+someone has to remember."
+
+### 15.4 The run's receipt
+
+"Every run writes one file, its receipt. It records the goal it was judged against,
+the baseline it measured, every change it tried, who approved it, which commit was
+deployed and what the target itself reported running, what was measured afterwards,
+which AI model was used and the verdict. The dashboard, the chat and the scorer all
+read this file. Nothing lives only in someone's head."
+
+```bash
+python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));e=d["experiments"][0];print("run:",d["run_id"]);print("goal: p99 <=",d["sla"]["p99_ms"],"ms on",d["sla"]["endpoint"]);print("baseline p99:",d["baseline"]["load"]["p99_ms"],"ms");print("recalled earlier attempts:",len(e["prior_findings"]));print("change:",e["apply_result"]["changes"]);print("approved by:",e["approval"]["responder"]);print("deployed commit:",e["deployed_commit"][:7],"| target reports:",e["deploy"]["observed_commit"][:7]);print("after p99:",e["after"]["load"]["p99_ms"],"ms ->",e["verdict"],"| kept:",e["kept"]);print("model:",d["models_used"])' ~/crucible/results/<run-id>.json
+```
+
+"Read it top to bottom: the goal, the starting point, how many earlier attempts the
+agent was reminded of, the one change, the human who approved it, the commit we
+deployed and the same commit the target itself reports, the result, and the model."
+
+The dashboard shows the summary (Results). The full record, audit trail and memory are
+files on the box, which is the point.
 
 ---
 

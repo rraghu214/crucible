@@ -979,19 +979,19 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
     <div class="card-h"><div><div class="card-title">The loop each experiment follows</div><div class="card-sub">Semi-Automated: perceive, decide, act, measure. Advisory stops after the guard check; a ceiling probe only measures.</div></div></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;">
       <div class="pgraph">
-        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Baseline snapshot</div><div class="pgraph-role">Measure</div></div>
-        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Recall past attempts</div><div class="pgraph-role">Plan</div></div>
-        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Diagnose</div><div class="pgraph-role">Diagnose</div></div>
-        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Guard check: property and bounds</div><div class="pgraph-role">Guard</div></div>
+        <div class="pgraph-node" id="loop-baseline"><div class="pgraph-dot"></div><div class="pgraph-label">Baseline snapshot</div><div class="pgraph-role">Measure</div></div>
+        <div class="pgraph-node" id="loop-recall"><div class="pgraph-dot"></div><div class="pgraph-label">Recall past attempts</div><div class="pgraph-role">Plan</div></div>
+        <div class="pgraph-node" id="loop-diagnose"><div class="pgraph-dot"></div><div class="pgraph-label">Diagnose</div><div class="pgraph-role">Diagnose</div></div>
+        <div class="pgraph-node" id="loop-guard"><div class="pgraph-dot"></div><div class="pgraph-label">Guard check: property and bounds</div><div class="pgraph-role">Guard</div></div>
         <div class="pgraph-node" id="loop-approve"><div class="pgraph-dot"></div><div class="pgraph-label">Human approval</div><div class="pgraph-role">Approve</div></div>
-        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Apply config change</div><div class="pgraph-role">Act</div></div>
+        <div class="pgraph-node" id="loop-apply"><div class="pgraph-dot"></div><div class="pgraph-label">Apply config change</div><div class="pgraph-role">Act</div></div>
       </div>
       <div class="pgraph">
-        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Push to the sandbox branch</div><div class="pgraph-role">Deploy</div></div>
-        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Prove the change is in force</div><div class="pgraph-role">Verify</div></div>
-        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Re-measure under the same load</div><div class="pgraph-role">Measure</div></div>
-        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Verdict: keep or revert</div><div class="pgraph-role">Verdict</div></div>
-        <div class="pgraph-node"><div class="pgraph-dot"></div><div class="pgraph-label">Write the manifest</div><div class="pgraph-role">Record</div></div>
+        <div class="pgraph-node" id="loop-deploy"><div class="pgraph-dot"></div><div class="pgraph-label">Push to the sandbox branch</div><div class="pgraph-role">Deploy</div></div>
+        <div class="pgraph-node" id="loop-verify"><div class="pgraph-dot"></div><div class="pgraph-label">Prove the change is in force</div><div class="pgraph-role">Verify</div></div>
+        <div class="pgraph-node" id="loop-remeasure"><div class="pgraph-dot"></div><div class="pgraph-label">Re-measure under the same load</div><div class="pgraph-role">Measure</div></div>
+        <div class="pgraph-node" id="loop-verdict"><div class="pgraph-dot"></div><div class="pgraph-label">Verdict: keep or revert</div><div class="pgraph-role">Verdict</div></div>
+        <div class="pgraph-node" id="loop-record"><div class="pgraph-dot"></div><div class="pgraph-label">Write the manifest</div><div class="pgraph-role">Record</div></div>
       </div>
     </div>
   </div>
@@ -1169,6 +1169,24 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
     <div class="card-h"><div class="card-title">Target repository</div></div>
     <div class="guard-row"><div class="guard-info"><div class="guard-name">Repo</div><div class="guard-desc">https://github.com/rraghu214/perf-lab</div></div><span class="pill ok">Reachable</span></div>
     <div class="guard-row"><div class="guard-info"><div class="guard-name">Sandbox branch</div><div class="guard-desc">The only branch Crucible ever writes to.</div></div><code style="font-family:var(--f-mono);font-size:12px;color:var(--blue);background:var(--blue-d);padding:4px 8px;border-radius:4px;">perftest_sandbox</code></div>
+  </div>
+  <div class="card" id="conn-card">
+    <div class="card-h"><div><div class="card-title">Metrics connections <span class="pill idle">preview</span></div>
+      <div class="card-sub">Name the places Crucible can read metrics from, add as many as you like, then pick one by name in a profile or SLA.</div></div></div>
+    <div style="background:var(--warn-d);color:var(--warn);border-radius:var(--rs);padding:9px 12px;font-size:12px;margin-bottom:12px;">
+      Preview: connections are kept in this browser session only and are not sent to the server. Every run still reads the target's own Actuator endpoint; choosing a connection by name in the profile or SLA arrives with the server side (Phase 2).</div>
+    <div id="connList"></div>
+    <div class="form-grid2" style="margin-top:12px;">
+      <div class="form-row"><label class="form-label">Provider</label><select class="form-select" id="conn-provider" onchange="onConnProvider()"></select></div>
+      <div class="form-row"><label class="form-label">Connection name</label><input class="form-input" id="conn-name" placeholder="datadog-prod" autocomplete="off"></div>
+    </div>
+    <div id="conn-note" style="font-size:12px;color:var(--lo);margin:-4px 0 8px;"></div>
+    <div class="form-grid2" id="conn-fields"></div>
+    <div style="font-size:11px;color:var(--lo);margin:6px 0 10px;">Credentials are never typed here. Each credential field takes the <strong>name</strong> of an environment variable on the Crucible server that holds the secret, so the secret itself is never stored, shown or logged (DESIGN.md §8, §19.8).</div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn btn-primary btn-sm" onclick="addConnection()">+ Add connection</button>
+      <span id="conn-error" style="font-size:12px;color:var(--err);"></span>
+    </div>
   </div>
   <div class="card">
     <div class="card-h"><div class="card-title">Control token</div></div>
@@ -1736,6 +1754,94 @@ function clearToken(){
   const st=document.getElementById('tokenStatus');
   st.textContent='Token cleared.';st.style.color='var(--lo)';
 }
+/* ── Metrics connections: a preview kept in this browser session only (Group 56) ──────────
+   Nothing here is sent to the server and no run reads it yet: the server side is Phase 2.
+   A credential is the NAME of an environment variable, never the secret (DESIGN.md 8, 19.8). */
+const CONN_NAME_RE=/^[a-z0-9][a-z0-9_-]{0,39}$/;
+// A variable NAME has an underscore (DATADOG_API_KEY); an all-capitals key or token usually has not.
+const CONN_ENV_RE=/^(?=.{3,64}$)[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/;
+const CONN_STORE_KEY='crucible.connections';
+// status: available = Crucible has the adapter; preview = reachable through another adapter, untested;
+// planned = on the roadmap (DESIGN.md 5), not built.
+const CONN_PROVIDERS=[
+  {id:'actuator',label:'Spring Boot Actuator',status:'available',note:'Reads the target directly. Built in; every run uses it today.',
+   fields:[['url','Base URL','http://10.0.0.79:8080',false]]},
+  {id:'promql',label:'Prometheus (PromQL)',status:'available',note:'One adapter for Prometheus, Mimir, Thanos, VictoriaMetrics and managed Prometheus services.',
+   fields:[['url','Base URL','http://10.0.0.79:9090',false],['token_env','Token variable (optional)','PROM_TOKEN',true]]},
+  {id:'datadog',label:'Datadog',status:'available',note:'Reads metrics through Datadog\'s query API.',
+   fields:[['site','Site','datadoghq.com',false],['api_key_env','API key variable','DATADOG_API_KEY',true],['app_key_env','Application key variable','DATADOG_APP_KEY',true]]},
+  {id:'grafana',label:'Grafana Cloud',status:'preview',note:'Speaks PromQL, so it should work through the Prometheus adapter. Not tried yet.',
+   fields:[['url','Prometheus endpoint','https://prometheus-prod-01.grafana.net/api/prom',false],['user_env','Instance ID variable','GRAFANA_USER',true],['token_env','API token variable','GRAFANA_TOKEN',true]]},
+  {id:'dynatrace',label:'Dynatrace',status:'planned',note:'On the roadmap, not built.',
+   fields:[['url','Environment URL','https://abc12345.live.dynatrace.com',false],['token_env','API token variable','DYNATRACE_TOKEN',true]]},
+  {id:'newrelic',label:'New Relic',status:'planned',note:'On the roadmap, not built.',
+   fields:[['account','Account ID','1234567',false],['api_key_env','User API key variable','NEW_RELIC_API_KEY',true]]},
+  {id:'elastic',label:'Elastic',status:'planned',note:'On the roadmap, not built.',
+   fields:[['url','Elasticsearch URL','https://my-deployment.es.example.com',false],['api_key_env','API key variable','ELASTIC_API_KEY',true]]},
+];
+const CONN_BUILTIN={name:'actuator',provider:'actuator',values:{url:'(the target in the SLA)'},builtin:true};
+function connProvider(id){return CONN_PROVIDERS.find(p=>p.id===id);}
+function connLoad(){
+  try{const raw=sessionStorage.getItem(CONN_STORE_KEY);const list=raw?JSON.parse(raw):[];return Array.isArray(list)?list:[];}
+  catch(e){return [];}
+}
+function connSave(list){try{sessionStorage.setItem(CONN_STORE_KEY,JSON.stringify(list));}catch(e){}}
+function onConnProvider(){
+  const p=connProvider(document.getElementById('conn-provider').value);if(!p) return;
+  document.getElementById('conn-note').textContent=p.note;
+  const box=document.getElementById('conn-fields');box.replaceChildren();
+  p.fields.forEach(([key,label,placeholder,isEnv])=>{
+    const row=_el('div',{className:'form-row'});
+    row.appendChild(_el('label',{className:'form-label',textContent:label}));
+    row.appendChild(_el('input',{className:'form-input',id:'conn-f-'+key,placeholder,autocomplete:'off',spellcheck:false}));
+    box.appendChild(row);
+  });
+}
+function addConnection(){
+  const err=document.getElementById('conn-error');err.textContent='';
+  const p=connProvider(document.getElementById('conn-provider').value);if(!p) return;
+  const name=document.getElementById('conn-name').value.trim();
+  const list=connLoad();
+  if(!CONN_NAME_RE.test(name)){err.textContent='Name: lower-case letters, digits, - or _ (up to 40), starting with a letter or digit.';return;}
+  if(name===CONN_BUILTIN.name||list.some(c=>c.name===name)){err.textContent='A connection named "'+name+'" already exists.';return;}
+  const values={};
+  for(const [key,label,,isEnv] of p.fields){
+    const v=document.getElementById('conn-f-'+key).value.trim();
+    if(isEnv&&v&&!CONN_ENV_RE.test(v)){err.textContent=label+': enter the NAME of an environment variable, such as '+p.fields.find(f=>f[0]===key)[2]+'. A key or token is never accepted here.';return;}
+    if(key==='url'&&v&&!/^https?:\/\/[^\s]+$/i.test(v)){err.textContent=label+': enter an http:// or https:// address.';return;}
+    values[key]=v;
+  }
+  list.push({name,provider:p.id,values});connSave(list);
+  document.getElementById('conn-name').value='';onConnProvider();renderConnections();
+}
+function removeConnection(name){connSave(connLoad().filter(c=>c.name!==name));renderConnections();}
+function renderConnections(){
+  const box=document.getElementById('connList');if(!box) return;
+  box.replaceChildren();
+  [CONN_BUILTIN,...connLoad()].forEach(c=>{
+    const p=connProvider(c.provider)||{label:c.provider,status:'planned'};
+    const row=_el('div',{className:'guard-row'});
+    const info=_el('div',{className:'guard-info'});
+    info.appendChild(_el('div',{className:'guard-name',textContent:c.name+(c.builtin?' (built in)':'')}));
+    const detail=Object.entries(c.values||{}).filter(([,v])=>v).map(([k,v])=>k+': '+v).join(' · ');
+    info.appendChild(_el('div',{className:'guard-desc',textContent:p.label+(detail?' — '+detail:'')}));
+    row.appendChild(info);
+    const tone={available:'ok',preview:'warn',planned:'idle'}[p.status]||'idle';
+    row.appendChild(_el('span',{className:'pill '+tone,textContent:c.builtin?'in use':p.status}));
+    if(!c.builtin){
+      const test=_el('button',{className:'btn btn-ghost btn-sm',textContent:'Test',title:'Phase 2: testing a connection needs the server side.',disabled:true,style:'margin-left:8px;'});
+      const rm=_el('button',{className:'btn btn-ghost btn-sm',textContent:'Remove',style:'margin-left:6px;'});
+      rm.onclick=()=>removeConnection(c.name);
+      row.appendChild(test);row.appendChild(rm);
+    }
+    box.appendChild(row);
+  });
+}
+(function initConnections(){
+  const sel=document.getElementById('conn-provider');if(!sel) return;
+  CONN_PROVIDERS.forEach(p=>sel.appendChild(_el('option',{value:p.id,textContent:p.label+(p.status==='planned'?' (planned)':p.status==='preview'?' (preview)':'')})));
+  onConnProvider();renderConnections();
+})();
 (function initTokenDisplay(){
   const st=document.getElementById('tokenStatus');
   if(!st)return;
@@ -1803,6 +1909,20 @@ async function doApprove(){
     addChatMsg('ai','⚠ Approval failed: '+e.message);
   }
 }
+// The loop card follows the run: steps already taken are green, the one in progress
+// pulses (amber while it waits for you). The server reads the stage from the job's own
+// log, so this only draws it (Group 55). With no stage every step is plain.
+const LOOP_NODES=['baseline','recall','diagnose','guard','approve','apply','deploy','verify','remeasure','verdict','record'];
+function _renderLoop(stage){
+  const done=new Set((stage&&stage.done)||[]);const current=stage&&stage.current;
+  LOOP_NODES.forEach(id=>{
+    const node=document.getElementById('loop-'+id);if(!node) return;
+    const dot=node.querySelector('.pgraph-dot'),label=node.querySelector('.pgraph-label');
+    const state=id===current?'active':(done.has(id)?'done':'');
+    dot.className='pgraph-dot'+(state?' '+state:'');
+    label.className='pgraph-label'+(state?' '+state:'');
+  });
+}
 // A paused run releases its lock, so it is listed here, not as the active run.
 // Resume is the CLI's `crucible resume`, with optional higher caps (Group 53).
 function _renderPaused(list){
@@ -1841,7 +1961,8 @@ async function doReject(){
 }
 async function confirmAbort(){
   const runId=getActiveRunId();
-  if(!confirm('Abort '+runId+'? The in-progress trial will be discarded and the last good commit will be redeployed.')) return;
+  // Abort, like pause, is checked before each experiment starts (Group 55).
+  if(!confirm('Abort '+runId+'? It stops before the next experiment starts; the experiment in progress finishes first. The target is then returned to the last good commit and the run is finished.')) return;
   const real=await _isRealCampaign(runId);
   if(!real){addChatMsg('ai','No campaign is running, so there is nothing to abort.');return;}
   addChatMsg('ai','Abort initiated…');
@@ -1853,7 +1974,9 @@ async function confirmAbort(){
 }
 async function confirmPause(){
   const runId=getActiveRunId();
-  if(!confirm('Pause '+runId+'? The load generator stops; nothing measured so far is lost.')) return;
+  // Pause is checked before each experiment starts: the one in progress finishes first
+  // (the dialog said the load generator stops, which it does not; Group 55).
+  if(!confirm('Pause '+runId+'? It stops before the next experiment starts; the experiment in progress finishes first. Nothing measured so far is lost, and you can resume it from the Active page.')) return;
   const real=await _isRealCampaign(runId);
   if(!real){addChatMsg('ai','No campaign is running, so there is nothing to pause.');return;}
   addChatMsg('ai','Pause initiated…');
@@ -2578,6 +2701,7 @@ async function renderLiveActive(data){
     const rj=document.getElementById('active-running-job');
     if(rj) rj.textContent=data.running_job?'A job is running: '+data.running_job.label+' (see Jobs).':'';
     _renderPaused(data.paused||[]);
+    _renderLoop(null);
     _pendingExperiment=null;
     if(loopApprove) loopApprove.classList.remove('waiting');
     return;
@@ -2633,6 +2757,8 @@ async function renderLiveActive(data){
     _pendingExperiment=null;_pendingParams={};
     if(loopApprove) loopApprove.classList.remove('waiting');
   }
+
+  _renderLoop(data.stage||null);
 
   // Job log
   const logCard=document.getElementById('active-log-card');

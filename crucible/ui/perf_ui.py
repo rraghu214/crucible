@@ -62,6 +62,7 @@ from . import actions as _actions
 from .actions import ActionError
 from .hitl import PendingAction, decide_resume
 from .jobs import RUNNING, Job, get_job, list_jobs, read_output, start_job
+from .loopstage import loop_stage
 from .validator import validate_surface
 
 # ---------------------------------------------------------------------------
@@ -1881,18 +1882,25 @@ def _ceiling_detail(run: dict[str, Any]) -> list[str]:
 
 
 def _run_context(ctx: PerfContext, message: str = "", run_id: str = "") -> str:
+    return _run_context_and_id(ctx, message, run_id)[0]
+
+
+def _run_context_and_id(ctx: PerfContext, message: str = "", run_id: str = "") -> tuple[str, str]:
     """The runs on disk, and the one under discussion in detail (operator, 25 October 2026).
 
     Any run type: a measured campaign, an Advisory run or a ceiling probe. The
     run is the one named in the message, else the one on the operator's screen,
     else the latest. Read from the manifests on disk, like the other facts.
+
+    Also returns the id of the run under discussion ("" when no run is on disk),
+    so the chat can name that manifest as a source (Group 54).
     """
     runs = _all_runs(ctx)
     chosen, why, missing = _mentioned_run(message, runs)
     not_found = [f"NOT ON DISK: the message asks about '{word}', and no run with that id is on disk. Say so "
                  "plainly; do not answer about a different run as though it were that one." for word in missing]
     if not runs:
-        return "\n".join(["(no run on disk yet)", *not_found])
+        return "\n".join(["(no run on disk yet)", *not_found]), ""
     lines = [f"Runs on disk, newest first (up to {_RUN_INDEX_SIZE}):"]
     for run in reversed(runs[-_RUN_INDEX_SIZE:]):
         lines.append(f"- {run.get('run_id')}: {_run_kind(run)}, {_when(run.get('started_at_epoch_s'))}, {_run_outcome(run)}")
@@ -1905,7 +1913,7 @@ def _run_context(ctx: PerfContext, message: str = "", run_id: str = "") -> str:
     lines.append("")
     lines.append(f"Run under discussion: {chosen.get('run_id')} ({_run_kind(chosen)}; {why})")
     lines += _ceiling_detail(chosen) if chosen.get("kind") == "ceiling" else _campaign_detail(chosen)
-    return "\n".join(lines)
+    return "\n".join(lines), str(chosen.get("run_id") or "")
 
 
 _SCREEN_HINTS: dict[str, str] = {
@@ -1924,6 +1932,8 @@ _CHAT_SYSTEM = """You are the Crucible AI assistant embedded in the Crucible per
 Crucible is an autonomous performance engineer: it runs load experiments against a target service, diagnoses bottlenecks from its telemetry, proposes bounded config changes under human approval, and verifies every change with a fresh measurement.
 
 The facts below are read from the operator's configuration and campaign manifests on disk. "Runs" lists the runs on disk and details one of them: answer questions about any run (what it proposed and why, the trade-offs between alternatives, what was measured, why it stopped) from that block and the evidence in it. Start every answer about a run by naming the run you are discussing. If the operator asks about a run that is not listed, say it is not on disk. Only MEASURED values are results: a predicted p99, and every Advisory proposal, has NOT been applied or measured, so never present it as a result. A ceiling probe describes the service as it stands, never a verdict on a change. When a change was refused by the guard, quote the guard's reason exactly; if the operator asks about applying it by hand, say plainly that it lies outside the bounds the target profile allows the agent, that doing it is the operator's own decision, and that any result would only count once measured. Knowledge excerpts come from documents the operator uploaded. Prefer both over general knowledge. When you use an excerpt, name its file. If neither the facts nor the excerpts cover the question, say so instead of guessing.
+
+Sources have ids: S1 to S4 are the numbered knowledge excerpts, R is the run under discussion in the Runs block, F is the current configuration in the Facts block. End every reply with one last line, exactly "USED: " followed by the ids of only the sources you took facts from (for example "USED: S2,R"), or "USED: none" when you used none. Never write the ids anywhere else in the reply.
 
 Answer concisely. You may use only these HTML tags: <strong>, <code>, <em>, <br>, <ul>, <li>, <p>. Stay factual: only claim things that were measured or are written in the facts or excerpts."""
 
@@ -1987,8 +1997,14 @@ async def perf_chat(body: ChatBody, request: Request):
     ctx = _context(request)
     screen_hint = _SCREEN_HINTS.get(body.screen, f"The user is on the '{body.screen}' screen.")
     hits, excerpts = await _retrieve(request, body.message)
+    if hits:
+        # Numbered here, not in _retrieve: the AI-suggestion buttons share that helper and
+        # are not changed by Group 54.
+        excerpts = "\n\n".join(f"[S{n}] {h['source']}{' > ' + str(h['heading']) if h.get('heading') else ''}\n{h['text']}"
+                               for n, h in enumerate(hits, 1))
+    runs_text, run_under_discussion = _run_context_and_id(ctx, body.message, body.run_id)
     prompt = (f"[Context: {screen_hint}]\n\nFacts:\n{_chat_facts(ctx)}\n\n"
-              f"Runs:\n{_run_context(ctx, body.message, body.run_id)}\n\n"
+              f"Runs:\n{runs_text}\n\n"
               f"Knowledge excerpts:\n{excerpts}\n\nUser: {body.message}")
     try:
         result = await GatewayClient().chat(
@@ -1998,7 +2014,48 @@ async def perf_chat(body: ChatBody, request: Request):
         )
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"gateway error: {exc}") from exc
-    return {"reply": _safe_reply(result.get("text") or "(no reply)"), "sources": _sources(hits)}
+    reply, used = _split_used(result.get("text") or "(no reply)")
+    sources = _used_sources(used, hits, run_under_discussion, str(ctx.sla_path))
+    return {"reply": _safe_reply(reply), "sources": sources}
+
+
+# The model ends its reply with "USED: S2,R". Searching the knowledge base returns no
+# relevance score, so the top hits were listed as Sources whether or not the answer used
+# them, and an answer built from a run listed document sections instead (trial,
+# 2 November 2026, Group 54). Now only what the model says it used is shown, and only
+# what the prompt actually offered.
+_USED_LINE = re.compile(
+    r"(?:<br\s*/?>|<p>|\s)*USED:\s*((?:none|(?:S\d+|R|F)(?:\s*,\s*(?:S\d+|R|F))*))\.?\s*(?:</p>)?\s*$", re.I)
+
+
+def _split_used(text: str) -> tuple[str, list[str] | None]:
+    """The reply without its final USED line, and the ids that line names (None: no such line)."""
+    match = _USED_LINE.search(text)
+    if match is None:
+        return text, None
+    return text[:match.start()].rstrip(), [i.upper() for i in re.findall(r"\b(S\d+|R|F)\b", match.group(1), re.I)]
+
+
+def _used_sources(used: list[str] | None, hits: list[dict[str, Any]], run_id: str, sla_path: str) -> list[dict[str, Any]]:
+    """The sources the reply says it used, each checked against what the prompt offered.
+
+    A missing USED line shows no sources rather than all of them: listing sources
+    that were not shown to have been used implies a grounding that is not there.
+    The check is that the id was offered, not that the answer drew on it: a word-overlap
+    test was tried on the real document chunks and passed the wrong ones (same product,
+    same vocabulary), so it was not kept (Group 54).
+    """
+    offered: dict[str, dict[str, Any]] = {f"S{n}": {"source": h["source"], "heading": h.get("heading")}
+                                          for n, h in enumerate(hits, 1)}
+    offered["F"] = {"source": sla_path, "heading": "current SLA and target profile"}
+    if run_id:
+        offered["R"] = {"source": f"results/{run_id}.json", "heading": "run manifest"}
+    sources: list[dict[str, Any]] = []
+    for ident in used or []:
+        entry = offered.get(ident)
+        if entry is not None and entry not in sources:
+            sources.append(entry)
+    return sources
 
 
 async def _retrieve(request: Request, query: str) -> tuple[list[dict[str, Any]], str]:
@@ -2747,6 +2804,8 @@ async def perf_active_campaign(request: Request):
         "approvals": approvals,
         "manual_steps": manual,
         "job": _job_dict(job) if job else None,
+        # Which step of the loop the run is on, read from the job's own log (Group 55).
+        "stage": loop_stage(read_output(job)) if job else None,
     }
 
 

@@ -192,3 +192,37 @@ work. Fix only when touching the file for another reason.
   do not run the page: a click handler that never fires, or a value read from the wrong
   element, still passes. Operator, 2 November 2026: add browser tests (e.g. Playwright) for
   the campaign path (launch, approve, pause, resume, abort) after submission. Low priority.
+
+## Operator direction, 2 November 2026 (trial, steps 9 to 15)
+
+- **The metrics provider cannot be chosen for a live run.** `crucible run` builds the
+  Actuator provider directly; only `crucible capture` takes `--provider` (actuator, promql,
+  datadog). Operator: "our tool should be able to choose the provider in settings." It is not
+  a settings change today: the Datadog adapter reads the latest 10 s interval, not the
+  measured window (57 GC pauses where Actuator and Prometheus count 2,338), so a live run on
+  it would feed the agent wrong counts and totals. Fix: a `metrics.provider` setting in the
+  profile or SLA, shown on the wizard's Target step, with the window aggregation done first.
+  Phase 1, the Settings page as a browser-session preview, is built (Group 56, 2 November 2026). Phase 2: a server-side connection store (credentials by environment-variable name, DESIGN.md §8), a `metrics.connection` reference in the profile or SLA and a selector in the wizard, a working Test button, runs that honour the connection, and the Datadog and PromQL window fixes. About 4 to 6 hours plus live validation. Until then the demo says Crucible reads Actuator (DEMO_SCRIPT Step 12).
+- **No "run record" in the dashboard.** Results shows the headline, the measured before and
+  after, spend and limits; per experiment only the label, p99 and verdict. The approver, the
+  deployed commit and the commit the target reports, the model, the earlier attempts the
+  agent was reminded of and the audit trail are in the manifest and `audit.jsonl` only (the
+  demo shows them on Box B, Step 15). Operator: back-log it. Fix: a Run record card on
+  Results (those facts per experiment, the run's audit lines, a link to download the
+  manifest JSON). About 1.5 hours with tests.
+- **Fact and Playbook memory are designed, not built.** The campaign recalls what earlier
+  runs measured (the journal reads past manifests, and experiment 1 of run-1793596989174 was
+  handed 2 of them), but it writes no Fact or Playbook, and the Playbooks screen says
+  promotion is not built. Five of the seven memory kinds in §13 are live. Next step when it
+  is taken up: a human-reviewed promotion from a repeated, measured finding to a
+  project-scoped Playbook (§13).
+- **Pause and Abort act only between experiments; DESIGN.md §7 says otherwise.** §7:
+  "pausing stops the load generator and freezes the scenario's clock"; "abort discards the
+  in-flight experiment". The code reads both markers once, before an experiment starts
+  (`campaign.py`, top of the experiment loop), so the one in progress finishes first. The
+  dashboard's dialogs now say what the code does (Group 55). Decide later whether to build the
+  mid-window behaviour or to change §7; until then §7 and the code disagree.
+- ~~**`memory.sqlite` held 16 stale document chunks**~~ **FIXED 2 November 2026.** Retired
+  (status `superseded`, the store's own re-index statement; the store has no delete, by
+  design) and backed up to `~/backups/` on Box B. One audit record that the same statement
+  also retired was restored: the audit trail stays as it was.

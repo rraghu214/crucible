@@ -184,7 +184,9 @@ class TestTheChatIsGrounded:
         return client.post("/v1/perf/chat", json={"message": message, "screen": "new-test"}, headers=AUTH)
 
     def test_the_prompt_carries_the_matching_excerpt_and_the_reply_cites_it(self, tmp_path, gateway):
-        calls, _ = gateway
+        # Group 54: the sources shown are the ones the reply says it used, not the top hits.
+        calls, reply = gateway
+        reply["text"] = "The pool is HikariCP.<br>USED: S1"
         client, kb = _client(tmp_path)
         _upload(client)
         kb.wait_idle()
