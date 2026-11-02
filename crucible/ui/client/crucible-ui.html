@@ -1067,6 +1067,21 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
     <button class="info-banner-close" onclick="dismissBanner('ib-guardrails')">✕</button>
   </div>
   <div class="card">
+    <div class="card-h"><div class="card-title">Three layers</div><div class="card-sub">What the agent can run, what it can change, and what it can never write. Each is enforced in code, not asked for in a prompt</div></div>
+    <div class="guard-row">
+      <div class="guard-info"><div class="guard-name">1 · What it can run: command runner bounds</div><div class="guard-desc">No shell: a command is a list of words, so <code style="font-family:var(--f-mono);font-size:11px;">;</code>, <code style="font-family:var(--f-mono);font-size:11px;">&amp;&amp;</code> and pipes mean nothing. Only allowlisted programs, only inside the workspace, killed at a timeout. An allowlist of commands is not an allowlist of behaviours: <code style="font-family:var(--f-mono);font-size:11px;">git</code> is allowed, but <code style="font-family:var(--f-mono);font-size:11px;">git push</code> and <code style="font-family:var(--f-mono);font-size:11px;">git -c …</code> are refused. <span style="color:var(--lo);">crucible/coding/exec.py</span></div></div>
+      <span class="guard-locked">Always enforced</span>
+    </div>
+    <div class="guard-row">
+      <div class="guard-info"><div class="guard-name">2 · What it can change: properties and bounds</div><div class="guard-desc"><code style="font-family:var(--f-mono);font-size:11px;">profile.yaml</code> grants authority: the properties the agent may change, each with bounds, and the paths it may never write (tables at the bottom of this page). <code style="font-family:var(--f-mono);font-size:11px;">SKILL.md</code> only tells the model how the runtime fails; it goes into the prompt and grants nothing. A value outside the bounds fails the guard before it reaches the target. <span style="color:var(--lo);">crucible/perf/profile.py, crucible/perf/applicator.py</span></div></div>
+      <span class="guard-locked">Always enforced</span>
+    </div>
+    <div class="guard-row">
+      <div class="guard-info"><div class="guard-name">3 · What it can never write: Policy memory</div><div class="guard-desc">Each campaign stores its SLA as a Policy record, a memory kind only the operator or the system may write. With the protected path on <code style="font-family:var(--f-mono);font-size:11px;">slo.yaml</code>, the SLA has two independent locks. The load profile is in the same protected file; it is not yet in the Policy record. <span style="color:var(--lo);">crucible/perf/policy.py, crucible/core/memory/store.py</span></div></div>
+      <span class="guard-locked">Always enforced</span>
+    </div>
+  </div>
+  <div class="card">
     <div class="card-h"><div class="card-title">Core protections</div><div class="card-sub">These cannot be disabled — they exist because disabling them reintroduces a specific past failure</div></div>
     <div class="guard-row">
       <div class="guard-info"><div class="guard-name">SLA is read-only</div><div class="guard-desc">The AI cannot raise its own goalposts. The p99 ceiling and error budget you set are locked for the lifetime of the run. Enforced as Policy memory and a protected file path — weakening either independently defeats both.</div></div>
