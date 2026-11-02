@@ -1,7 +1,22 @@
 # Crucible — End-to-End Demo Script
 
-*Updated 25 October 2026 for the Part B changes and the chat that discusses runs.
-Practise it once end to end (Part P) before recording.*
+*Updated 3 November 2026. Previous update: 2 November with Groups 45–56 trial fixes
+and three additions (benchmark glossary, 1993 vs 26, guardrail layers). Practise
+once end to end (Part P) before recording.*
+
+> **3 November additions**
+>
+> 1. **§0.5** — clear-knowledge command + ⏸ pause marker for indexing.
+> 2. **§0.7** — tunnel marked optional; Cloudflare + Basic Auth path added.
+> 3. **§0.8** — pre-demo reset of perftest_sandbox and ~/perf-lab.
+> 4. **Step 1** — PerfLab API endpoint table added (~1 min extra).
+> 5. **Step 6** — five-file participation table (slo.yaml, profile, SKILL.md, locustfile, manifest).
+> 6. **Step 9** — Locust headless note moved here from the removed Step 10.
+> 7. **Step 10** (was 11) — two RAG stores explained here (knowledge-index + memory.sqlite).
+> 8. **Steps 11–15** renumbered (old 12–16). Timing table updated to ~33 min.
+> 9. **Benchmarks page** — LUCKY quadrant and 6-dimension definitions now shown on the page (code change).
+> 10. **Guardrails page** — Three-layers tab added to the page (code change).
+> 11. **Results page** — title now shows only the run id; headline is in the Findings card below (code change).
 
 ---
 
@@ -103,6 +118,30 @@ ls -lh ~/.crucible/knowledge-index/    # knowledge.sqlite + knowledge.sqlite.fai
 *(The agent API door, `POST /v1/agent/documents`, feeds the same store and
 needs the control token. See `docs/KNOWLEDGE_STORE.md`.)*
 
+**Before recording: clear the knowledge store so the upload looks fresh on camera.**
+Run these on Box B:
+```bash
+# Mark all existing chunks from PERF_LAB_PRODUCT.md as superseded
+python3 -c "
+import sqlite3, os
+db = os.path.expanduser('~/.crucible/knowledge-index/knowledge.sqlite')
+c = sqlite3.connect(db)
+c.execute(\"UPDATE chunks SET status='superseded' WHERE source LIKE '%PERF_LAB_PRODUCT%'\")
+c.commit()
+print('chunks superseded:', c.execute(\"SELECT COUNT(*) FROM chunks WHERE status='superseded'\").fetchone()[0])
+"
+# Remove the FAISS index (rebuilt on next search) and the original file
+rm -f ~/.crucible/knowledge-index/knowledge.sqlite.faiss \
+      ~/.crucible/knowledge-index/knowledge.sqlite.faiss.ids.json
+rm -f ~/.crucible/knowledge/PERF_LAB_PRODUCT.md
+ls -lh ~/.crucible/knowledge/ ~/.crucible/knowledge-index/
+# Expected: knowledge/ is now empty; knowledge-index/ has only the sqlite file
+```
+
+> **⏸ Pause recording** while the chunking/indexing runs after Upload & index in Step 2.
+> It takes ~4.5 min (gateway embed cooldown, 16 chunks). Resume when the chip says
+> "indexed — N chunks". Do not re-upload on camera.
+
 ### 0.6 Confirm the UI endpoints
 
 ```bash
@@ -116,18 +155,25 @@ ls ~/crucible/results/                  # manifests: <run>.json, ceiling probes 
 
 ### 0.7 Open the tunnel and browser
 
+**Option A — SSH tunnel (no auth required):**
 ```powershell
-# Windows laptop. Keep this terminal open throughout
+# Windows laptop. Keep this terminal open throughout.
 ssh -i "<path-to-ssh-key>" `
     -L 9113:127.0.0.1:8113 `
     ubuntu@<box-b-ip>
-# Locust runs --headless: there is no Locust web UI and no port 8089 to forward.
+# Locust runs --headless: no web UI, no port 8089 to forward.
 ```
+Browse **http://localhost:9113/dashboard**.
 
-Open **http://localhost:9113/dashboard**, then:
-1. **Settings → Control token** → paste `CRUCIBLE_CONTROL_TOKEN` (`grep CRUCIBLE_CONTROL_TOKEN ~/crucible/.env`) → Save
+**Option B — Cloudflare Quick Tunnel (if `CRUCIBLE_UI_USER` / `CRUCIBLE_UI_PASSWORD` are set in `.env`):**
+Browse the public Cloudflare URL directly. The Basic Auth login grants the control
+token automatically (`CRUCIBLE_UI_LOGIN_GRANTS_CONTROL=1`), so you need only one
+credential. No SSH port forwarding needed. *(The tunnel and login come down after submission.)*
+
+In either case, confirm after opening:
+1. **Settings → Control token** → paste `CRUCIBLE_CONTROL_TOKEN` (for Option A; Option B auto-grants it)
 2. **Results** → a real run loads (chart and experiment table)
-3. **Active** → "No campaign is running" when nothing is running (no demo content since Group 45)
+3. **Active** → "No campaign is running"
 
 ---
 
@@ -160,6 +206,32 @@ Don't record a step you haven't seen pass.
 
 ---
 
+### 0.8 Pre-demo reset of perftest_sandbox (once, before recording)
+
+Before the first recording take, the `perftest_sandbox` branch should not exist on
+GitHub (so the audience sees Crucible create it). **One-time setup only.**
+
+```bash
+# From Box B — delete the remote branch (Box B has write access via the deploy key)
+cd ~/perf-lab
+git push perftest --delete perftest_sandbox   # removes it from the remote
+
+# Also clear ~/perf-lab and re-clone so the workspace is pristine
+cd ~
+rm -rf ~/perf-lab
+git clone git@github.com:rraghu214/perf-lab.git ~/perf-lab
+cd ~/perf-lab && git log --oneline -2         # confirm it is at the base state
+```
+
+Or from your laptop (HTTPS):
+```bash
+gh api repos/rraghu214/perf-lab/git/refs/heads/perftest_sandbox -X DELETE
+```
+
+Crucible recreates `perftest_sandbox` from the base branch when the first campaign runs.
+
+---
+
 ## Pre-flight checklist (confirm before pressing Record)
 
 ```
@@ -184,7 +256,7 @@ Practice : Part P passed
 
 ---
 
-## Step 1 — Problem statement + architecture (2 min) [EXPLAIN]
+## Step 1 — Problem statement + architecture + PerfLab (3 min) [EXPLAIN]
 
 **Say:**
 "Performance engineering today is manual: load test, open Grafana, form a guess,
@@ -202,6 +274,25 @@ approval, applies it, and measures again. Every claim is a measurement."
 Postgres, Redis, Prometheus and Jaeger. Box B, this machine, runs Crucible and
 the Locust load generator. GLC v5, hosted on Render, is the LLM gateway.
 Crucible never holds model keys; the gateway rotates them."
+
+**PerfLab target (~1 min):**
+
+"PerfLab is a realistic Spring Boot service deliberately wired to fail in eight
+different ways. The key endpoints are:"
+
+| Endpoint | What it does | Bottleneck it exercises |
+|---|---|---|
+| `/api/db` | single DB query (Postgres via HikariCP) | connection pool |
+| `/api/cache` | Redis cache-aside (hit or miss) | cache hit rate, GC |
+| `/api/downstream` | real HTTP call to httpbin | downstream latency |
+| `/actuator/health` | Spring Boot health | — |
+| `/actuator/metrics` | Micrometer metrics | collector reads these |
+
+"Crucible points its Locust load at `/api/db`, reads HikariCP and JVM metrics from
+`/actuator/metrics`, and reads the property it changes back from `/actuator/env`
+to prove the new config is in force before it measures. The service resets between
+experiments by deploying a new commit to the sandbox branch — the post-receive
+hook on Box A builds and restarts it."
 
 ---
 
@@ -330,6 +421,20 @@ Set mode back to **Semi-Automated** → **Next: Review**.
 and the preflight checks, including that the load script actually drives the SLA
 endpoint. That is what `crucible plan` prints, from the same source."
 
+**Five files behind every run:**
+
+| File | What it holds | Agent can write? |
+|---|---|---|
+| `slo.yaml` | Goal (p99, error budget, load profile) — Launch writes it | No (Policy memory + protected path) |
+| `config/profiles/spring-boot.yaml` | Allowed properties and bounds, protected paths | No (it IS the guard) |
+| `config/profiles/spring-boot.SKILL.md` | How Spring Boot fails, in plain prose — goes into the prompt only | No |
+| `locustfile.py` | The load script driving `/api/db` | No |
+| `results/<run-id>.json` | The manifest: goal, baseline, every change, approvals, commits, models, verdict | No (append-only) |
+
+"These five files are the whole system's memory and authority. The agent reads most
+of them; it writes none of them directly. Everything it does is a parameter change
+to one of the values listed in `allowed_properties` of `spring-boot.yaml`."
+
 ---
 
 ## Step 7 — Guardrails + sandbox structure (2 min) [UI]
@@ -338,18 +443,33 @@ endpoint. That is what `crucible plan` prints, from the same source."
 
 "Two lists. The core protections cannot be disabled."
 
-Policy row: "The SLA is Policy memory. The agent has no write permission for it,
-ever. Two independent locks: a protected path in the file guard, and the Policy
-memory kind. Both would have to fail. The operator can still change it, mid-run
-too, and every such edit is recorded on the manifest as an amendment."
+"Crucible organises its guardrails in three layers. Session 17 supplied the
+concepts behind the first two; Crucible adds the third."
+
+**Layer 1 — command runner bounds.** "Session 17 defines four hard limits on
+what the agent can run: no shell (commands are words, not shell strings), an
+allowlist of allowed tools, inside the workspace only, and a timeout. An
+allowlist of commands is not an allowlist of behaviours — `git` is on the list
+but `git push origin main` is refused; `git -c core.pager=id log` executes
+programs through git's config and is also refused. The list says which tools
+exist; the constraints inside each tool are separate."
+
+**Layer 2 — property bounds in `profile.yaml`.** "SKILL.md tells the model how
+this runtime fails. It goes into the prompt and grants nothing. `profile.yaml`
+grants authority: the allowed properties and their bounds. A SKILL.md saying
+'raise the pool to 10,000' has zero effect — that number fails the guard before
+it reaches the target. Session 17's rule, stated three times in the PDF: a skill
+changes how the agent works; it can never change what the agent is allowed to do."
+
+**Layer 3 — Policy memory.** "The SLA is Policy memory. The agent has no write
+permission for it, ever. Two independent locks: a protected path in the file
+guard, and the Policy memory kind. Both would have to fail. The operator can
+still change it mid-run, and every such edit is recorded on the manifest as an
+amendment."
 
 Sandbox row: "Crucible writes to exactly one branch, `perftest_sandbox`, on the
 PerfLab repo, never its base branch. Each experiment is one commit of one file,
 pushed to that branch. The post-receive hook on Box A rebuilds."
-
-Allowed properties: "SKILL.md tells the model how this runtime fails. It goes
-into the prompt and grants nothing. `profile.yaml` grants authority. A SKILL.md
-saying 'raise the pool to 10,000' has zero effect."
 
 ---
 
@@ -389,6 +509,11 @@ itself reports the new value, and only then runs a fresh measurement window."
 
 **Click Approve.**
 
+"Crucible drives Locust headless: no web UI, no port 8089. It is a subprocess
+at the scenario's users and spawn rate. The diagnosis uses server-side Actuator
+metrics — HikariCP pending connections, acquire time, server p99 — not just
+Locust's client view. They measure different things."
+
 **Optional, mid-run edit (30 s):** "I can change the goal mid-run." Raise p99 in
 the wizard → **💾 Save changes**. "It is taken at the next experiment boundary,
 recorded as an amendment, and in Semi-Automated it pauses for me to confirm."
@@ -397,29 +522,28 @@ recorded as an amendment, and in Semi-Automated it pauses for me to confirm."
 
 ---
 
-## Step 10 — Load generator: headless Locust (1 min) [EXPLAIN]
-
-"Crucible drives Locust headless: no web UI, no port. It is a subprocess that
-sends requests at the scenario's users and spawn rate, then writes its CSV.
-A web UI would compete with the load generator for Box B's single CPU.
-
-The diagnosis uses server-side metrics, Actuator's `hikaricp.connections.pending`
-and the server's p99, not just Locust's client view. They measure different
-things."
-
----
-
-## Step 11 — Results (1.5 min) [LIVE]
+## Step 10 — Results + memory stores (1.5 min) [LIVE]
 
 **Navigate to:** Results → ↺.
 
-"This comes from the manifest file on Box B, not hardcoded data."
+"This comes from the manifest file on Box B, not hardcoded data. The title is
+just the run id — the full outcome is in the Findings card below it."
 
 Before/After chart: "Two measured windows, identical load. The only difference
 is the pool size."
 
 Trials: "The agent predicted 140 ms. The prediction is tracked as calibration,
 but the verdict uses only the measurement."
+
+**Two RAG stores behind this run:**
+- `~/.crucible/knowledge-index/knowledge.sqlite` — the chunked uploaded documents
+  (search at each chat turn; citations say "PERF_LAB_PRODUCT.md")
+- `~/.crucible/memory.sqlite` — the agent's own memory: the locked SLA (Policy),
+  the audit trail, and the journal that recalls past experiments at diagnosis
+
+"The chat searches both. When you ask why an experiment was kept, it reads
+`memory.sqlite`'s episode records — the run manifests. When you ask a product
+question, it searches `knowledge-index/`. The Sources line tells you which."
 
 **Show on Box B:**
 ```bash
@@ -433,7 +557,7 @@ approval, the caps and any mid-run edits. Reproducible by construction."
 
 ---
 
-## Step 12 — Datadog + CI/CD (1 min) [EXPLAIN]
+## Step 11 — Datadog + CI/CD (1 min) [EXPLAIN]
 
 "Crucible reads the target's metrics directly from its Actuator endpoint, and has
 adapters for Prometheus (PromQL) and Datadog. PerfLab also publishes the same
@@ -459,7 +583,7 @@ restarts. In Jenkins or GitHub Actions, the same push would trigger the pipeline
 
 ---
 
-## Step 13 — History + chat about runs (2.5 min) [LIVE]
+## Step 12 — History + chat about runs (2.5 min) [LIVE]
 
 **Navigate to:** History & Diff. The run table is live from Box B.
 
@@ -503,49 +627,104 @@ never shown as a verdict on a change."
 
 ---
 
-## Step 14 — Benchmarks + the LUCKY quadrant (2 min) [UI]
+## Step 13 — Benchmarks + the LUCKY quadrant (3 min) [UI]
 
 **Navigate to:** Benchmarks (drawn from disk: the replay files and the live manifests).
 
-"Diagnosis is replayed against captured snapshots: two seconds and a fraction of
-a cent each, against fifteen minutes for a live campaign. So I can run hundreds
-of diagnosis tests without one load test."
+### Glossary (one-liners for the audience)
 
-Scoring grid: "Six dimensions. The LUCKY quadrant matters most: wrong diagnosis,
-fix worked anyway. Counting that as success fails the next look-alike fixture.
-Scoring diagnosis separately from outcome is what catches it."
+`Task` is Session 18's term applied to the performance domain. `Fixture`,
+`Snapshot`, and `Replay` are **Crucible's own vocabulary** — S18 does not use
+them. (S18's "fixture" means visible test cases an agent can memorize, which is
+a different thing entirely.)
 
-**The numbers (run 2, 1 November 2026, the benchmark of record; gemini-3.5-flash-lite):**
+| Term | One line | Origin |
+|---|---|---|
+| **Task** | A question to the agent: "given this snapshot, what is wrong, and what would you change?" | S18 |
+| **Fixture** | A real service under load, measured and frozen — a crime-scene photograph | Crucible |
+| **Snapshot** | One reading of the service's metrics at a moment in time, produced by the collector | Crucible |
+| **Replay** | Running the agent against a stored snapshot — no load test, 2 seconds, a fraction of a cent | Crucible |
+| **Live** | A full campaign: load → collect → diagnose → apply → redeploy → remeasure | Crucible |
+
+"Session 18's lesson: a benchmark is a procedure, not a score — it is a Task, a
+Harness (the environment and allowed tools), a Policy (what the agent may do), a
+Scorer (the rules that turn a run into numbers), and a Manifest (the exact
+versioned record — commit SHA, model ID, scorer version — that lets anyone rerun
+it without calling a model). Never publish the conclusion without keeping the
+observation that produced it."
+
+"The replay/live split is Crucible's application of that principle: capture a
+fixture once, run the agent against it hundreds of times cheaply. 23 snapshots,
+$0.054 each replay run, vs 15 minutes and $0.0115 for six live campaigns."
+
+### The LUCKY quadrant
+
+Scoring grid: "Six dimensions. The LUCKY quadrant matters most: **wrong
+diagnosis, fix worked anyway.** Counting that as a success fails the next
+look-alike fixture. Session 18 flags this as 'visible-fixture fit' — an agent
+that memorises the answer rather than solving the problem. Crucible extends it to
+the performance domain: an agent that raises the pool because it misread a GC
+signal, on a fixture where the pool also happened to be tight, records a success
+and will fail the next fixture that looks similar but isn't. The LUCKY quadrant
+is what catches it."
+
+"**The LUCKY quadrant is not in the course by that name — it is Crucible's
+contribution.** Session 18 introduced the principle; Crucible names the
+failure mode and measures it explicitly on every run."
+
+### The numbers
+
+**Run 2, 1 November 2026, the benchmark of record (gemini-2.5-flash-lite):**
+
 "Live: six Fully Automated campaigns, one per planted fault, eight experiments.
-Seven CORRECT, one LUCKY, no UNLUCKY, no WRONG, and every SLA met, for just over a
-cent ($0.0115). The LUCKY one is real: on the N+1 query fault the agent first
-raised the pool. That made it 11% faster, so on outcome alone it counts as a
-success. The scorer marks it LUCKY because the pool was not the cause. The second
+Seven CORRECT, one LUCKY, no UNLUCKY, no WRONG, every SLA met, just over a cent
+($0.0115). The LUCKY one is real: on the N+1 query fault the agent first raised
+the pool. That made it 11% faster, so on outcome alone it counts as a success.
+The scorer marks it LUCKY because the pool was not the cause. The second
 experiment fixed the query and was scored CORRECT."
 
 "Replay: 23 clean snapshots, 40 cases. Diagnosis correct on 31 of 37 cases that
-have a true cause, and 32 of 40 on the task grade, for five cents ($0.054)."
+have a true cause, 32 of 40 on the task grade, five cents ($0.054)."
 
-Point at the task classes if asked: A 8/9, B 12/14, C 9/10, D 2/5, E 1/2. D and E
+Point at task classes if asked: A 8/9, B 12/14, C 9/10, D 2/5, E 1/2. D and E
 are the weak classes; say so rather than skipping them.
 
-**On evaluation:**
-"Every test assertion is drafted with its reasoning and reviewed by me before
-it's committed, more than 40 groups in `docs/CRUCIBLE_TEST_ASSERTIONS.md`. The
-review asks whether the reasoning matches the failure it tests for."
+### "1993 tests vs 26 benchmark cases" — if a trainer asks
+
+These test two completely different things:
+
+| | What it tests | Count | How |
+|---|---|---|---|
+| **pytest suite** | Crucible's own code: does the collector, the guard, the applicator, the wizard behave correctly? | 1993 | Unit + integration tests; 2 min |
+| **Benchmark** | The AI agent's reasoning: does it diagnose the right cause given a snapshot? | 26 runnable cases | Replay against captured snapshots |
+
+"1993 tests check the plumbing. 26 benchmark cases check the intelligence.
+Session 18's point: passing tests is not everything — you need to test that the
+right property was actually tested."
+
+### On evaluation
+
+"Every test assertion is drafted with its reasoning and reviewed by me before it
+is committed — more than 40 groups in `docs/CRUCIBLE_TEST_ASSERTIONS.md`. The
+review asks: does the reasoning match the failure it tests for? That is the same
+question Session 18 asks about every task."
 
 ---
 
-## Step 15 — Memory, the files behind it, and the run's receipt (3 min) [LIVE on Box B]
+## Step 14 — Memory, the files behind it, and the run's receipt (3 min) [LIVE on Box B]
 
 This is a critical section: it is where the audience sees that nothing is hidden.
 Everything Crucible knows is a file you can open. (Box B has **no `sqlite3` tool**;
 the commands below use `python3`, which is there. Tested 2 November 2026.)
 
-### 15.1 The memory kinds, and what is built today
+### 14.1 The memory kinds, and what is built today
 
 "The design has seven memory kinds, each with its own lifetime and write authority.
-Five are live. Two are designed and not built yet, and I would rather say so."
+Five are live. Two are designed and not built yet, and I would rather say so.
+
+The taxonomy comes directly from the course — Session 13's PDF defines all seven
+kinds in a table (Working, Episode, Fact, Playbook, Policy, Audit, Document
+chunk). Crucible inherits them without renaming them."
 
 | Kind | What it holds | Today |
 |---|---|---|
@@ -557,13 +736,18 @@ Five are live. Two are designed and not built yet, and I would rather say so."
 | Fact | confirmed operational knowledge | **designed, not built** |
 | Playbook | cause signatures that worked, promoted by a human | **designed, not built** (the Playbooks screen says so) |
 
+"The memory write permissions are the third guardrail layer from Step 7. Session
+11's rule: the LLM reads most kinds, writes a few, and can never write the audit
+log. Crucible adds Policy to that protected set — an agent that can overwrite its
+SLA is not safe to run autonomously."
+
 **Do not claim the agent learns across runs beyond recall.** It reads earlier
 manifests and is told what was tried and measured (experiment 1 of
 `run-1793596989174` was handed 2 earlier attempts on the same pool setting). It does
 not write Facts or Playbooks from what it finds. If asked: "It remembers what was
 measured, and a human decides what becomes a rule. Promotion is the next step."
 
-### 15.2 The files
+### 14.2 The files
 
 ```bash
 ls ~/.crucible/
@@ -588,7 +772,7 @@ copy from before the document store was split out (DESIGN.md §14). They were re
 2 November (status `superseded`, as a re-index does it; backup in `~/backups/` on Box B), so
 the count below shows only current records. The chat searches `knowledge-index/`.
 
-### 15.3 Memory and audit, live
+### 14.3 Memory and audit, live
 
 ```bash
 python3 -c 'import sqlite3,os;c=sqlite3.connect("file:"+os.path.expanduser("~/.crucible/memory.sqlite")+"?mode=ro",uri=True);print(c.execute("select kind,count(*) from records where status=\"current\" group by kind").fetchall());[print(r) for r in c.execute("select created_at,kind,substr(text,1,90) from records where kind in (\"policy\",\"audit\") order by created_at desc limit 4")]'
@@ -603,7 +787,7 @@ last two lines are the approval you gave and the pool change it applied, 2 to 50
 is not safe to run autonomously. Here it is a structural constraint, not a rule
 someone has to remember."
 
-### 15.4 The run's receipt
+### 14.4 The run's receipt
 
 "Every run writes one file, its receipt. It records the goal it was judged against,
 the baseline it measured, every change it tried, who approved it, which commit was
@@ -624,7 +808,7 @@ files on the box, which is the point.
 
 ---
 
-## Step 16 — CLI parity (1 min) [EXPLAIN]
+## Step 15 — CLI parity (1 min) [EXPLAIN]
 
 "Every button calls the same function as its CLI command: same guard, same
 approval binding. The UI is not a shortcut."
@@ -651,28 +835,29 @@ wasn't measured."
 
 ---
 
-## Total estimated recording time: ~29 minutes
+## Total estimated recording time: ~33 minutes
 
-| Section | Time |
-|---|---|
-| Intro + architecture | 2 min |
-| Knowledge upload + index | 2 min |
-| Grounded chat | 1.5 min |
-| Input data + templates | 1 min |
-| Goal & SLA | 1 min |
-| Mode, scenarios, hooks, budget, review | 2.5 min |
-| Guardrails | 2 min |
-| Preflight | 1.5 min |
-| Live campaign + approval (+ edit) | 3 min |
-| Headless Locust | 1 min |
-| Results + manifest | 1.5 min |
-| Datadog + CI/CD | 1 min |
-| History + chat about runs | 2.5 min |
-| Benchmarks | 2 min |
-| Memory taxonomy | 2 min |
-| CLI parity | 1 min |
-| Closing | 0.5 min |
-| **Total** | **~29 min** |
+| Step | Section | Time |
+|---|---|---|
+| 1 | Problem statement + architecture + PerfLab API | 3 min |
+| 2 | Knowledge upload + index | 2 min |
+| 3 | Grounded chat | 1.5 min |
+| 4 | Input data + request templates | 1 min |
+| 5 | Goal & SLA | 1 min |
+| 6 | Mode, scenarios, hooks, budget, review | 2.5 min |
+| 7 | Guardrails + sandbox | 2 min |
+| 8 | Preflight | 1.5 min |
+| 9 | Live campaign + approval (+ optional edit) | 3 min |
+| 10 | Results + memory stores | 1.5 min |
+| 11 | Datadog + CI/CD | 1 min |
+| 12 | History + chat about runs | 2.5 min |
+| 13 | Benchmarks + LUCKY + glossary | 3 min |
+| 14 | Memory taxonomy | 3 min |
+| 15 | CLI parity | 1 min |
+| — | Closing | 0.5 min |
+| | **Total** | **~33 min** |
+
+> Step 2 includes a ⏸ pause during indexing (~4.5 min, not counted in audience time).
 
 ---
 

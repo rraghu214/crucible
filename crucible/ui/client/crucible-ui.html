@@ -2804,7 +2804,7 @@ async function loadResults(runId){
   const title=document.getElementById('results-title');
   const sub=document.getElementById('results-sub');
   const pill=document.getElementById('results-outcome-pill');
-  if(title) title.textContent=(report.run_id||runId)+' · '+(report.headline||'');
+  if(title) title.textContent=report.run_id||runId;
   if(report.run_id){chatRunId=report.run_id;_chatContextRun();}
   if(sub){
     const m=report.measurement||{};
