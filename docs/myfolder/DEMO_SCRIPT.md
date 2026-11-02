@@ -211,8 +211,9 @@ Don't record a step you haven't seen pass.
   `perftest_sandbox` on GitHub changes nothing the run touches, and the audience would
   not see Crucible recreate it there.
 - **Deleting it on `perftest` would break the demo.** Crucible would recreate it from
-  `main`, and `main` has pool=10, not the broken pool=2. The baseline would show no
-  bottleneck to find.
+  the workspace's *local* `main`. GitHub's `main` has pool=2 since perf-lab PR #5
+  (3 November), but Box B's local `main` is 12 commits behind and still has pool=10,
+  and it lacks `/api/slow`. The baseline would show no bottleneck to find.
 
 To start clean, use the pool=2 reset in 0.3. Each run's experiment commits then
 sit on top of that reset commit.

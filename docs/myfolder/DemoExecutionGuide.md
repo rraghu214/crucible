@@ -98,7 +98,8 @@ cd ~/perf-lab && git checkout -q perftest_sandbox && git fetch -q perftest \
 # Then re-check step 2.
 ```
 
-**Never reset from `main`**: `main` has pool=10, which has no bottleneck to find.
+**Reset with the command above, not from `main`**: GitHub's `main` has pool=2 since
+perf-lab PR #5, but `~/perf-lab`'s local `main` on Box B is behind it and still has pool=10.
 **Never delete `perftest_sandbox` or `~/perf-lab`**: Crucible does not clone, and
 would recreate the branch from `main` (DEMO_SCRIPT §0.8).
 
