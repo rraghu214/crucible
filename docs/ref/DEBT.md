@@ -222,6 +222,11 @@ work. Fix only when touching the file for another reason.
   (`campaign.py`, top of the experiment loop), so the one in progress finishes first. The
   dashboard's dialogs now say what the code does (Group 55). Decide later whether to build the
   mid-window behaviour or to change §7; until then §7 and the code disagree.
+- **Loop card clears when a run finishes; final state is not retained.** The workflow card
+  on the Active page goes blank once a run is done. Operator request (2 November 2026, step
+  14): show the final card state (all steps reached, last verdict) when viewing a completed
+  run from Jobs or Results. Fix: store the last `loop_stage` result on the job record and
+  render it in the completed-run view. Low priority.
 - ~~**`memory.sqlite` held 16 stale document chunks**~~ **FIXED 2 November 2026.** Retired
   (status `superseded`, the store's own re-index statement; the store has no delete, by
   design) and backed up to `~/backups/` on Box B. One audit record that the same statement
