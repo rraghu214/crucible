@@ -615,15 +615,18 @@ restarts. In Jenkins or GitHub Actions, the same push would trigger the pipeline
 
 Live AI ON. Type, with a **real run id** from 0.6 (name the run: the chat cannot
 tell which one you mean from the screen alone):
-`Tell me about <advisory-run-id>: what did you propose, why, and was anything measured?`
+`Tell me about run-1793613354320-fully_auto_burst_100u: what did you propose, why, and was anything measured?`
+*(The Advisory run. Its id says fully_auto because of the scenario name it was launched with.)*
 
-→ The answer names the run, the cause, the change (pool size to 50) and the evidence
+→ The answer names the run, the cause, the change (pool size 2 → 20) and the evidence
 (93 pending connections, acquire time about 2.2 s), says nothing was applied or
 measured, and calls the predicted p99 a prediction. (That Advisory run has one
 proposal, so "why #1 above #2" has no answer: do not ask it.)
 
-Then: `Why was experiment 1 kept in <semi-auto-run-id>?`
-→ It quotes the measured before → after (2500 → 69 ms), the run's own SLA (120 ms) and
+Then: `Why was experiment 1 kept in run-1793610533986-burst_100u?`
+*(The 2 November Semi-Automated run, or use the id of the run you just recorded.)*
+→ It quotes the measured before → after (2500 → 68 ms, pool → 50), the run's own SLA
+(150 ms, raised mid-run from 120 ms) and
 the verdict reason, and its **Sources** line names the run manifest
 (`results/<run-id>.json › run manifest`), not a document.
 
