@@ -6,6 +6,8 @@
 **Question K3 asks:** given only a metrics snapshot, can one glc_v5 call name the real
 cause (connection pool) and propose the right fix, as valid JSON?
 
+The raw probe files below were moved out of the repository on 3 November 2026 to the operator's archive; the figures in this document are the record.
+
 Snapshot: `k3_probe/snapshot.json`
 Prompt: `k3_probe/diagnosis_prompt.txt`
 Probe script: `k3_probe/run_probe.py`

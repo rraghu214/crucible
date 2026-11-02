@@ -17,7 +17,7 @@ Method and vocabulary follow Session 12 ("Containers, Sandboxes, and the Adversa
 - §12: attack chains
 - §15: the method
 
-The work plan these findings feed is `docs/SECURITY_HARDENING.md`.
+The work plan these findings fed was `docs/SECURITY_HARDENING.md` (a working prompt, moved to the operator's archive on 3 November 2026).
 
 **Scope:**
 

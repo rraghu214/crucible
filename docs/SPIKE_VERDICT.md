@@ -68,7 +68,7 @@ That is the core loop. The four-week plan builds on it.
 ## Evidence
 
 - `docs/K1_RESULT.md`, `docs/K3_RESULT.md`
-- `locust/results/` — all baseline, bottleneck, `k3-source`, and `k3-verify-01` run JSONs
+- `locust/results/` — all baseline, bottleneck, `k3-source`, and `k3-verify-01` run JSONs (moved out of the repository on 3 November 2026 to the operator's archive; the figures in this document are the record)
 - `k3_probe/snapshot.json`, `snapshot_k3a.json`, `result_*.json` (all four probe replies,
-  including the first wrong one)
+  including the first wrong one; moved out of the repository on 3 November 2026 to the operator's archive; the figures in this document are the record)
 - Commit `6fcb929` on `capstone/perf-agent`

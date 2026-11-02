@@ -18,7 +18,7 @@
 
 - `p50/p95/p99/rps` — from `locust/results/<run_id>.json` (Locust's own percentile approximation).
 - `hikari.acquire_mean` — per-run delta of the cumulative `hikaricp.connections.acquire` timer
-  (`TOTAL_TIME` delta / `COUNT` delta), from `locust/results/<run_id>_hikari.json`.
+  (`TOTAL_TIME` delta / `COUNT` delta), from `locust/results/<run_id>_hikari.json`. (Raw files moved out of the repository on 3 November 2026 to the operator's archive; the figures in this document are the record.)
 - `hikari.pending` — instantaneous gauge. Baseline: only sampled after the run (load already
   drained → 0). Bottleneck: sampled every 5s during the run; value shown is the peak.
 - 0 request failures in all six runs (30s `connection-timeout` absorbs the queue wait).

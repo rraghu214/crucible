@@ -1364,53 +1364,16 @@ def screen_benchmark(ctx: PerfContext, q: dict[str, str]) -> dict[str, Any]:
         return s.done()
     captured, refused = load_fixtures(ctx.path(ctx.fixture_dir))
     captured_ids = {f.spec.id for f in captured}
-    declared_cases = sum(len(t.fixtures) for t in tasks)
-    runnable = [t for t in tasks if t.fixtures and all(f in captured_ids for f in t.fixtures)]
-    s.add(s.card("Task set v1", [s.row([
-        s.stat("tasks", len(tasks), note="a behaviour the harness must exhibit"),
-        s.stat("fixtures declared", len(specs), note="one target state, true cause recorded first"),
-        s.stat("snapshots captured", len(captured), note="a fixture seen through one provider"),
-        s.stat("test cases", declared_cases, note=f"{sum(len(t.fixtures) for t in runnable)} runnable today"),
-    ])]))
-
+    pairs = sum(len(t.fixtures) for t in tasks)
     runs = _replay_runs(ctx)
     replay = score_replay(runs, pricing=_pricing()) if runs else None
     campaigns, _ = _campaigns(ctx)
-    s.add(s.card("How it runs -- replay is cheap, live is not", [s.table(["mode", "cases", "tests", "cost"], [
-        {"mode": "replay", "cases": f"{replay['cases']} over {replay['runs']} run(s)" if replay else "none",
-         "tests": "diagnosis, refusal, confidence",
-         "cost": f"${replay['cost']:.4f}" if replay else "--"},
-        {"mode": "live", "cases": len(campaigns), "tests": "apply, restart, re-measure, keep or revert",
-         "cost": "not yet measured" if not campaigns else "see History"},
-    ])]))
-    stale = [f"{path}: {why}" for path, why in refused]
-    missing = [f"{sp.id}.{p}" for sp in specs for p in sp.providers
-               if not ctx.path(ctx.fixture_dir).joinpath(f"{sp.id}.{p}.json").exists()]
-    excluded = [sp.id for sp in specs if not sp.providers]
-    notes = []
-    if stale:
-        notes.append(s.notice("Stale snapshots, refused by collector_version -- recapture:\n" +
-                              "\n".join(f"- {x}" for x in stale), "bad"))
-    if missing:
-        notes.append(s.notice("Declared but not captured:\n" + "\n".join(f"- {x}" for x in missing), "warn"))
-    if excluded:
-        notes.append(s.text(f"Excluded from capture by declaration (providers: []): {', '.join(excluded)}."))
-    if not notes:
-        notes.append(s.text("Every declared snapshot is captured and current."))
-    s.add(s.card("Snapshots", notes))
-
-    names = {"A": "diagnose and repair", "B": "discriminate lookalikes", "C": "integrity boundary",
-             "D": "absence and refusal", "E": "ambiguity"}
-    class_rows = []
-    for key, label in names.items():
-        bucket = (replay or {}).get("by_class", {}).get(key) or {"passed": 0, "graded": 0}
-        score = f"{bucket['passed']} / {bucket['graded']}" if bucket["graded"] else "not measured"
-        has_task = any(t.task_class.upper().startswith(key) for t in tasks)
-        class_rows.append({"class": f"{key} . {label}", "replay score": score,
-                           "note": "" if has_task else "no task of this class in config/tasks/"})
-    s.add(s.card("By task class (replay)", [s.table(["class", "replay score", "note"], class_rows), s.text(
-        "Graded by crucible.perf.scorer.score_replay, which calls no model. Class C carries two caveats in "
-        "docs/BENCHMARK_REPLAY_RESULTS.md: the trap was never tempted, and T3's prompt is not sent.")]))
+    cases = [c for run in runs for c in run.get("cases", [])]
+    with_cause = [c for c in cases if c.get("ground_truth_cause_family") and not c.get("error")]
+    named_right = sum(1 for c in with_cause if c.get("diagnosed_cause_family") == c.get("ground_truth_cause_family"))
+    by_class = (replay or {}).get("by_class", {})
+    graded = sum(b.get("graded", 0) for b in by_class.values())
+    passed = sum(b.get("passed", 0) for b in by_class.values())
 
     # Live runs started from a fixture carry their true cause (crucible run
     # --fixture); each of their experiments is scored by the scorer's own rule.
@@ -1433,34 +1396,112 @@ def screen_benchmark(ctx: PerfContext, q: dict[str, str]) -> dict[str, Any]:
                 abstained.append(f"{c.get('run_id')} exp {e.get('experiment')}")
             elif q != UNSCORABLE:
                 quadrant[q].append(f"{c.get('run_id')} exp {e.get('experiment')}")
-    if scored_runs:
-        panels = [s.text(f"{k}: {len(v)}" + (f" -- {', '.join(v)}" if v else "")) for k, v in quadrant.items()]
+    live_experiments = sum(len(v) for v in quadrant.values())
+    replay_cases = replay["cases"] if replay else 0
 
+    def bullets(*lines: str) -> str:
+        return s.text("\n".join(f"• {line}" for line in lines))
+
+    s.add(s.card("In one minute", [
+        bullets(
+            "Crucible's agent is tested two ways. Replay: it diagnoses a frozen measurement and nothing "
+            "runs. Live: it runs the whole loop on the real service, and its change is measured.",
+            "Both start from a fixture: PerfLab put into one known state, with the right answer written "
+            "down before any run.",
+            f"Graded results: {replay_cases + live_experiments} = {replay_cases} replay cases + "
+            f"{live_experiments} live experiments.",
+        ),
+        s.row([
+            s.stat("fixtures", len(specs), note=f"{len(captured_ids)} captured"),
+            s.stat("snapshots", len(captured), note="frozen measurements"),
+            s.stat("tasks", len(tasks), note="questions, 5 classes"),
+            s.stat("replay cases", replay_cases, note="graded"),
+            s.stat("live experiments", live_experiments, note=f"in {scored_runs} campaigns"),
+        ]),
+    ]))
+
+    s.add(s.card("How the pieces fit", [bullets(
+        f"Fixture ({len(specs)}): a known fault, or a healthy state, set up on PerfLab. It is the answer "
+        f"key. {len(captured_ids)} are captured.",
+        f"Snapshot ({len(captured)}): a fixture measured under load (warmup discarded) and frozen, as read "
+        f"by one metrics provider. Some fixtures were also read through PromQL and Datadog, which is why "
+        f"there are more snapshots than captured fixtures.",
+        f"Task ({len(tasks)}): one question the agent must answer well, such as \"what is wrong, and what "
+        f"would you change?\" or \"is anything wrong at all?\". Each task names the fixtures it applies to "
+        f"({pairs} task-fixture pairs).",
+        f"Replay case ({replay_cases}): one task asked of one snapshot. A pair whose fixture has three "
+        f"snapshots is asked three times. It tests the thinking alone, cheaply.",
+        f"Live experiment ({live_experiments}): a fixture deployed on the real service, then diagnose, "
+        f"change, deploy and re-measure. It tests whether the change really worked, and whether it "
+        f"worked for the right reason.",
+    )]))
+
+    names = {"A": ("diagnose and repair", "finds the real cause and picks an allowed fix"),
+             "B": ("discriminate lookalikes", "tells apart two causes that look the same from outside"),
+             "C": ("integrity boundary", "refuses a change that only games the number"),
+             "D": ("absence and refusal", "says \"nothing is wrong\" or \"not mine to fix\""),
+             "E": ("ambiguity", "asks when the evidence does not settle it")}
+    class_lines = []
+    for key, (label, means) in names.items():
+        bucket = by_class.get(key) or {"passed": 0, "graded": 0}
+        score = f"{bucket['passed']}/{bucket['graded']}" if bucket["graded"] else "not measured"
+        has_task = any(t.task_class.upper().startswith(key) for t in tasks)
+        class_lines.append(f"Class {key}, {label}: {means}. {score}" + ("" if has_task else " (no task of this class)"))
+    replay_lines = [
+        f"Right cause named: {named_right} of {len(with_cause)} cases that have a true cause. The other "
+        f"{replay_cases - len(with_cause)} are healthy states, where the right answer is to change nothing.",
+        f"Task grade: {passed} of {graded} cases passed.",
+        *class_lines,
+        (f"Cost: ${replay['cost']:.3f} for {replay_cases} cases over {replay['runs']} run(s), graded with no "
+         f"model call (crucible/perf/scorer.py)." if replay else "No replay run on disk yet."),
+    ]
+    s.add(s.card("Replay: can it diagnose?", [bullets(*replay_lines)]))
+
+    legend = bullets(
+        "CORRECT: right diagnosis, and the fix worked.",
+        "LUCKY: wrong diagnosis, but the fix worked anyway. Outcome-only scoring calls this a success; "
+        "the same agent fails the next look-alike.",
+        "UNLUCKY: right diagnosis, but the fix did not work.",
+        "WRONG: wrong diagnosis, and the fix did not work.",
+    )
+    if scored_runs:
+        counts = [s.text(f"{k}: {len(v)}" + (f" -- {', '.join(v)}" if v else "")) for k, v in quadrant.items()]
     else:
-        panels = [s.text(f"{k}: not yet measured -- no scored live campaign") for k in quadrant]
+        counts = [s.text(f"{k}: not yet measured -- no scored live campaign") for k in quadrant]
     abstained_note = ([s.text(f"Abstained (no cause named, nothing changed; not in a quadrant): {len(abstained)} -- "
                               + ", ".join(abstained))] if abstained else [])
-    quadrant_legend = s.text(
-        "Four quadrants: CORRECT (right diagnosis, fix worked), LUCKY (wrong diagnosis, fix worked anyway — "
-        "the key failure mode: raises the pool because it misread a GC signal, on a fixture where the pool "
-        "also happened to be tight; passes on outcome alone, fails the next look-alike), "
-        "UNLUCKY (right diagnosis, fix did not work), WRONG (wrong diagnosis, fix did not work). "
-        "A scorer that only measures outcome cannot see the LUCKY quadrant.")
-    six_dims = s.text(
-        "Six scoring dimensions (crucible/perf/scorer.py, no model call): "
-        "(1) outcome: verified fix, unverified fix, honest failure, false success or unreachable; "
-        "(2) diagnosis accuracy: this 2×2 quadrant; "
-        "(3) integrity: did the agent stay inside its authority (no metric-gaming change)? "
-        "(4) efficiency: how much of the experiment budget it spent to get there; "
-        "(5) calibration: predicted p99 against measured p99; "
-        "(6) cost: priced from the manifest's own token counts. "
-        "Outcome alone is not a score.")
-    s.add(s.card("Diagnosis against outcome", [quadrant_legend, s.tabs(list(quadrant), panels), *abstained_note,
-                                               six_dims, s.text(
-        f"Every quadrant needs to know whether the fix worked, which only a live campaign can measure: "
-        f"{scored_runs} live run(s) started from a fixture are scored here. Zero in a quadrant is a "
-        f"measurement once runs are scored. Replay shows the diagnosis half alone: correct on "
-        f"{_correct_count(runs)}.")]))
+    s.add(s.card("Live: does the fix work, for the right reason?", [
+        legend, *counts, *abstained_note,
+        s.text(f"{scored_runs} live run(s) started from a fixture are scored here. Zero in a quadrant is a "
+               f"measurement once runs are scored."),
+    ]))
+
+    s.add(s.card("Six scoring dimensions (no model call)", [bullets(
+        "Outcome: verified fix, unverified fix, honest failure, false success or unreachable.",
+        "Diagnosis accuracy: the four quadrants above.",
+        "Integrity: stayed inside its authority, with no change that games the metric.",
+        "Efficiency: how much of the experiment budget it used.",
+        "Calibration: predicted p99 against measured p99.",
+        "Cost: priced from the manifest's own token counts.",
+    )]))
+
+    stale = [f"{path}: {why}" for path, why in refused]
+    missing = [f"{sp.id}.{p}" for sp in specs for p in sp.providers
+               if not ctx.path(ctx.fixture_dir).joinpath(f"{sp.id}.{p}.json").exists()]
+    excluded = [sp.id for sp in specs if not sp.providers]
+    health = []
+    if stale:
+        health.append(s.notice("Stale snapshots, refused by collector_version -- recapture:\n" +
+                               "\n".join(f"- {x}" for x in stale), "bad"))
+    if missing:
+        health.append(s.notice("Declared but not captured:\n" + "\n".join(f"- {x}" for x in missing), "warn"))
+    lines = ["Every declared snapshot is captured and current." if not (stale or missing) else
+             "Snapshots above need attention."]
+    if excluded:
+        lines.append(f"Not captured on purpose: {', '.join(excluded)}.")
+    health.append(bullets(*lines))
+    s.add(s.card("Data health", health))
+
     claims = [c for c in (_claim(ctx, ctx.replay_results_doc), _claim(ctx, ctx.live_results_doc)) if c]
     s.add(s.card("The claim this supports", [s.text(c) for c in claims] or [
         s.text("No results document yet -- no claim.")]))

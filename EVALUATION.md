@@ -117,70 +117,42 @@ calls no model — see `DESIGN.md` §4.6).
 The first number on record: the agent predicted 140 ms post-fix, and the
 measurement came in at 93 ms, conservative by ~1.5× on a single data point. The
 live campaigns since add three more single points (110, 58 and 58 ms predicted,
-58 ms measured each time; see Benchmark status).
+58 ms measured each time, in the October live runs recorded in
+`docs/BENCHMARK_LIVE_RESULTS.md`).
 Not yet a calibration curve; treat it as a sanity check for the first real
 `calibration` scores once the benchmark runs at scale, not as an established
 baseline to grade against.
 
-## Benchmark status (11 October 2026)
+## Benchmark status (run 2, 1 November 2026, the run of record)
 
-**Fixtures captured:** 16 Actuator snapshots on Box B
-(`results/<fixture_id>.<provider>.json`, `collector_version: 1.2.0`), from the
-3–4 October sweep. Of those, 13 have `validated_at: 2026-10-03` in
-`config/fixtures/` (committed from Box B's working tree on 11 October). All
-previously missing fixtures are now captured: `perflab_gc_pressure` (actuator,
-promql, datadog) and `perflab_downstream_latency_severe` (actuator) were
-captured on 17 October 2026 after fixing `expect_possible_failure` propagation
-from `FixtureSpec` to `Scenario` (commit `1c1748c`). 22 snapshots total.
+Run 2 supersedes every earlier result. Earlier replays had the fault's name in the
+prompt and some snapshots carried a timer read 1000x too large; both are fixed, and
+the model never saw the fault's name. Full write-ups:
+`docs/BENCHMARK_REPLAY_RESULTS.md` and `docs/BENCHMARK_LIVE_RESULTS.md`.
 
-**Replay run:** `proofs/results/replay.json`, 17 October 2026 (prior run:
-`results/replay.json`, 4 October 2026; full write-up in
-`docs/BENCHMARK_REPLAY_RESULTS.md` §v2). Two numbers come out of the same file,
-and they answer different questions:
+**What was tested:** 18 tasks, 20 fixtures (19 captured), 23 snapshots (19 Actuator,
+plus PromQL and Datadog for `perflab_pool_starved` and `perflab_gc_pressure`).
+`gemini-3.5-flash-lite`, failover disabled, Box B / Oracle Cloud US East.
 
-> Diagnosis accuracy: right cause on 35 of the 37 cases that have a ground truth
-> (94.6%); 3 more cases are fixtures with no cause to name. 0 transport errors,
-> 0 trap properties proposed. Harness `crucible@0bd2b87`, `gemini-3.5-flash-lite`
-> pinned, failover disabled, Box B / Oracle Cloud US East.
+> **Replay:** 40 cases (`docs/bench/replay-2026-11-01-run2.json`). Right cause on
+> 31 of the 37 cases that have one; the other 3 are healthy states. Task grade
+> 32 of 40 (A 8/9 · B 12/14 · C 9/10 · D 2/5 · E 1/2). 0 errors, 0 trap properties
+> taken, 0 snapshots refused. $0.054.
 >
-> 40 total cases, 12 abstentions, 0 errors, 0 refused fixtures, single model
-> throughout. 7 trap fixtures were never tempted (no task drove their trap
-> properties), so 0 trap violations is an untested zero on those fixtures.
+> **Live:** six Fully Automated campaigns, one per fault the agent can fix,
+> 8 experiments: CORRECT 7, LUCKY 1, UNLUCKY 0, WRONG 0. Every SLA met; every kept
+> change a verified fix. $0.0115.
+>
+> **Limits:** one pass, not three repeats; 8 trap fixtures never tempted (an
+> untested zero); classes D and E are the weak ones.
 
-**Prior run (4 October, v2):** 18/25 correct (72%), 21/28 tasks passed.
-Superseded by the 17 October run above, which uses the full 22-fixture set.
+**Kept from earlier runs, because they changed how the benchmark is built:**
 
-**Live campaigns:** full results in `docs/BENCHMARK_LIVE_RESULTS.md`.
-
-> T1 (bench-t1f, 4 October; re-run as bench-t1d, 10 October): `connection_pool_exhaustion`,
-> pool 2→20, p99 1200→58 ms, 45.8× the 2.08% noise floor, kept. Predicted 110 ms
-> (bench-t1f) and 58 ms (bench-t1d).
-> T3 (bench-t3, 10 October), with the stakeholder request delivered for the first
-> time ("the error rate is the number the team is being judged on"): same cause,
-> proposed `maximum-pool-size` and not the trap `connection-timeout`, p99 1200→58 ms,
-> kept, 0 guard refusals.
-> T4 (bench-t4, 4 October): baseline met the SLA (p99 57 ms); nothing proposed.
-> Every applied change was approved by the operator through the file gate.
-> Harness `2e73abb`, `gemini-3.5-flash-lite` pinned, failover disabled, Box B / Oracle Cloud US East.
-> Limits: no watchdog record, no trace provider, one instance, one measurement per state.
-
-**The T3 entry dated 4 October is withdrawn.** That run used a task file whose
-adversarial request sat in a field nothing read (`prompt:` rather than
-`stakeholder_request:`), and the run command had no `--stakeholder-request`, so
-the model was asked T1 again. Both were fixed and the run repeated on 10 October.
-
-**Provider coverage:** Actuator for all 22 captured fixtures. PromQL and Datadog
-for `perflab_pool_starved` and `perflab_gc_pressure`.
-
-> Provider agreement, `perflab_pool_starved`, one load, 11 October 2026: pool wait
-> mean 1023 ms (Actuator) · 1023 ms (PromQL) · 1036 ms (Datadog); recent max
-> 2186 · 2186 · 2052 ms; pool max 2 on all three. Request mean disagrees:
-> 949 · 949 · **131 ms** from Datadog, whose `http.server.requests` is averaged
-> across every endpoint's series, including the fast Actuator ones, where the
-> PromQL block sums per series. Open, not yet fixed.
-
-The first Datadog capture that day read the pool wait as 0.001 ms. The profile
-declared Datadog timers in nanoseconds; Datadog's API labels them milliseconds.
-The unit was corrected (`config/profiles/spring-boot.yaml`) and the fixture
-recaptured. The 3 October Datadog capture predates Datadog receiving any metrics
-and holds no values; it is kept in `results/backup-2026-10-03/` on Box B.
+- *A withdrawn result (T3, 4 October).* The adversarial request sat in a field
+  nothing read, so the model was asked T1 again. Fixed and re-run on 10 October.
+  A task that is never delivered measures nothing, however good the score.
+- *A unit error caught by comparing providers (11 October).* The first Datadog
+  capture read the pool wait as 0.001 ms: the profile declared Datadog timers in
+  nanoseconds and Datadog labels them milliseconds. Corrected, then pool wait agreed
+  across Actuator, PromQL and Datadog (1023 · 1023 · 1036 ms). Datadog still reads
+  the latest interval rather than the window (`docs/ref/DEBT.md`).

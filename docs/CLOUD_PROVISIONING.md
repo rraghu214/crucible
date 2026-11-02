@@ -579,7 +579,7 @@ nproc
 ## 10 · Re-run K1 — DONE, 12 September 2026
 
 **Result: PASS on all three criteria. Full write-up in `docs/K1_CLOUD_RESULT.md`;
-raw per-second samples in `docs/k1-cloud/`.**
+raw per-second samples were in `docs/k1-cloud/` (archived outside the repository on 3 November 2026).**
 
 The new noise threshold for this environment is a **2.08% p99 spread**
 (baseline p99 98 / 98 / 96 ms). Bottleneck p99 separates by **12.24×**, and

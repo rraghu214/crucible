@@ -1049,7 +1049,7 @@ td.mono{font-family:var(--f-mono);font-size:12px;}
   </div>
   <div class="info-banner" id="ib-benchmarks">
     <span class="info-banner-icon">🧪</span>
-    <div class="info-banner-body"><strong>Replay separates diagnosis quality from luck.</strong> Each fixture is a metric snapshot captured from a real PerfLab state with its true cause recorded first. The model diagnoses it without running anything live, and the scorer grades it with no model call. Whether a fix <em>worked</em> needs a live campaign, so the diagnosis quadrant (CORRECT, LUCKY, UNLUCKY, WRONG) stays "not yet measured" until one is scored. Re-run with <code style="font-family:var(--f-mono);font-size:10px;">crucible bench</code>; the write-up is <code style="font-family:var(--f-mono);font-size:10px;">docs/BENCHMARK_REPLAY_RESULTS.md</code>.</div>
+    <div class="info-banner-body"><strong>How Crucible tests its own agent.</strong> Replay checks the thinking: can it name the right cause from a frozen measurement? Live checks the result: did its change really work, and for the right reason? Everything below is counted from files on disk, and graded with no model call.</div>
     <button class="info-banner-close" onclick="dismissBanner('ib-benchmarks')">✕</button>
   </div>
   <!-- Rendered from /v1/perf/screens/18: no figure on this page is typed in. -->

@@ -71,8 +71,8 @@ All six runs: 50 users, spawn-rate 10, 90 s, `/api/db`, **0 request failures**.
 
 - `p50/p95/p99/rps` — Locust's own percentile approximation, from its summary.
 - `pending` / `active` peak — `scripts/k1_sample.py`, sampling the gauges once
-  per second **during** the run. Raw per-second samples are committed under
-  `docs/k1-cloud/`.
+  per second **during** the run. Raw per-second samples were committed under
+  `docs/k1-cloud/` until 3 November 2026, then moved to the operator's archive.
 - `acquire mean` — delta of the cumulative `hikaricp.connections.acquire` timer
   across the measured window (`TOTAL_TIME` delta / `COUNT` delta), converted
   from seconds to milliseconds.
