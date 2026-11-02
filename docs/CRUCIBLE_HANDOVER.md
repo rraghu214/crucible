@@ -864,7 +864,7 @@ it is a **starting point for the operator to rewrite**, not something to commit 
 | `crucible-screens-v2.html` | 19 screens, the design reference |
 | `CRUCIBLE_TEST_ASSERTIONS.md` | 34 draft assertions for the operator to rewrite |
 | `CRUCIBLE_EVALUATION.md` | full evaluation design |
-| `FLOW.md` | capstone and product flow, Mermaid |
+| `FLOW.md` | pointer to the README's Mermaid flow diagram (built vs planned), since 3 Nov 2026 |
 
 The repo already holds `docs/K1_RESULT.md`, `docs/K3_RESULT.md`,
 `docs/SPIKE_VERDICT.md`, `docs/DESIGN.md`, `docs/FLOW.md`, `docs/ref/DEBT.md` and

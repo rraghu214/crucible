@@ -140,11 +140,11 @@ blockquote{border-left:3px solid var(--fire);padding:12px 16px;background:var(--
     <h1 class="hero-title">Crucible:<br><em>Autonomous Performance Engineer</em></h1>
     <p class="hero-sub">An AI agent that runs its own load experiments, diagnoses bottlenecks from telemetry, proposes bounded configuration changes under human approval, and proves every claim with a fresh measurement — not an assertion.</p>
     <div class="hero-badges">
-      <span class="badge badge-fire">Spring Boot · FastAPI</span>
+      <span class="badge badge-fire">Spring Boot (FastAPI profile drafted)</span>
       <span class="badge badge-ok">Actuator · Prometheus · Datadog</span>
-      <span class="badge badge-blue">Locust · k6</span>
+      <span class="badge badge-blue">Locust</span>
       <span class="badge badge-fire">Gemini via GLC v5</span>
-      <span class="badge badge-ok">Oracle Cloud · Hetzner</span>
+      <span class="badge badge-ok">Oracle Cloud</span>
     </div>
   </div>
 
@@ -241,11 +241,11 @@ blockquote{border-left:3px solid var(--fire);padding:12px 16px;background:var(--
       </li>
       <li>
         <span class="prin-num">3</span>
-        <div class="prin-body"><strong>The agent never grades itself.</strong><span>It cannot edit the SLA, the load profile, or the tests. Enforced twice — as a protected path in the guard and as a Policy memory kind with no write permission for the agent.</span></div>
+        <div class="prin-body"><strong>The agent never grades itself.</strong><span>It cannot edit the SLA, the load profile, or the tests: all are protected paths in the guard. The SLA is locked a second time as a Policy memory record the agent has no write permission for.</span></div>
       </li>
       <li>
         <span class="prin-num">4</span>
-        <div class="prin-body"><strong>A human holds every irreversible action.</strong><span>Deploy, apply, and keep are gated on explicit operator approval. Approval parameters are bound — the exact diff approved is the exact diff deployed.</span></div>
+        <div class="prin-body"><strong>A human holds every irreversible action.</strong><span>In Semi-Automated mode every change waits for the operator's approval, and the approval is bound: the exact diff approved is the exact diff deployed. Fully Automated is an operator's choice to pre-approve changes inside the profile's bounds; the guard and the measured verdict still decide.</span></div>
       </li>
       <li>
         <span class="prin-num">5</span>
@@ -282,12 +282,12 @@ blockquote{border-left:3px solid var(--fire);padding:12px 16px;background:var(--
       <div class="card">
         <div class="card-tag" style="color:var(--blue);">Guard</div>
         <div class="card-title">Allowlist command runner</div>
-        <div class="card-body">Model-composed shell is refused. Approved parameters bound to a parked object — widening is impossible. Protected paths cover SLA, load profile, tests, packaging. Every refusal in Audit memory.</div>
+        <div class="card-body">Three layers: what it can run (no shell, an allowlist, inside the workspace, a timeout), what it can change (properties and bounds in <code>profile.yaml</code>), and what it can never write (the SLA as Policy memory). Protected paths cover the SLA, the profiles, the load script and the tests. Approved parameters are bound to the parked proposal. Every refusal is audited.</div>
       </div>
       <div class="card">
         <div class="card-tag" style="color:var(--blue);">Score</div>
         <div class="card-title">Off-loop, model-free scorer</div>
-        <div class="card-body">Reads manifests from disk. Six dimensions: outcome, diagnosis quality, integrity, comparability, efficiency, calibration. Rescoring without re-running. LUCKY quadrant surfaced separately.</div>
+        <div class="card-body">Reads manifests from disk. Six dimensions: outcome, diagnosis accuracy, integrity, efficiency, calibration, cost. Rescoring without re-running. LUCKY quadrant surfaced separately.</div>
       </div>
     </div>
 
@@ -333,7 +333,7 @@ blockquote{border-left:3px solid var(--fire);padding:12px 16px;background:var(--
       <tr>
         <td>Safety</td>
         <td>The agent cannot widen its own authority</td>
-        <td>SLA + load profile in Policy memory (operator-only write); protected path guard runs independently</td>
+        <td>Protected-path guard on the SLA, load profile, profiles and tests; the SLA also stored as Policy memory (operator-only write)</td>
       </tr>
       <tr>
         <td>Safety</td>
@@ -392,17 +392,17 @@ blockquote{border-left:3px solid var(--fire);padding:12px 16px;background:var(--
       </div>
       <div class="mem-card">
         <div class="mem-kind" style="color:var(--ok);">Fact</div>
-        <div class="mem-desc">"Gateway quota is 120 rps", "this app resets by truncate+reseed". Agent writes on confirmation.</div>
+        <div class="mem-desc">"Gateway quota is 120 rps", "this app resets by truncate+reseed". Agent writes on confirmation. <strong>Designed, not built yet.</strong></div>
         <div class="mem-who" style="color:var(--lo);">Writer: agent (confirmed)</div>
       </div>
       <div class="mem-card">
         <div class="mem-kind" style="color:var(--warn);">Playbook</div>
-        <div class="mem-desc">Cause signatures that worked. Service-scoped until a human promotes to global. Seeded into diagnosis context.</div>
+        <div class="mem-desc">Cause signatures that worked. Service-scoped until a human promotes to global. <strong>Designed, not built yet</strong>: today the agent recalls earlier runs through the Journal RAG, and promotion is the next step.</div>
         <div class="mem-who" style="color:var(--lo);">Writer: agent, promoted by operator</div>
       </div>
       <div class="mem-card" style="border-color:rgba(201,77,26,.3);background:var(--fire-d);">
         <div class="mem-kind" style="color:var(--fire);">Policy ⚠</div>
-        <div class="mem-desc">Allowed properties, protected paths, budget ceiling, <strong>the SLA</strong>. Agent has no write permission — ever.</div>
+        <div class="mem-desc"><strong>The SLA</strong>, one record per campaign: endpoint, p99, error budget, noise floor. Agent has no write permission — ever. (The allowed properties and protected paths are operator-only too, but live in <code>profile.yaml</code>, guarded by path.)</div>
         <div class="mem-who" style="color:var(--fire);">Writer: operator only</div>
       </div>
       <div class="mem-card">
@@ -420,7 +420,7 @@ blockquote{border-left:3px solid var(--fire);padding:12px 16px;background:var(--
       <div class="card-title">Two RAGs, different purposes</div>
       <div class="card-body">
         <strong>Journal RAG</strong> — past manifests, queried at diagnosis so the agent doesn't re-propose a disproven hypothesis. Structured field filter first (fast, free), vectors only for narrative matching — dense retrieval is weak on exact identifiers like <code>hikaricp.connections.pending</code>.<br><br>
-        <strong>Knowledge RAG</strong> — runbooks, architecture, incident notes. Prevents the agent blaming the application for an API-gateway throttle. Upload any document (architecture spec, post-mortem) and it becomes part of the diagnosis context.
+        <strong>Knowledge RAG</strong> — runbooks, architecture, incident notes, uploaded as <code>.md</code> or <code>.txt</code>. Today it feeds the Live AI chat (with citations), the wizard's AI suggestions and the S17 agent. Feeding it into campaign diagnosis, so the agent stops blaming the application for an API-gateway throttle, is the next step: not built yet.
       </div>
     </div>
   </div>
@@ -442,20 +442,21 @@ blockquote{border-left:3px solid var(--fire);padding:12px 16px;background:var(--
       <div class="card">
         <div class="card-title">Six scoring dimensions</div>
         <div class="card-body">
-          <strong>Outcome</strong> — did p99 improve?<br>
-          <strong>Diagnosis quality</strong> — was the cause correctly identified?<br>
-          <strong>Integrity</strong> — were the measurement conditions sound?<br>
-          <strong>Comparability</strong> — same model, same environment?<br>
-          <strong>Efficiency</strong> — how many experiments to reach a verdict?<br>
-          <strong>Calibration</strong> — how close was the prediction to the measurement?<br><br>
-          Scorer calls no model. Reads manifests only. Rescore without re-running.
+          <strong>Outcome</strong> — verified fix, unverified fix, honest failure, false success or unreachable<br>
+          <strong>Diagnosis accuracy</strong> — the 2×2: CORRECT, LUCKY, UNLUCKY, WRONG<br>
+          <strong>Integrity</strong> — did it stay inside its authority (no metric-gaming change)?<br>
+          <strong>Efficiency</strong> — how much of the experiment budget it spent<br>
+          <strong>Calibration</strong> — predicted p99 against measured p99<br>
+          <strong>Cost</strong> — priced from the manifest's own token counts<br><br>
+          Scorer calls no model (<code>crucible/perf/scorer.py</code>). Reads manifests only. Rescore without re-running.
         </div>
       </div>
     </div>
     <div class="card" style="margin-top:16px;">
-      <div class="card-title">34 draft test assertions across 8 groups · <code>docs/CRUCIBLE_TEST_ASSERTIONS.md</code></div>
+      <div class="card-title">56 groups of reviewed test assertions · <code>docs/CRUCIBLE_TEST_ASSERTIONS.md</code></div>
       <div class="card-body">
-        Measurement integrity · Collector correctness · Guard and safety · Approval binding · Deploy and verification · Diagnosis quality · Scorer · Watchdog.<br><br>
+        Started as 34 assertions in 8 groups (measurement integrity, collector, guard, approval binding, deploy and verification, diagnosis, scorer, watchdog) and grew with every feature, through the dashboard contract tests of Group 53. Backed by 1993 passing pytest tests.<br><br>
+        <strong>Benchmark of record (1 November 2026, gemini-3.5-flash-lite):</strong> live, 6 Fully Automated campaigns, 8 experiments — CORRECT 7, LUCKY 1, every SLA met, $0.0115. Replay, 23 clean snapshots, 40 cases — diagnosis correct on 31 of 37, task grade 32 of 40, $0.054.<br><br>
         Every assertion is reviewed by the operator before it is committed — Claude Code drafts the reasoning, the operator decides whether it matches the actual failure mode it is testing for.
       </div>
     </div>
@@ -473,8 +474,8 @@ blockquote{border-left:3px solid var(--fire);padding:12px 16px;background:var(--
         <td>Perception → Memory → Decision → Action. Collector is Perception; Journal RAG is Memory; Diagnosis is Decision; Applicator + Deploy is Action. Outcome earns the next piece of the graph — baseline must pass before experiments begin, diagnosis must pass before proposals are generated.</td>
       </tr>
       <tr>
-        <td>Collector cascade</td>
-        <td>Cheap first, escalate on failure. Try Actuator (no infra cost), fall back to PromQL (requires Prometheus), then Datadog. The same cost-discipline principle that governs model tier selection.</td>
+        <td>One collector, several providers</td>
+        <td>Actuator, PromQL and Datadog adapters all feed the same collector, which converts units and declares what it could not read. A live campaign reads Actuator; fixture capture reads all three from one load window to check they agree. Choosing the provider for a live run is a planned setting (the Settings page previews it).</td>
       </tr>
       <tr>
         <td>Journal RAG</td>
@@ -482,11 +483,11 @@ blockquote{border-left:3px solid var(--fire);padding:12px 16px;background:var(--
       </tr>
       <tr>
         <td>HITL approval gate</td>
-        <td>A waiting node in the campaign graph. The proposal parks with its exact parameters. Approval resumes the node with those same parameters — widening is structurally impossible, not a policy hope.</td>
+        <td>A waiting step in the campaign loop. The proposal parks on disk with its exact parameters (<code>~/.crucible/approvals/</code>). An approval must carry those same parameters to be accepted — widening is structurally impossible, not a policy hope.</td>
       </tr>
       <tr>
         <td>Guard enforced twice</td>
-        <td>A single enforcement point can be bypassed if configuration moves. Two independent mechanisms — protected path in the file guard and Policy memory kind — must both be weakened independently for a violation to succeed. Defence in depth, not defence by hope.</td>
+        <td>A single enforcement point can be bypassed if configuration moves. For the SLA, two independent mechanisms — protected path in the file guard and Policy memory kind — must both be weakened for a violation to succeed. Defence in depth, not defence by hope. (The load profile has the path lock only, for now.)</td>
       </tr>
       <tr>
         <td>SKILL.md grants no authority</td>
@@ -513,124 +514,72 @@ blockquote{border-left:3px solid var(--fire);padding:12px 16px;background:var(--
     <div class="section-label">09 · Demo Flow</div>
     <h2 class="section-title">End-to-end walkthrough script</h2>
 
+    <p class="section-body" style="margin-bottom:16px;">About 33 minutes, recorded with pauses while documents index and load windows measure. The demo runs one Semi-Automated campaign live; the other three modes are explained in words.</p>
     <div class="steps">
-
-      <div class="step">
-        <div class="step-num">1</div>
-        <div class="step-body">
-          <div class="step-title">Problem statement + architecture overview <span class="step-tag tag-explain">explain</span></div>
-          <div class="step-desc">Show the three-box diagram. Box A (Spring Boot on Oracle Cloud) is the target under test. Box B (Crucible + Locust) is the agent. GLC v5 on Render is the LLM gateway. Crucible uses Actuator, Prometheus, and Datadog for telemetry — three different adapter implementations, same interface.</div>
-        </div>
-      </div>
-
-      <div class="step">
-        <div class="step-num">2</div>
-        <div class="step-body">
-          <div class="step-title">Upload architecture doc → Knowledge RAG <span class="step-tag tag-live">live</span></div>
-          <div class="step-desc">Upload the architecture PDF. The system chunks it semantically (topic-boundary detection, not fixed-size splits) and embeds with Gemini embedding-001 at 768 dimensions into a FAISS index. This becomes the diagnosis context — the agent reads relevant sections when forming a hypothesis rather than having all docs in context at all times.</div>
-        </div>
-      </div>
-
-      <div class="step">
-        <div class="step-num">3</div>
-        <div class="step-body">
-          <div class="step-title">Onboarding chat — curated questions <span class="step-tag tag-live">live</span></div>
-          <div class="step-desc">Ask: "What SLA should I set for /api/db at 50 users?" — agent responds from the uploaded doc context. Ask: "What cause families does this runtime declare?" — agent reads from <code>config/profiles/spring-boot.yaml</code>. Show that the knowledge doc changes the answers.</div>
-        </div>
-      </div>
-
-      <div class="step">
-        <div class="step-num">4</div>
-        <div class="step-body">
-          <div class="step-title">Upload users.csv + POST body template <span class="step-tag tag-explain">explain</span></div>
-          <div class="step-desc">Show users.csv (not chunked/RAG — raw file). Show the Locust POST body template and how CSV columns map to variables. This drives realistic user behaviour instead of uniform synthetic load.</div>
-          <div class="step-cli">crucible run --scenario steady_50u --sla config/slo.yaml</div>
-        </div>
-      </div>
-
-      <div class="step">
-        <div class="step-num">5</div>
-        <div class="step-body">
-          <div class="step-title">Guardrails + YAML inspection <span class="step-tag tag-live">live</span></div>
-          <div class="step-desc">Open Guardrails screen. Show the property list from <code>profile.yaml</code>: which properties the agent may change, and within what bounds. Show that the SLA is read-only (Policy memory). Show the sandbox branch rule. Explain: SKILL.md shapes how the agent reasons; <code>profile.yaml</code> is what grants actual authority — they are deliberately separate files.</div>
-        </div>
-      </div>
-
-      <div class="step">
-        <div class="step-num">6</div>
-        <div class="step-body">
-          <div class="step-title">New Test Run + budget by mode <span class="step-tag tag-demo">demo script</span></div>
-          <div class="step-desc">Walk through the wizard. Switch between Advisory / Semi-Automated / Fully Automated modes and show how the budget estimate changes (more experiments = longer wall clock, not more money — foreground time, background cost). Toggle "add 2 more experiments" and show the time impact. Set a cap.</div>
-        </div>
-      </div>
-
-      <div class="step">
-        <div class="step-num">7</div>
-        <div class="step-body">
-          <div class="step-title">Preflight <span class="step-tag tag-explain">explain</span></div>
-          <div class="step-desc">Explain that preflight exercises the full loop once before committing to a campaign: connects to the target, runs a tiny baseline, deploys a no-op change, confirms the target reports the new commit, reverts, confirms the revert is live. Every step that can fail in a real campaign is exercised here with minimal cost. These same verification steps run before every experiment.</div>
-          <div class="step-cli">crucible preflight --apply-probe</div>
-        </div>
-      </div>
-
-      <div class="step">
-        <div class="step-num">8</div>
-        <div class="step-body">
-          <div class="step-title">Active campaign — real-time logs + PDMA loop <span class="step-tag tag-live">live</span></div>
-          <div class="step-desc">Start a real campaign (pool=2 baseline → agent diagnoses pool saturation → proposes pool=20). Active tab streams the raw log. Show each PDMA phase: Perception (collector), Memory (journal RAG query), Decision (diagnosis + proposal), Action (apply + deploy). The approve button appears when the proposal is ready. Show the exact diff. Approve.</div>
-          <div class="step-cli">crucible approve &lt;run_id&gt; &lt;experiment_id&gt;</div>
-        </div>
-      </div>
-
-      <div class="step">
-        <div class="step-num">9</div>
-        <div class="step-body">
-          <div class="step-title">Datadog live metrics during the run <span class="step-tag tag-live">live</span></div>
-          <div class="step-desc">Switch to the Datadog tab. Show <code>perflab.http.requests.total</code>, HikariCP pool metrics, JVM GC. Note that Crucible also polls these via the Datadog adapter — the agent sees the same numbers the dashboard shows, not a copy in Prometheus. Mention: metrics also flow via Prometheus to Grafana as an alternative view.</div>
-        </div>
-      </div>
-
-      <div class="step">
-        <div class="step-num">10</div>
-        <div class="step-body">
-          <div class="step-title">Results tab — outcome + calibration <span class="step-tag tag-live">live</span></div>
-          <div class="step-desc">Show the completed run. Baseline p99 (pool=2: ~1206 ms), final p99 (pool=20: ~58 ms), verdict CHANGE_KEPT. Show the agent's prediction vs measured — calibration score. Show that the experiment commit is recorded and the change is traceable to a specific SHA.</div>
-        </div>
-      </div>
-
-      <div class="step">
-        <div class="step-num">11</div>
-        <div class="step-body">
-          <div class="step-title">History &amp; Diff — past runs + ceiling probe mention <span class="step-tag tag-live">live</span></div>
-          <div class="step-desc">History table now loads from the live API. Select two runs (advisory baseline + semi-auto improved run). Show the comparison. Mention ceiling probe: "what is the service actually capable of?" — a separate campaign type that escalates load until the SLA is first missed, reports a pair (last passing level, first failing level).</div>
-        </div>
-      </div>
-
-      <div class="step">
-        <div class="step-num">12</div>
-        <div class="step-body">
-          <div class="step-title">Benchmarks tab — harness depth <span class="step-tag tag-explain">explain</span></div>
-          <div class="step-desc">Show the 8 cause families × multiple providers fixture matrix. Explain replay vs live split: diagnosis runs against captured snapshots in ~2 s — hundreds of replay runs during development without ever touching a real service. Show the scoring grid: outcome alone is not enough; the LUCKY quadrant (wrong diagnosis, correct fix by accident) fails on a different fixture.</div>
-        </div>
-      </div>
-
-      <div class="step">
-        <div class="step-num">13</div>
-        <div class="step-body">
-          <div class="step-title">Memory + backend files <span class="step-tag tag-explain">explain</span></div>
-          <div class="step-desc">Show the 7 memory kinds on screen or by opening the SQLite + FAISS files. Policy memory: operator-only, contains the SLA. Episode memory: the journal, append-only. Audit memory: every guard refusal, every approval. Fact memory: things the agent confirmed during a run ("this app resets by truncate+reseed"). Show the manifest JSON on disk — every result is a file, not a database row.</div>
-        </div>
-      </div>
-
-      <div class="step">
-        <div class="step-num">14</div>
-        <div class="step-body">
-          <div class="step-title">CLI parity — every UI click has a command <span class="step-tag tag-explain">explain</span></div>
-          <div class="step-desc">Point out the "CLI twin" labels in the UI. Every action calls the same function as the CLI command. The UI is not a shortcut — it calls the same guard, the same approval binding, the same deploy logic. Crucible runs headless on a scheduled cron or from CI/CD without any UI at all.</div>
-          <div class="step-cli">crucible run | approve | abort | pause | resume | score | diff | bench</div>
-        </div>
-      </div>
-
+      <div class="step"><div class="step-num">1</div><div class="step-body">
+        <div class="step-title">Problem, architecture and the target <span class="step-tag tag-explain">explain</span></div>
+        <div class="step-desc">Box A runs PerfLab (Spring Boot, Postgres, Redis, Prometheus) on Oracle Cloud; Box B runs Crucible and Locust; GLC v5 on Render is the model gateway. PerfLab has one endpoint per cause of slowness (<code>/api/db</code> pool exhaustion, <code>/api/orders</code> N+1 query, <code>/api/churn</code> GC pressure, …), so every diagnosis has a known right answer. <code>/api/version</code> reports the commit the running jar was built from.</div>
+      </div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body">
+        <div class="step-title">Knowledge RAG: upload and index <span class="step-tag tag-live">live</span></div>
+        <div class="step-desc">Upload <code>PERF_LAB_PRODUCT.md</code>. One background worker chunks it and embeds each chunk with gemini-embedding-001 at 768 dimensions into its own FAISS index. The embedder is pinned: changing it means re-indexing, never querying across two.</div>
+      </div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body">
+        <div class="step-title">Grounded chat with citations <span class="step-tag tag-live">live</span></div>
+        <div class="step-desc">Ask a question only the document answers. The reply cites the file it used; its SLA and profile facts are read from the YAML on disk.</div>
+      </div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-body">
+        <div class="step-title">Input data and request templates <span class="step-tag tag-explain">ui</span></div>
+        <div class="step-desc">Upload <code>sizes.csv</code> and map <code>${size}</code> to its column for <code>/api/orders?size=${size}</code>. Every placeholder must map to an uploaded file and column before anything runs. Hooks (<code>before_each</code>, <code>after_each</code>, <code>on_abort</code>) are Python files run isolated, with an allowlisted environment.</div>
+      </div></div>
+      <div class="step"><div class="step-num">5</div><div class="step-body">
+        <div class="step-title">Goal and SLA <span class="step-tag tag-live">live</span></div>
+        <div class="step-desc">p99 ≤ 120 ms on <code>/api/db</code>. AI suggestion fills the form, bounds-checked. The 2.08% noise floor is read-only: measured on this box, and any change smaller than it is inconclusive.</div>
+      </div></div>
+      <div class="step"><div class="step-num">6</div><div class="step-body">
+        <div class="step-title">Mode, scenarios, budget, review <span class="step-tag tag-demo">wizard</span></div>
+        <div class="step-desc">The four modes in words; Semi-Automated chosen. Budget foregrounds wall clock, not dollars, and caps pause rather than stop. Review shows the exact diff Launch writes — what <code>crucible plan</code> prints.</div>
+      </div></div>
+      <div class="step"><div class="step-num">7</div><div class="step-body">
+        <div class="step-title">Guardrails: three layers <span class="step-tag tag-explain">ui</span></div>
+        <div class="step-desc">What it can run (no shell, allowlist, workspace, timeout); what it can change (<code>profile.yaml</code> properties and bounds — <code>SKILL.md</code> grants nothing); what it can never write (the SLA as Policy memory). Writes only to <code>perftest_sandbox</code>.</div>
+      </div></div>
+      <div class="step"><div class="step-num">8</div><div class="step-body">
+        <div class="step-title">Preflight <span class="step-tag tag-live">live</span></div>
+        <div class="step-desc">Read-only checks against the real target. With the apply probe it deploys a no-op change, reads it back, reverts and reads it back again — the steps every experiment runs.</div>
+        <div class="step-cli">crucible preflight --apply-probe</div>
+      </div></div>
+      <div class="step"><div class="step-num">9</div><div class="step-body">
+        <div class="step-title">Live campaign and approval <span class="step-tag tag-live">live</span></div>
+        <div class="step-desc">Baseline: the pool is 2 of 2 with requests queuing. The agent proposes pool 2 → 20; the operator approves that exact diff. Crucible commits one file, pushes, waits until the target reports the new commit (reading the value back too), then re-measures under identical load. Locust runs headless; the diagnosis reads server-side Actuator metrics.</div>
+        <div class="step-cli">crucible approve &lt;run-id&gt; --experiment 1 --as &lt;you&gt;</div>
+      </div></div>
+      <div class="step"><div class="step-num">10</div><div class="step-body">
+        <div class="step-title">Results and the stores behind them <span class="step-tag tag-live">live</span></div>
+        <div class="step-desc">Measured before and after, verdict against the noise floor, the prediction tracked apart from the result. Every result is a manifest file in <code>results/</code>; the Journal RAG reads those at diagnosis, the Knowledge RAG holds the documents.</div>
+      </div></div>
+      <div class="step"><div class="step-num">11</div><div class="step-body">
+        <div class="step-title">Observability and CI/CD <span class="step-tag tag-explain">explain</span></div>
+        <div class="step-desc">Diagnosis reads Actuator today; PromQL and Datadog adapters exist, and choosing one for a live run is planned. Datadog, as PerfLab's own monitoring, saw the same run independently. Deploy is a push to the sandbox branch: a post-receive hook here, Jenkins or GitHub Actions elsewhere.</div>
+      </div></div>
+      <div class="step"><div class="step-num">12</div><div class="step-body">
+        <div class="step-title">History and chat about runs <span class="step-tag tag-live">live</span></div>
+        <div class="step-desc">The chat explains any run on disk by id, quotes measured values, calls a prediction a prediction, and says when a run does not exist. Unlike runs are flagged, not compared. A ceiling probe reports a pair, never a verdict.</div>
+      </div></div>
+      <div class="step"><div class="step-num">13</div><div class="step-body">
+        <div class="step-title">Benchmarks and the LUCKY quadrant <span class="step-tag tag-explain">ui</span></div>
+        <div class="step-desc">Replay against stored snapshots versus live campaigns. Six scoring dimensions, no model call. Run 2: 7 CORRECT, 1 LUCKY — on the N+1 fault the agent first raised the pool, it helped by 11%, and the scorer marks it LUCKY because the pool was not the cause.</div>
+        <div class="step-cli">crucible bench --tasks config/tasks/ --fixtures fixtures/</div>
+      </div></div>
+      <div class="step"><div class="step-num">14</div><div class="step-body">
+        <div class="step-title">Memory and the run's receipt <span class="step-tag tag-live">live on Box B</span></div>
+        <div class="step-desc">Seven memory kinds, five live (Working, Episode, Policy, Audit, Document chunk); Fact and Playbook designed, not built. Open <code>memory.sqlite</code> and <code>audit.jsonl</code>, then read one manifest top to bottom: goal, baseline, change, approver, deployed commit and the commit the target reports, result, model.</div>
+      </div></div>
+      <div class="step"><div class="step-num">15</div><div class="step-body">
+        <div class="step-title">CLI parity <span class="step-tag tag-explain">explain</span></div>
+        <div class="step-desc">Every button calls the same function as its command: same guard, same approval binding. Crucible runs headless from CI with no UI at all.</div>
+        <div class="step-cli">crucible plan | run | status | approve | resume | abort | report | diff | bench</div>
+      </div></div>
     </div>
   </div>
 

@@ -2,6 +2,16 @@
 
 Status legend: ✅ done · ⬜ to do · 🔧 in progress
 
+> **Status, 3 November 2026.** Steps 0–9 are done. The UI trial ran 31 October to
+> 2 November, all 15 steps passed ([`trial-run-31102026.md`](myfolder/trial-run-31102026.md)).
+> The benchmark of record is run 2, 1 November (`BENCHMARK_LIVE_RESULTS.md`,
+> `BENCHMARK_REPLAY_RESULTS.md`). Next: Step 10 (recording), then Step 11.
+>
+> Steps 2–7 are kept as the October record. For today's commands use
+> [`DemoExecutionGuide.md`](myfolder/DemoExecutionGuide.md): resets run on **Box B**
+> and push to the `perftest` remote, campaigns run under nohup, and the model is
+> pinned by `config/tiers.yaml` (`gemini-3.5-flash-lite`).
+
 ---
 
 ## Step 0 — Pull latest code to Box B
@@ -253,7 +263,10 @@ Can be done in any order, one group per sitting.
 
 ---
 
-## Step 9 — UI dry-run verification ⬜
+## Step 9 — UI dry-run verification ✅
+
+Done as the 31 October – 2 November trial (`myfolder/trial-run-31102026.md`); every
+issue it found is fixed or recorded in `docs/ref/DEBT.md`. Kept below for reference.
 
 Do this once before recording to confirm all UI paths work end-to-end.
 
@@ -295,7 +308,7 @@ Open `http://localhost:9113/dashboard`.
 
 **Warm GLC v5** (PowerShell on laptop — one call before anything else):
 ```powershell
-$body = '{"model":"gemini-2.5-flash","messages":[{"role":"user","content":"ping"}]}'
+$body = '{"model":"gemini-3.5-flash-lite","messages":[{"role":"user","content":"ping"}]}'
 (Invoke-RestMethod -Uri "https://<your-gateway>.onrender.com/v1/chat" -Method Post -ContentType "application/json" -Body $body).text
 # Expected: any response (burns Render cold start)
 ```
@@ -361,8 +374,8 @@ re-checking.
 # On Box B, in a second SSH terminal (serve keeps running under nohup).
 # Or launch from the wizard (New Test Run -> Review -> Launch), which runs the same command.
 cd ~/crucible && set -a; . ./.env; set +a   # hand-typed CLI: load .env (it holds GLC_BASE_URL)
-uv run crucible run --run-id dry-run-1 --workspace ~/perf-lab \
-    --provider gemini --model gemini-2.5-flash --experiments 2
+uv run crucible run --run-id dry-run-1 --workspace ~/perf-lab --experiments 2
+# The model comes from config/tiers.yaml (gemini-3.5-flash-lite); no --model needed.
 ```
 
 In the browser, verify in order:
@@ -435,23 +448,24 @@ Reference: `docs/KNOWLEDGE_STORE.md`, `docs/HOOKS.md`, and assertion Groups 29�
 
 ## Step 10 — Demo recording ⬜
 
-After Step 9 passes, follow the full demo script:
-`docs/myfolder/DEMO_SCRIPT.md` (15 steps, ~22–25 min).
+Follow `docs/myfolder/DEMO_SCRIPT.md` (15 steps, ~33 min, with ⏸ pauses while
+indexing and measuring). Backstage commands: `docs/myfolder/DemoExecutionGuide.md`.
 
 **Pre-recording setup on Box B:**
 ```bash
 cd ~/crucible
-git pull origin capstone/perf-agent
+git pull -q --ff-only origin capstone/perf-agent
 uv sync --group load
-nohup uv run crucible serve > ~/crucible-serve.log 2>&1 &   # SPA demo UI on port 8113
+~/restart-serve.sh     # restarts serve under nohup; keeps the Cloudflare tunnel and prints its URL
 ```
 
-**SSH tunnel from your laptop:**
-```powershell
-ssh -i "<path-to-ssh-key>" -L 9113:127.0.0.1:8113 ubuntu@<box-b-ip>
-```
+- [ ] Box A pool=2 (DemoExecutionGuide, "Reset Box A")
+- [ ] Knowledge store empty, so the upload on camera is a first upload (DEMO_SCRIPT §0.5)
+- [ ] `~/perf-lab` clean; `perftest_sandbox` **not** deleted (DEMO_SCRIPT §0.8)
 
-Open `http://localhost:9113/dashboard`.
+**Open the dashboard:** the public URL `~/restart-serve.sh` printed (log in), or an
+SSH tunnel (`ssh -i "<path-to-ssh-key>" -L 9113:127.0.0.1:8113 ubuntu@<box-b-ip>`,
+then `http://localhost:9113/dashboard` and save the control token in Settings).
 
 **Sanity checks before recording:**
 ```bash
@@ -467,7 +481,11 @@ curl -s http://127.0.0.1:8113/v1/perf/screens/17 | python3 -m json.tool | grep "
 
 1. Verify `uv run pytest -q` and `uv run ruff check .` pass clean locally.
 2. Push the branch: `git push origin capstone/perf-agent`
-3. Submit per the course instructions.
+3. Open the PR from `capstone/perf-agent` to `main` (operator's plan, 3 November 2026).
+   Note: `AGENTS.md` currently says `main` stays the clean S17Code baseline and capstone
+   work is never committed to it. Update that rule in the same PR, or the PR contradicts it.
+4. After submission: take down the Cloudflare tunnel and the dashboard login (`DESIGN.md` §18).
+5. Submit per the course instructions.
 
 ---
 
@@ -489,11 +507,6 @@ uv run crucible approve <run-id> --experiment <n> --as raghu
 # View campaign report
 uv run crucible report --run <run-id>
 
-# Run replay benchmark
-export GLC_BASE_URL=https://<your-gateway>.onrender.com
-uv run crucible bench \
-    --tasks config/tasks/ \
-    --fixtures results/ \
-    --out results/replay.json \
-    --skip-missing-fixtures
+# Run replay benchmark (load .env first: set -a; . ./.env; set +a)
+uv run crucible bench --tasks config/tasks/ --fixtures fixtures/ --out results/replay.json
 ```

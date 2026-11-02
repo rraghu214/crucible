@@ -26,7 +26,7 @@ once end to end (Part P) before recording.*
 |---|---|---|
 | **[crucible-product-doc.html](crucible-product-doc.html)** | **Share with trainer/audience the day before** | Pre-demo product brief: problem, architecture, five principles, NFR table, memory taxonomy, design concepts. |
 | **[DemoExecutionGuide.md](DemoExecutionGuide.md)** | 30 min before recording, and keep it open | Backstage manual: Box A/B state, resets, troubleshooting. |
-| **[COMPLETION_CHECKLIST.md](../COMPLETION_CHECKLIST.md) step 9** | The day before | The one-time dry run. **9g** covers everything changed on 24–25 October. |
+| **[COMPLETION_CHECKLIST.md](../COMPLETION_CHECKLIST.md) step 10** | The day before | The pre-recording checklist. Step 9 (the dry run) was done as the 31 Oct – 2 Nov trial. |
 | **This file** | Practice run, then recording | Part 0 = prep, Part P = practice run, Steps 1–16 = what to say and click. |
 
 ---
@@ -51,18 +51,12 @@ uv sync --group load
 rm -f ~/.crucible/memory.faiss ~/.crucible/memory.faiss.ids.json
 rm -f ~/.crucible/memory.db ~/.crucible/memory.db.faiss ~/.crucible/memory.db.faiss.ids.json
 
-# Restart the UI server
-# serve loads ~/crucible/.env itself (crucible/main.py), so no sourcing here.
-# Only commands typed by hand (crucible run/resume/report) need: set -a; . ./.env; set +a
-pkill -f "crucible serve"; sleep 2
-nohup uv run crucible serve > ~/crucible-serve.log 2>&1 &
-sleep 8
-curl -s http://127.0.0.1:8113/healthz        # {"ok":true,...}
+# Restart the UI server. The script restarts serve under nohup, keeps the
+# Cloudflare tunnel (so the public URL doesn't change), and prints healthz + the URL.
+# serve loads ~/crucible/.env itself; only hand-typed CLI commands
+# (crucible run/resume/report) need: set -a; . ./.env; set +a
+~/restart-serve.sh        # {"ok":true,...} then "public URL: https://…/dashboard"
 ```
-
-> If Box B runs the UI as the `crucible-ui` systemd service instead, use
-> `sudo systemctl restart crucible-ui` and `systemctl status crucible-ui`, not
-> the nohup lines. Don't run both.
 
 ### 0.2 Verify Box A is reachable and pool=2
 
@@ -268,6 +262,11 @@ approval, applies it, and measures again. Every claim is a measurement."
 Postgres, Redis, Prometheus and Jaeger. Box B, this machine, runs Crucible and
 the Locust load generator. GLC v5, hosted on Render, is the LLM gateway.
 Crucible never holds model keys; the gateway rotates them."
+
+**Show the loop:** the Crucible repo's README on GitHub → **Architecture**. "Solid
+boxes are what runs today. Dashed boxes are designed and not built, and I'd rather
+show you the line between them than blur it." Point at the two gates that matter:
+the operator's approval, and the target proving the commit before anything is measured.
 
 **PerfLab target (~1 min):**
 
@@ -521,7 +520,8 @@ the journal was searched, so a disproven hypothesis isn't proposed again."
 
 Approval gate: "The proposal is pool 2 → 20, and this exact diff is what I
 approve. Then Crucible commits that one file, pushes, waits until the target
-itself reports the new value, and only then runs a fresh measurement window."
+itself reports the commit it pushed, reads the new value back, and only then runs
+a fresh measurement window."
 
 **Click Approve.**
 
@@ -697,7 +697,7 @@ failure mode and measures it explicitly on every run."
 
 ### The numbers
 
-**Run 2, 1 November 2026, the benchmark of record (gemini-2.5-flash-lite):**
+**Run 2, 1 November 2026, the benchmark of record (gemini-3.5-flash-lite, read from the manifests):**
 
 "Live: six Fully Automated campaigns, one per planted fault, eight experiments.
 Seven CORRECT, one LUCKY, no UNLUCKY, no WRONG, every SLA met, just over a cent

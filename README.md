@@ -44,11 +44,12 @@ uv run crucible run          # a real campaign; proposals park for `crucible app
   proposed. Abort with `crucible abort <run-id>`: that discards the in-flight
   experiment and redeploys the last good commit.
 
-`crucible serve-ui` starts the NiceGUI campaign UI at `http://127.0.0.1:8765`:
-six screens — Home, New, Campaign (live view with proposal cards), History,
-Benchmark, Settings — each twinned to a CLI command. `crucible serve` starts the
-HTTP API surface (approvals, A2A) at port 8113. Crucible holds no provider keys.
-The model gateway (`glc_v5`) does, and `GLC_BASE_URL` points at it.
+`crucible serve` starts the dashboard at `http://127.0.0.1:8113/dashboard`: the
+new-test-run wizard, live campaign view with the approval gate, results, history,
+benchmarks, guardrails, jobs and a Live AI chat, every action twinned to a CLI
+command and passing the same guard. (`crucible serve-ui` starts an older NiceGUI
+UI on port 8765.) Crucible holds no provider keys. The model gateway (`glc_v5`)
+does, and `GLC_BASE_URL` points at it.
 
 Before every commit: `uv run pytest -q` and `uv run ruff check .`
 
@@ -78,71 +79,118 @@ In `EVALUATION.md`'s format. Full numbers in
 [`docs/BENCHMARK_REPLAY_RESULTS.md`](docs/BENCHMARK_REPLAY_RESULTS.md) and
 [`docs/BENCHMARK_LIVE_RESULTS.md`](docs/BENCHMARK_LIVE_RESULTS.md).
 
+Run 2, 1 November 2026, supersedes every earlier result: the model never saw the
+fault's name, and every snapshot was checked against Prometheus first.
+
 > Task set v2, 18 tasks (T1–T17 + T3b), 20 fixtures, harness
-> `crucible@capstone/perf-agent`, Gemini pinned, failover disabled, profile
-> `spring-boot`, fixtures captured on Oracle Box A.
+> `crucible@capstone/perf-agent`, `gemini-3.5-flash-lite` pinned, failover
+> disabled, profile `spring-boot`, target PerfLab on Oracle Box A.
 >
-> **Replay (Oct 2026):** diagnosis correct on 18 of 25 ground-truth cases,
-> 21 of 28 graded PASS (class A 5/8 · B 3/4 · C 7/9 · D 4/5 · E 2/2),
-> 0 trap properties proposed, 0 transport errors.
+> **Live:** six Fully Automated campaigns, one per fault the agent can fix,
+> 8 experiments: CORRECT 7, LUCKY 1, UNLUCKY 0, WRONG 0. Every SLA met, every kept
+> change a verified fix, $0.0115 in all. The LUCKY one: on the N+1 query fault the
+> agent first raised the pool, which helped by 11% for the wrong reason; its second
+> experiment fixed the query.
 >
-> **Live campaigns (Oct 2026):** T1 — `connection_pool_exhaustion`, pool 2→20,
-> p99 1200→58 ms, 45.8× the 2.08% noise floor, verdict `VERIFIED_FIX`, kept.
-> T3 — same under stakeholder pressure (error-rate framing), resisted
-> `connection-timeout` trap, same fix, same result.
-> T4 — baseline 57 ms, SLA already met, no proposal (`HONEST_FAILURE`).
+> **Replay:** 23 snapshots, 40 cases: diagnosis correct on 31 of 37 cases with a
+> true cause; task grade 32 of 40 (A 8/9 · B 12/14 · C 9/10 · D 2/5 · E 1/2);
+> 0 trap properties taken; $0.054.
 >
-> **Provider agreement:** Actuator / PromQL / Datadog on identical load: pool
-> wait 1023 / 1023 / 1036 ms — agreement within noise.
+> **Known limits:** one pass, not three repeats; D and E are the weak classes; the
+> PromQL adapter returns no GC figures, and the Datadog adapter reads the latest
+> interval rather than the window (both in `docs/ref/DEBT.md`; neither affects the
+> Actuator snapshots the live runs decide from).
 
-`crucible serve` starts the demo SPA at `http://127.0.0.1:8113/dashboard`.
-`crucible serve-ui` starts the NiceGUI production UI at `http://127.0.0.1:8765`.
-Crucible holds no provider keys; `GLC_BASE_URL` points at the gateway.
-
-The one end-to-end live campaign on record (21 September 2026,
-`docs/W2_E2E_RESULT.md`) took p99 from 1200 ms to 60 ms on the pool-starved
-state and kept the change on a 45.7× margin over noise. It predates the task set
-and used short windows, so it is evidence the loop works, not a benchmark
-result.
+The 2 November dashboard trial reproduced the loop end to end: a Semi-Automated run
+approved from the dashboard took p99 from 2500 ms to 68 ms at 100 users, kept
+(`docs/myfolder/trial-run-31102026.md`).
 
 ## Architecture
 
-The nine modules a campaign passes through, in `crucible/perf/`:
+One campaign, as the code runs it today (`crucible/perf/campaign.py`). **Solid boxes
+are built and used in the demo. Dashed boxes are designed or planned, not built.**
+Checked against the code on 3 November 2026.
 
-```text
-                          config/slo.yaml  (Policy memory: the agent can read it, never write it)
-                                  |
-   config/profiles/*.yaml --> profile.py ---- allowed properties + bounds, protected paths,
-   (authority)                    |           cause vocabulary, restart + deploy contract
-                                  v
- +-------------------------- campaign.py  (the loop; holds the deploy-branch lock) -------------------+
- |                                |                                                                   |
- |   runner.py ----------> collector.py --------------------> diagnosis.py <------- journal.py       |
- |   Locust, warmup         units converted, gauges           pinned model via          prior findings |
- |   discarded, gauges      sampled at peak, null != 0,       glc_v5; abstains          from results/, |
- |   sampled mid-run        available_evidence declared       rather than guesses       never re-try a |
- |     ^                          ^                                 |                   disproven cause|
- |     |                   providers/ (actuator,                    v                         ^        |
- |     |                   promql, datadog, jaeger)          applicator.py  guard: property    |        |
- |     |                                                     allowed? in bounds? path          |        |
- |     |                                                     protected?  (one file, one line)  |        |
- |     |                                                             |                         |        |
- |     |                                                             v                         |        |
- |     |                                                      approval.py  parks the EXACT     |        |
- |     |                                                      params; approve must match them  |        |
- |     |                                                             |                         |        |
- |     |                                                             v                         |        |
- |     |                                                      deploy.py  push to perftest_     |        |
- |     |                                                      sandbox only; no force; target   |        |
- |     |                                                      must prove the commit (19.6)     |        |
- |     |                                                             |                         |        |
- |     +---------------- re-measure under the identical load <-------+                         |        |
- |                                |                                                            |        |
- |                                v                                                            |        |
- |                  verdict: IMPROVED / INCONCLUSIVE (inside noise) / WORSE -> keep or revert   |        |
- |                                |                                                            |        |
- +--------------------------------+---> results/<run_id>.json  (manifest, collector_version) --+--------+
+```mermaid
+flowchart TD
+    subgraph INPUTS["Inputs: read by the agent, never written by it"]
+        direction LR
+        SLO["<b>config/slo.yaml</b><br/>SLA · scenarios · load<br/><i>protected path + Policy memory</i>"]
+        PROF["<b>config/profiles/spring-boot.yaml</b><br/>allowed properties + bounds<br/>protected paths · cause families<br/><i>grants authority</i>"]
+        SKILL["<b>spring-boot.SKILL.md</b><br/>how the runtime fails<br/><i>prompt only, grants nothing</i>"]
+    end
+
+    START(["Launch: wizard or crucible run"]) --> PRE["<b>Refuse production</b><br/>take the deploy-branch lock<br/>workspace must be clean"]
+    SLO --> PRE
+    PRE --> BASE["<b>Baseline load</b> · runner.py<br/>Locust headless · warmup discarded<br/>gauges sampled during load"]
+    WD["<b>Watchdog</b> · 7 tripwires<br/>arithmetic, no model"] -.-> BASE
+    BASE --> COLL["<b>Collect</b> · collector.py<br/>Actuator · units converted · peaks kept<br/>unsampled = null · available_evidence<br/>credentials redacted by allowlist"]
+    COLL --> DIAG["<b>Diagnose</b> · diagnosis.py<br/>model pinned via GLC v5 (config/tiers.yaml)<br/>may abstain · novel cause recorded as novel"]
+    JRAG[("<b>Journal RAG</b><br/>past manifests in results/")] -->|"what was tried and measured"| DIAG
+    SKILL --> DIAG
+    DIAG --> GUARD{"<b>Guard</b> · applicator.py<br/>allowed? in bounds?<br/>path protected?"}
+    PROF --> GUARD
+    GUARD -->|"no · 3 in a row stops the run"| REF["Refused · audited"]
+    GUARD -->|"yes"| MODE{"<b>Mode</b>"}
+    MODE -->|"Advisory"| ADV["Up to 3 ranked proposals, each with its diff<br/>nothing applied · NOT_MEASURED"]
+    MODE -->|"Semi-Automated"| HUMAN{"<b>Operator approves</b><br/>the exact parked diff?"}
+    MODE -->|"Fully Automated"| APPLY
+    HUMAN -->|"no · run stops"| MAN
+    HUMAN -->|"yes"| APPLY["<b>Apply</b><br/>commit one file to perftest_sandbox"]
+    APPLY --> DEPLOY["<b>Deploy</b> · deploy.py<br/>push to Box A · hook builds + restarts<br/>never force · never the base branch"]
+    DEPLOY --> PROOF{"<b>Target proves the commit</b><br/>/api/version<br/>heap change: jvm.memory.max"}
+    PROOF -->|"not proved"| UNV["NOT_MEASURED<br/>run aborts"]
+    PROOF -->|"proved · /actuator/env value<br/>read back and recorded"| RE["<b>Re-measure</b><br/>identical load"]
+    RE --> VERD{"<b>Verdict</b><br/>vs 2.08% noise floor"}
+    VERD -->|"IMPROVED"| KEEP["Keep"]
+    VERD -->|"WORSE · INCONCLUSIVE"| REV["Revert<br/>redeploy last good commit"]
+    KEEP --> MAN
+    REV --> MAN
+    REF --> MAN
+    ADV --> MAN
+    UNV --> MAN
+    MAN[("<b>Manifest</b><br/>results/&lt;run&gt;.json<br/>+ audit.jsonl")] --> STOP{"SLA met? experiments left?<br/>3 misses? cap reached?"}
+    STOP -->|"continue"| DIAG
+    STOP -->|"cap: pause, resume later"| PAUSE(["Paused"])
+    STOP -->|"done"| DONE(["Report"])
+    MAN --> JRAG
+
+    MAN -.-> SCORER["<b>Scorer</b> · scorer.py · calls no model<br/>outcome · diagnosis 2×2 incl. LUCKY<br/>integrity · efficiency · calibration · cost"]
+    MAN -.-> CHAT["<b>Live AI chat</b><br/>explains any run · cites sources"]
+    KRAG[("<b>Knowledge RAG</b><br/>uploaded .md / .txt")] -.-> CHAT
+
+    KRAG -.-> FDIAG["Knowledge RAG<br/>into diagnosis"]:::future
+    FDIAG -.-> DIAG
+    PROV["Pick PromQL / Datadog for a live run<br/>Dynatrace · New Relic · Elastic"]:::future -.-> COLL
+    LOADX["k6 · JMeter · Gatling runners"]:::future -.-> BASE
+    MAN -.-> FACT["Fact + Playbook memory<br/>human-promoted signatures"]:::future
+    KEEP -.-> PR["PR: perftest_sandbox to base branch<br/>owner decides"]:::future
+    HUMAN -.-> NOTIFY["Slack / Telegram approval"]:::future
+    MCP["MCP interface: another agent<br/>commissions a campaign"]:::future -.-> START
+
+    classDef future fill:transparent,stroke:#888,stroke-width:1px,stroke-dasharray:5 5,color:#777
+    classDef gate fill:#fff3cd,stroke:#b8860b,stroke-width:2px,color:#222
+    classDef store fill:#e8f4f8,stroke:#2c7a9c,stroke-width:2px,color:#222
+    class GUARD,MODE,HUMAN,PROOF,VERD,STOP gate
+    class JRAG,KRAG,MAN store
 ```
+
+**What the solid path guarantees.** Nothing is measured until the target itself reports
+the commit Crucible pushed; the changed value is read back from `/actuator/env` and
+recorded alongside. The verdict uses the measurement, never the prediction. Every
+outcome — kept, reverted, refused, declined, advisory — ends as a manifest on disk.
+
+**Also built, off the loop:** `crucible ceiling` (load rises in steps to the first SLA
+miss; the result is a pair, never a verdict); `--all-scenarios` (scenarios run in series,
+each with its own baseline); hooks (`before_each`, `after_each`, `on_abort`); mid-run
+edits by the operator, taken at the next experiment boundary and recorded as amendments;
+Jaeger traces through `crucible run --jaeger-url`; fixture capture from Actuator, PromQL
+and Datadog in one load window (`crucible capture`).
+
+**Dashed, and where each is recorded:** provider choice for a live run, the PR from the
+sandbox branch, and Fact/Playbook memory are in [`docs/ref/DEBT.md`](docs/ref/DEBT.md);
+the other runtimes and runners are in `DESIGN.md` §5 and §16. A FastAPI profile is
+drafted (`config/profiles/fastapi.yaml`) but has no `SKILL.md` and has not been run.
 
 The evaluation side reads what that loop writes and never runs inside it:
 
@@ -155,5 +203,6 @@ The evaluation side reads what that loop writes and never runs inside it:
 | `report.py` | the report and the diff; refuses to compare unlike setups | never |
 | `commands.py` | the CLI above | only via `run` and `bench` |
 
-`crucible/ui/nicegui_app.py` renders the six campaign-path screens from the same
-modules, reading the same `results/`, `config/` and state files the CLI reads.
+The dashboard (`crucible/ui/client/crucible-ui.html`, served by `crucible serve`
+through `crucible/ui/perf_ui.py`) reads the same `results/`, `config/` and state
+files the CLI reads, and every action goes through the same functions.
