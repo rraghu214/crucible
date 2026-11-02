@@ -1457,12 +1457,18 @@ def screen_benchmark(ctx: PerfContext, q: dict[str, str]) -> dict[str, Any]:
     ]
     s.add(s.card("Replay: can it diagnose?", [bullets(*replay_lines)]))
 
+    def cell(key: str, meaning: str) -> str:
+        n = len(quadrant[key]) if scored_runs else "—"
+        return s.stat(f"{key} · {meaning}", n, note="experiments" if scored_runs else "no scored live run")
+
+    grid = [
+        s.text("Across: did the fix work? Down: was the diagnosis right?", "caption"),
+        s.row([cell("CORRECT", "right diagnosis, fix worked"), cell("UNLUCKY", "right diagnosis, fix failed")]),
+        s.row([cell("LUCKY", "wrong diagnosis, fix worked"), cell("WRONG", "wrong diagnosis, fix failed")]),
+    ]
     legend = bullets(
-        "CORRECT: right diagnosis, and the fix worked.",
-        "LUCKY: wrong diagnosis, but the fix worked anyway. Outcome-only scoring calls this a success; "
-        "the same agent fails the next look-alike.",
-        "UNLUCKY: right diagnosis, but the fix did not work.",
-        "WRONG: wrong diagnosis, and the fix did not work.",
+        "LUCKY is the one that matters: outcome-only scoring calls it a success, and the same agent "
+        "fails the next look-alike.",
     )
     if scored_runs:
         counts = [s.text(f"{k}: {len(v)}" + (f" -- {', '.join(v)}" if v else "")) for k, v in quadrant.items()]
@@ -1471,7 +1477,7 @@ def screen_benchmark(ctx: PerfContext, q: dict[str, str]) -> dict[str, Any]:
     abstained_note = ([s.text(f"Abstained (no cause named, nothing changed; not in a quadrant): {len(abstained)} -- "
                               + ", ".join(abstained))] if abstained else [])
     s.add(s.card("Live: does the fix work, for the right reason?", [
-        legend, *counts, *abstained_note,
+        *grid, legend, s.text("Which experiments:", "caption"), *counts, *abstained_note,
         s.text(f"{scored_runs} live run(s) started from a fixture are scored here. Zero in a quadrant is a "
                f"measurement once runs are scored."),
     ]))
