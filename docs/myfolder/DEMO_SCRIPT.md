@@ -6,17 +6,17 @@ once end to end (Part P) before recording.*
 
 > **3 November additions**
 >
-> 1. **§0.5** — clear-knowledge command + ⏸ pause marker for indexing.
+> 1. **§0.5** — retire PERF_LAB_PRODUCT.md from the knowledge store (done on Box B, 2 Nov) + ⏸ pause marker.
 > 2. **§0.7** — tunnel marked optional; Cloudflare + Basic Auth path added.
-> 3. **§0.8** — pre-demo reset of perftest_sandbox and ~/perf-lab.
-> 4. **Step 1** — PerfLab API endpoint table added (~1 min extra).
-> 5. **Step 6** — five-file participation table (slo.yaml, profile, SKILL.md, locustfile, manifest).
-> 6. **Step 9** — Locust headless note moved here from the removed Step 10.
-> 7. **Step 10** (was 11) — two RAG stores explained here (knowledge-index + memory.sqlite).
-> 8. **Steps 11–15** renumbered (old 12–16). Timing table updated to ~33 min.
-> 9. **Benchmarks page** — LUCKY quadrant and 6-dimension definitions now shown on the page (code change).
-> 10. **Guardrails page** — Three-layers tab added to the page (code change).
-> 11. **Results page** — title now shows only the run id; headline is in the Findings card below (code change).
+> 3. **§0.8** — why not to delete `perftest_sandbox` or `~/perf-lab`.
+> 4. **Step 1** — PerfLab's ten endpoints, checked against `PerfController.java` (~1 min extra).
+> 5. **Step 4** — `demo-assets/sizes.csv`; no built-in generators (GUID, random) exist, so say so if asked.
+> 7. **Step 9** — Locust headless note moved here from the removed Step 10; ⏸ markers for the run.
+> 8. **Step 10** (was 11) — the stores behind a run: knowledge-index, results/ manifests, memory.sqlite.
+> 9. **Steps 11–15** renumbered (old 12–16). Timing table updated to ~33 min.
+> 10. **Benchmarks page** — LUCKY quadrant and 6-dimension definitions now shown on the page (code change).
+> 11. **Guardrails page** — Three-layers tab added to the page (code change).
+> 12. **Results page** — title now shows only the run id; headline is in the Findings card below (code change).
 
 ---
 
@@ -118,25 +118,28 @@ ls -lh ~/.crucible/knowledge-index/    # knowledge.sqlite + knowledge.sqlite.fai
 *(The agent API door, `POST /v1/agent/documents`, feeds the same store and
 needs the control token. See `docs/KNOWLEDGE_STORE.md`.)*
 
-**Before recording: clear the knowledge store so the upload looks fresh on camera.**
-Run these on Box B:
+**Before recording: retire PERF_LAB_PRODUCT.md so the upload is a first upload on camera.**
+Done on 2 November 2026 (backup in `~/backups/knowledge-20261102-191809/`). If the
+practice run re-uploads it, repeat this on Box B, then restart serve (0.1) so the
+dashboard forgets its upload list:
 ```bash
-# Mark all existing chunks from PERF_LAB_PRODUCT.md as superseded
-python3 -c "
+TS=$(date +%Y%m%d-%H%M%S); mkdir -p ~/backups/knowledge-$TS \
+  && cp -a ~/.crucible/knowledge ~/.crucible/knowledge-index ~/backups/knowledge-$TS/ \
+  && python3 - <<'EOF'
 import sqlite3, os
-db = os.path.expanduser('~/.crucible/knowledge-index/knowledge.sqlite')
-c = sqlite3.connect(db)
-c.execute(\"UPDATE chunks SET status='superseded' WHERE source LIKE '%PERF_LAB_PRODUCT%'\")
-c.commit()
-print('chunks superseded:', c.execute(\"SELECT COUNT(*) FROM chunks WHERE status='superseded'\").fetchone()[0])
-"
-# Remove the FAISS index (rebuilt on next search) and the original file
-rm -f ~/.crucible/knowledge-index/knowledge.sqlite.faiss \
-      ~/.crucible/knowledge-index/knowledge.sqlite.faiss.ids.json
-rm -f ~/.crucible/knowledge/PERF_LAB_PRODUCT.md
-ls -lh ~/.crucible/knowledge/ ~/.crucible/knowledge-index/
-# Expected: knowledge/ is now empty; knowledge-index/ has only the sqlite file
+c = sqlite3.connect(os.path.expanduser("~/.crucible/knowledge-index/knowledge.sqlite"))
+with c:
+    for (d,) in c.execute("select document_id from documents where source_uri='upload://PERF_LAB_PRODUCT.md' and state='active'").fetchall():
+        c.execute("update documents set state='superseded' where document_id=? and state='active'", (d,))
+        n = c.execute("update records set status='superseded' where status='current' and kind='document_chunk' "
+                      "and json_extract(metadata_json, '$.document_id')=?", (d,)).rowcount
+        print("retired", d, "chunks:", n)
+EOF
+mv ~/.crucible/knowledge/PERF_LAB_PRODUCT.md ~/backups/knowledge-$TS/ 2>/dev/null; ls ~/.crucible/knowledge/
 ```
+This retires only that document, with the same statements a re-index uses. Run
+memory is untouched: `memory.sqlite` and `results/` are separate stores. The vector
+index (`knowledge.sqlite.faiss`) rebuilds itself the next time the store opens.
 
 > **⏸ Pause recording** while the chunking/indexing runs after Upload & index in Step 2.
 > It takes ~4.5 min (gateway embed cooldown, 16 chunks). Resume when the chip says
@@ -206,29 +209,20 @@ Don't record a step you haven't seen pass.
 
 ---
 
-### 0.8 Pre-demo reset of perftest_sandbox (once, before recording)
+### 0.8 Do not delete `perftest_sandbox` or `~/perf-lab` (checked 2 November 2026)
 
-Before the first recording take, the `perftest_sandbox` branch should not exist on
-GitHub (so the audience sees Crucible create it). **One-time setup only.**
+- **Crucible never clones.** It uses the existing checkout named by `CRUCIBLE_WORKSPACE`
+  in `~/crucible/.env` (`/home/ubuntu/perf-lab`). Remove that folder and Launch fails.
+  Cloning on first use is backlog (DEBT.md, "The workspace is box configuration").
+- **Crucible pushes to `perftest` (Box A's deploy repo), never to GitHub.** Deleting
+  `perftest_sandbox` on GitHub changes nothing the run touches, and the audience would
+  not see Crucible recreate it there.
+- **Deleting it on `perftest` would break the demo.** Crucible would recreate it from
+  `main`, and `main` has pool=10, not the broken pool=2. The baseline would show no
+  bottleneck to find.
 
-```bash
-# From Box B — delete the remote branch (Box B has write access via the deploy key)
-cd ~/perf-lab
-git push perftest --delete perftest_sandbox   # removes it from the remote
-
-# Also clear ~/perf-lab and re-clone so the workspace is pristine
-cd ~
-rm -rf ~/perf-lab
-git clone git@github.com:rraghu214/perf-lab.git ~/perf-lab
-cd ~/perf-lab && git log --oneline -2         # confirm it is at the base state
-```
-
-Or from your laptop (HTTPS):
-```bash
-gh api repos/rraghu214/perf-lab/git/refs/heads/perftest_sandbox -X DELETE
-```
-
-Crucible recreates `perftest_sandbox` from the base branch when the first campaign runs.
+To start clean, use the pool=2 reset in 0.3. Each run's experiment commits then
+sit on top of that reset commit.
 
 ---
 
@@ -277,22 +271,30 @@ Crucible never holds model keys; the gateway rotates them."
 
 **PerfLab target (~1 min):**
 
-"PerfLab is a realistic Spring Boot service deliberately wired to fail in eight
-different ways. The key endpoints are:"
+"PerfLab is the target: a Spring Boot service with one endpoint per cause of
+slowness, so every diagnosis has a known right answer." (Source:
+`PerfController.java` in github.com/rraghu214/perf-lab; routes checked on Box A,
+2 November 2026.)
 
-| Endpoint | What it does | Bottleneck it exercises |
-|---|---|---|
-| `/api/db` | single DB query (Postgres via HikariCP) | connection pool |
-| `/api/cache` | Redis cache-aside (hit or miss) | cache hit rate, GC |
-| `/api/downstream` | real HTTP call to httpbin | downstream latency |
-| `/actuator/health` | Spring Boot health | — |
-| `/actuator/metrics` | Micrometer metrics | collector reads these |
+| Endpoint | Cause family it plants |
+|---|---|
+| `/api/fast` | none: the baseline, no dependency |
+| `/api/db` | connection pool exhaustion (holds a pooled connection 50 ms). **Today's demo** |
+| `/api/async` | thread pool saturation |
+| `/api/churn` | GC pressure |
+| `/api/orders?size=` | inefficient query (N+1) |
+| `/api/catalog?page=` | cache miss |
+| `/api/downstream` | downstream latency (calls httpbin) |
+| `/api/ledger` | lock contention (diagnosable, deliberately not fixable by config) |
+| `/api/payload?rows=` | payload serialisation |
+| `/api/slow` | application code |
+| `/api/version` | app name, pool size in force, and the commit the jar was built from |
 
-"Crucible points its Locust load at `/api/db`, reads HikariCP and JVM metrics from
-`/actuator/metrics`, and reads the property it changes back from `/actuator/env`
-to prove the new config is in force before it measures. The service resets between
-experiments by deploying a new commit to the sandbox branch — the post-receive
-hook on Box A builds and restarts it."
+"Crucible drives `/api/db` with Locust, reads HikariCP and JVM meters from
+`/actuator/metrics`, reads a changed property back from `/actuator/env`, and checks
+`/api/version` for the commit it pushed. It measures only once the target proves
+the change is running. Each experiment is a commit pushed to the sandbox branch;
+a post-receive hook on Box A builds and restarts the service."
 
 ---
 
@@ -320,8 +322,12 @@ dimensions produce incomparable vectors, so changing the embedder means
 re-indexing, never querying across the two. We keep the originals for exactly
 that reason."
 
+> **⏸ Pause recording** once the chip reads "indexing…" (~4.5 min for 16 chunks).
+> Resume when the chat says "indexed — N chunks".
+
 *(If it was already uploaded in practice, the chip reports "unchanged since
-last upload". Say "identical text is never re-embedded" and move on.)*
+last upload". Say "identical text is never re-embedded" and move on. To avoid
+that, repeat the §0.5 retirement after practice.)*
 
 **Show on Box B (optional):**
 ```bash
@@ -353,9 +359,9 @@ Emergency fallbacks.)*
 
 Wizard step **3 Scenarios**, then the **Input Data & Request Templates** card.
 
-**Action:** upload a small CSV (e.g. `sizes.csv` with a `size` column). It shows
-its row count and columns. Add a request row: `/api/orders`, query `size=${size}`,
-then map `size` → `sizes.csv` / `size`.
+**Action:** upload `docs/myfolder/demo-assets/sizes.csv` (one `size` column, six
+rows: 10 to 1000). It shows its row count and columns. Add a request row:
+`/api/orders`, query `size=${size}`, then map `size` → `sizes.csv` / `size`.
 
 **Say:**
 "Realistic load needs realistic inputs. A request is a path on the target, never
@@ -363,8 +369,13 @@ another host. Each `${var}` must be mapped to an uploaded file and column, and
 that is checked before anything runs. Rows are cycled. Templated endpoints are
 judged one endpoint at a time."
 
-*(Remove the request row again before launching, unless you want the
-demo run to use it.)*
+*Built-in generators: there are none. No `${uuid}`, random number or timestamp
+function exists today. Every `${var}` comes from a column of an uploaded CSV or
+JSON file (`crucible/perf/loaddata.py`). If a unique id is needed, put the ids in
+the file. If asked, say generators are not built. Do not show them.*
+
+**Remove the request row before launching.** Otherwise the demo run loads
+`/api/orders` instead of `/api/db`.
 
 ---
 
@@ -421,15 +432,16 @@ Set mode back to **Semi-Automated** → **Next: Review**.
 and the preflight checks, including that the load script actually drives the SLA
 endpoint. That is what `crucible plan` prints, from the same source."
 
-**Five files behind every run:**
+**Five files behind every run** (skim them on the Crucible repo's GitHub page,
+branch `capstone/perf-agent`; the manifest is on Box B):
 
 | File | What it holds | Agent can write? |
 |---|---|---|
-| `slo.yaml` | Goal (p99, error budget, load profile) — Launch writes it | No (Policy memory + protected path) |
+| `config/slo.yaml` | Goal (p99, error budget, load profile). Launch writes it | No (Policy memory + protected path) |
 | `config/profiles/spring-boot.yaml` | Allowed properties and bounds, protected paths | No (it IS the guard) |
-| `config/profiles/spring-boot.SKILL.md` | How Spring Boot fails, in plain prose — goes into the prompt only | No |
-| `locustfile.py` | The load script driving `/api/db` | No |
-| `results/<run-id>.json` | The manifest: goal, baseline, every change, approvals, commits, models, verdict | No (append-only) |
+| `config/profiles/spring-boot.SKILL.md` | How Spring Boot fails, in plain prose. Goes into the prompt only | No |
+| `locust/locustfile.py` | The built-in load script driving `/api/db` | No |
+| `results/<run-id>.json` | The manifest: goal, baseline, every change, approvals, commits, models, verdict | No: Crucible writes it, the agent can't |
 
 "These five files are the whole system's memory and authority. The agent reads most
 of them; it writes none of them directly. Everything it does is a parameter change
@@ -495,6 +507,10 @@ before recording. First proposal in ~7 minutes.
 
 **Navigate to:** Active. A green ● LIVE overlay appears within 5 s.
 
+> **⏸ Pause recording** while the baseline measures (~7 min to the first proposal).
+> Resume when the approval gate appears. Pause again after **Approve** while it
+> deploys and re-measures, and resume when the verdict shows.
+
 "The baseline measured p99 above the 120 ms SLA. The pool is 2 of 2, saturated,
 with 43 requests waiting at peak."
 
@@ -535,15 +551,17 @@ is the pool size."
 Trials: "The agent predicted 140 ms. The prediction is tracked as calibration,
 but the verdict uses only the measurement."
 
-**Two RAG stores behind this run:**
-- `~/.crucible/knowledge-index/knowledge.sqlite` — the chunked uploaded documents
-  (search at each chat turn; citations say "PERF_LAB_PRODUCT.md")
-- `~/.crucible/memory.sqlite` — the agent's own memory: the locked SLA (Policy),
-  the audit trail, and the journal that recalls past experiments at diagnosis
+**The stores behind this run (one line each):**
+- `~/.crucible/knowledge-index/knowledge.sqlite`: **Knowledge RAG**, the uploaded
+  documents in chunks. The chat searches it each turn; Sources says `PERF_LAB_PRODUCT.md`.
+- `~/crucible/results/<run-id>.json`: the run manifests (Episode memory, kept as files).
+  The **Journal RAG** reads past manifests at diagnosis, so a disproven fix isn't
+  proposed again. The chat reads them when you ask about a run; Sources names the manifest.
+- `~/.crucible/memory.sqlite`: the agent's own memory: each campaign's locked SLA
+  (Policy) and the audit trail. Step 14 opens it.
 
-"The chat searches both. When you ask why an experiment was kept, it reads
-`memory.sqlite`'s episode records — the run manifests. When you ask a product
-question, it searches `knowledge-index/`. The Sources line tells you which."
+"Two RAGs, two questions: what the documents say, and what earlier runs measured.
+The Sources line on every chat answer says which one it used."
 
 **Show on Box B:**
 ```bash
@@ -658,6 +676,11 @@ fixture once, run the agent against it hundreds of times cheaply. 23 snapshots,
 $0.054 each replay run, vs 15 minutes and $0.0115 for six live campaigns."
 
 ### The LUCKY quadrant
+
+The page's "Diagnosis against outcome" card lists the six dimensions the scorer
+computes, with no model call: **outcome, diagnosis accuracy, integrity, efficiency,
+calibration, cost** (`crucible/perf/scorer.py`). Verification is not a separate
+dimension: it is inside outcome, as verified fix vs unverified fix.
 
 Scoring grid: "Six dimensions. The LUCKY quadrant matters most: **wrong
 diagnosis, fix worked anyway.** Counting that as a success fails the next
