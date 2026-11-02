@@ -411,7 +411,7 @@ Wizard step **3 Scenarios**. Click each **Test mode** card:
 - **Semi-Automated**: "You approve each diff. The approval is bound to the exact
   change: you can't approve one thing and deploy another."
 - **Fully Automated**: "No approval prompts, but the agent's authority is the
-  property list and bounds in `profile.yaml`. The guardrails make this safe, not
+  property list and bounds in `spring-boot.yaml`, the target profile. The guardrails make this safe, not
   trust in the model. It still stops after three misses in a row."
 - **Ceiling Probe**: "A different question: how much headroom do I have? Load
   rises in steps up to bounds I set, until the SLA is first missed. Only an
@@ -473,8 +473,8 @@ but `git push origin main` is refused; `git -c core.pager=id log` executes
 programs through git's config and is also refused. The list says which tools
 exist; the constraints inside each tool are separate."
 
-**Layer 2 — property bounds in `profile.yaml`.** "SKILL.md tells the model how
-this runtime fails. It goes into the prompt and grants nothing. `profile.yaml`
+**Layer 2 — property bounds in `config/profiles/spring-boot.yaml`.** "`spring-boot.SKILL.md` tells the model how
+this runtime fails. It goes into the prompt and grants nothing. `spring-boot.yaml`, the target profile,
 grants authority: the allowed properties and their bounds. A SKILL.md saying
 'raise the pool to 10,000' has zero effect — that number fails the guard before
 it reaches the target. Session 17's rule, stated three times in the PDF: a skill
