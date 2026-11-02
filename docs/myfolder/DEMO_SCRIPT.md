@@ -739,9 +739,9 @@ ls ~/.crucible/
 |---|---|
 | `knowledge/` | the documents you uploaded, kept as originals so they can be re-indexed |
 | `knowledge-index/knowledge.sqlite` | those documents cut into searchable chunks (16 for PERF_LAB_PRODUCT.md) |
-| `knowledge-index/knowledge.sqlite.faiss` (+ `.ids.json`) | the vector index: how meaning-based search finds a chunk |
+| `knowledge-index/knowledge.sqlite.faiss` (+ `.ids.json`) | the vector index: how meaning-based search finds a chunk. Appears after the Step 2 upload |
 | `memory.sqlite` | the agent's memory: each campaign's locked SLA (Policy) and the audit trail |
-| `memory.sqlite.faiss` (+ `.ids.json`) | the vector index for that memory. Policy and Audit are never embedded |
+| *(no `memory.sqlite.faiss`)* | not a missing file: Policy and Audit are never embedded, so this memory has nothing to vector-index and Crucible removes an empty index |
 | `audit.jsonl` | the append-only log: approvals, applies, refusals, reverts, with times |
 | `approvals/` | a request file for each proposal and your decision file. The campaign waits on these: the human gate, on disk |
 | `ui-jobs/` | one folder per command started from the dashboard, with its log (what Jobs and Active show) |
