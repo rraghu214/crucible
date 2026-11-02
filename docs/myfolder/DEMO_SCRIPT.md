@@ -40,16 +40,13 @@ once end to end (Part P) before recording.*
 ```bash
 ssh -i "<path-to-ssh-key>" ubuntu@<box-b-ip>
 
+hostname                      # instance-20260912-2245 (Box B)
 cd ~/crucible
-git status --short
-# Launch rewrites config/slo.yaml and the profile. If either is listed as modified, stash it first:
-git stash push config/slo.yaml config/profiles/spring-boot.yaml
-git pull origin capstone/perf-agent
+git status --short            # config/slo.yaml and the profile show as modified: your wizard edits. Keep them.
+git pull -q --ff-only origin capstone/perf-agent && git log --oneline -1
+# Only if the pull refuses because of those two files:
+#   git stash push config/slo.yaml config/profiles/spring-boot.yaml && git pull -q --ff-only origin capstone/perf-agent && git stash pop
 uv sync --group load
-
-# One time only, after the 24 October changes (checklist 9g):
-rm -f ~/.crucible/memory.faiss ~/.crucible/memory.faiss.ids.json
-rm -f ~/.crucible/memory.db ~/.crucible/memory.db.faiss ~/.crucible/memory.db.faiss.ids.json
 
 # Restart the UI server. The script restarts serve under nohup, keeps the
 # Cloudflare tunnel (so the public URL doesn't change), and prints healthz + the URL.
@@ -94,7 +91,7 @@ cd ~/perf-lab && git checkout -q perftest_sandbox && git fetch -q perftest \
 ```bash
 curl -s -X POST https://<your-gateway>.onrender.com/v1/chat \
   -H "Content-Type: application/json" \
-  -d '{"model":"gemini-2.5-flash","messages":[{"role":"user","content":"ping"}]}' | head -c 200; echo
+  -d '{"model":"gemini-3.5-flash-lite","messages":[{"role":"user","content":"ping"}]}' | head -c 200; echo
 # Burns off the Render cold start (up to 60 s). If it took >30 s, run it again.
 ```
 
@@ -142,10 +139,12 @@ index (`knowledge.sqlite.faiss`) rebuilds itself the next time the store opens.
 ### 0.6 Confirm the UI endpoints
 
 ```bash
-curl -s http://127.0.0.1:8113/v1/perf/jobs | python3 -m json.tool | head
-curl -s http://127.0.0.1:8113/v1/perf/campaign/active | python3 -m json.tool
-# Expected: {"active": false, ...}
-curl -s http://127.0.0.1:8113/v1/perf/runs | python3 -m json.tool | head -20
+# The dashboard login is on, so every call needs it (read from .env, never typed or printed):
+AUTH="$(grep ^CRUCIBLE_UI_USER= ~/crucible/.env|cut -d= -f2-):$(grep ^CRUCIBLE_UI_PASSWORD= ~/crucible/.env|cut -d= -f2-)"
+curl -s -u "$AUTH" http://127.0.0.1:8113/v1/perf/jobs | python3 -m json.tool | head
+curl -s -u "$AUTH" http://127.0.0.1:8113/v1/perf/campaign/active | python3 -m json.tool
+# Expected: {"active": false, "running_job": null, "paused": []}
+curl -s -u "$AUTH" http://127.0.0.1:8113/v1/perf/runs | python3 -m json.tool | head -20
 # The run ids on disk: note two of them for Step 13
 ls ~/crucible/results/                  # manifests: <run>.json, ceiling probes <run>.ceiling.json
 ```
@@ -217,6 +216,13 @@ Don't record a step you haven't seen pass.
 
 To start clean, use the pool=2 reset in 0.3. Each run's experiment commits then
 sit on top of that reset commit.
+
+**If asked how the target gets onto Box B** (operator decision, 3 November: say it,
+don't build it before the demo): "The intended flow is that Crucible clones the
+service from its base branch into its own sandbox folder, commits there, pushes the
+sandbox branch, and that push triggers the deploy: a hook here, Jenkins in a real
+shop. Today the checkout is made once by hand; cloning it automatically is the
+dashed box in the README diagram."
 
 ---
 
@@ -518,8 +524,8 @@ Micrometer's seconds to milliseconds before the model saw them, and sampled the
 pending gauge during load, so we have the peak, not the post-run zero. Memory:
 the journal was searched, so a disproven hypothesis isn't proposed again."
 
-Approval gate: "The proposal is pool 2 → 20, and this exact diff is what I
-approve. Then Crucible commits that one file, pushes, waits until the target
+Approval gate (read the value off the screen; the 2 November trial proposed 2 → 50):
+"The proposal is pool 2 → <value>, and this exact diff is what I approve. Then Crucible commits that one file, pushes, waits until the target
 itself reports the commit it pushed, reads the new value back, and only then runs
 a fresh measurement window."
 
@@ -651,18 +657,26 @@ never shown as a verdict on a change."
 
 ### Glossary (one-liners for the audience)
 
-`Task` is Session 18's term applied to the performance domain. `Fixture`,
-`Snapshot`, and `Replay` are **Crucible's own vocabulary** — S18 does not use
-them. (S18's "fixture" means visible test cases an agent can memorize, which is
-a different thing entirely.)
+"The benchmark is four things: tasks, fixtures, snapshots and replay. Each number
+below comes from the files on disk (counted 3 November 2026)."
 
-| Term | One line | Origin |
-|---|---|---|
-| **Task** | A question to the agent: "given this snapshot, what is wrong, and what would you change?" | S18 |
-| **Fixture** | A real service under load, measured and frozen — a crime-scene photograph | Crucible |
-| **Snapshot** | One reading of the service's metrics at a moment in time, produced by the collector | Crucible |
-| **Replay** | Running the agent against a stored snapshot — no load test, 2 seconds, a fraction of a cent | Crucible |
-| **Live** | A full campaign: load → collect → diagnose → apply → redeploy → remeasure | Crucible |
+| Term | One line | Count | Origin |
+|---|---|---|---|
+| **Task** | One behaviour the agent must show, asked as a question: "here is the evidence, what is wrong, and what would you change?" Five classes, from "diagnose and repair" to "say nothing is wrong" | **18** tasks in 5 classes (`config/tasks/`) | S18 |
+| **Fixture** | PerfLab deliberately put into one broken (or healthy) state, with its true cause written down before any run | **20** fixtures: 18 broken across 9 causes, 2 healthy; 19 captured (`config/fixtures/`) | Crucible |
+| **Snapshot** | One fixture measured under real load and frozen: 2 min warmup discarded, 5 min measured, read through one metrics provider | **23** snapshots: 19 Actuator, 2 PromQL, 2 Datadog (`fixtures/`) | Crucible |
+| **Replay** | The model diagnoses a stored snapshot. No load, no target: about 2 seconds and a fraction of a cent per case | **40** cases: 26 task–fixture pairs, each asked through every provider view of its fixture. 37 have a true cause; **31 correct** | Crucible |
+
+And beside replay, the part replay cannot do: **live** — the whole loop on the real
+target. **6** campaigns, **8** experiments: 7 CORRECT, 1 LUCKY.
+
+"Task is Session 18's word. Fixture, snapshot and replay are Crucible's. S18's
+'fixture' means visible test cases an agent could memorise, a different thing."
+
+*If asked why the Benchmarks page says "26 test cases": those are the task–fixture
+pairs. Replay asks each pair once per provider view, which makes 40. The 1 November
+overnight replay had 38 cases (35 with a true cause); the blinded re-run after the
+unit fix is the 40-case run of record.*
 
 "Session 18's lesson: a benchmark is a procedure, not a score — it is a Task, a
 Harness (the environment and allowed tools), a Policy (what the agent may do), a
@@ -837,16 +851,19 @@ files on the box, which is the point.
 approval binding. The UI is not a shortcut."
 
 ```bash
-crucible plan
-crucible run --all-scenarios --advisory
-crucible run --cost-cap 0.05 --wall-clock-cap 2
-crucible status <run_id>
-crucible approve <run_id> --experiment 1 --as raghu
-crucible resume <run_id> --cost-cap 1
-crucible report --run <run_id>
-crucible diff <run_id_a> <run_id_b>
-crucible bench --replay
+cd ~/crucible && set -a; . ./.env; set +a      # hand-typed CLI needs .env loaded
+uv run crucible plan
+uv run crucible run --all-scenarios --advisory
+uv run crucible run --cost-cap 0.05 --wall-clock-cap 2
+uv run crucible status <run_id>
+uv run crucible approve <run_id> --experiment 1 --as raghu
+uv run crucible resume <run_id> --cost-cap 1
+uv run crucible report --run <run_id>
+uv run crucible diff --a <run_id_a> --b <run_id_b>
+uv run crucible bench --tasks config/tasks/ --fixtures fixtures/
 ```
+*Checked on Box B, 3 November 2026: each parses (`--help`). Show them; don't run
+`run` or `bench` on camera. `crucible` alone is not on PATH, so keep `uv run`.*
 
 ---
 

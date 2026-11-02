@@ -551,7 +551,7 @@ blockquote{border-left:3px solid var(--fire);padding:12px 16px;background:var(--
       </div></div>
       <div class="step"><div class="step-num">9</div><div class="step-body">
         <div class="step-title">Live campaign and approval <span class="step-tag tag-live">live</span></div>
-        <div class="step-desc">Baseline: the pool is 2 of 2 with requests queuing. The agent proposes pool 2 → 20; the operator approves that exact diff. Crucible commits one file, pushes, waits until the target reports the new commit (reading the value back too), then re-measures under identical load. Locust runs headless; the diagnosis reads server-side Actuator metrics.</div>
+        <div class="step-desc">Baseline: the pool is 2 of 2 with requests queuing. The agent proposes a larger pool (2 → 50 in the 2 November trial); the operator approves that exact diff. Crucible commits one file, pushes, waits until the target reports the new commit (reading the value back too), then re-measures under identical load. Locust runs headless; the diagnosis reads server-side Actuator metrics.</div>
         <div class="step-cli">crucible approve &lt;run-id&gt; --experiment 1 --as &lt;you&gt;</div>
       </div></div>
       <div class="step"><div class="step-num">10</div><div class="step-body">

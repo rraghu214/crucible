@@ -55,8 +55,11 @@ as new test areas come up.
 - Run `uv run pytest -q` and `uv run ruff check .` before every commit. Both
   must pass clean.
 - One bug, one PR. Adjacent findings get their own PR, not a bundle.
-- `capstone/perf-agent` is the working branch. `main` stays the clean
-  S17Code baseline — never commit capstone work to it.
+- `capstone/perf-agent` is the working branch. Never commit or push to `main`
+  directly. Until 3 November 2026 `main` was kept as the clean S17Code baseline;
+  for the final submission the operator relaxed that: capstone work reaches `main`
+  only through a reviewed pull request from `capstone/perf-agent`, opened and
+  merged by the operator.
 - **The target is a separate repository**: https://github.com/rraghu214/perf-lab.
   It lived at `perf-lab/` inside this repo until 21 September 2026. Crucible's
   workspace is a checkout of the *target's* repo, never of this one, and

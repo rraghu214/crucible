@@ -102,7 +102,7 @@ fault's name, and every snapshot was checked against Prometheus first.
 > Actuator snapshots the live runs decide from).
 
 The 2 November dashboard trial reproduced the loop end to end: a Semi-Automated run
-approved from the dashboard took p99 from 2500 ms to 68 ms at 100 users, kept
+approved from the dashboard took p99 from 2500 ms to 69 ms at 100 users, pool 2 → 50, kept
 (`docs/myfolder/trial-run-31102026.md`).
 
 ## Architecture
@@ -165,6 +165,7 @@ flowchart TD
     LOADX["k6 · JMeter · Gatling runners"]:::future -.-> BASE
     MAN -.-> FACT["Fact + Playbook memory<br/>human-promoted signatures"]:::future
     KEEP -.-> PR["PR: perftest_sandbox to base branch<br/>owner decides"]:::future
+    CLONE["Clone the target from base_branch<br/>into Crucible's own sandbox folder<br/>today: a pre-made checkout"]:::future -.-> PRE
     HUMAN -.-> NOTIFY["Slack / Telegram approval"]:::future
     MCP["MCP interface: another agent<br/>commissions a campaign"]:::future -.-> START
 
@@ -187,8 +188,9 @@ edits by the operator, taken at the next experiment boundary and recorded as ame
 Jaeger traces through `crucible run --jaeger-url`; fixture capture from Actuator, PromQL
 and Datadog in one load window (`crucible capture`).
 
-**Dashed, and where each is recorded:** provider choice for a live run, the PR from the
-sandbox branch, and Fact/Playbook memory are in [`docs/ref/DEBT.md`](docs/ref/DEBT.md);
+**Dashed, and where each is recorded:** cloning the target on first use, provider choice
+for a live run, the PR from the sandbox branch, and Fact/Playbook memory are in
+[`docs/ref/DEBT.md`](docs/ref/DEBT.md);
 the other runtimes and runners are in `DESIGN.md` §5 and §16. A FastAPI profile is
 drafted (`config/profiles/fastapi.yaml`) but has no `SKILL.md` and has not been run.
 

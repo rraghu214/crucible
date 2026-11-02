@@ -152,7 +152,7 @@ commit (if it never does, nothing is measured and the run stops), reads the new
 value back from `/actuator/env` and records it; then a fresh measured window
 under identical load; then the verdict against the 2.08% noise floor.
 
-**The 2 November trial run** (`run-1793596989174`, 100 users): p99 2500 → 68 ms,
+**The 2 November trial run** (`run-1793596989174`, 100 users): p99 2500 → 69 ms (pool 2 → 50),
 IMPROVED, kept. Your recording will produce its own numbers: say the ones on screen.
 
 **`--reject` stops the campaign.** The manifest records "operator declined
@@ -235,7 +235,7 @@ the wizard's Ceiling Probe mode launches the same command.
 | p99 goal 120 ms on `/api/db` | `config/slo.yaml` (the wizard's Goal & SLA step) |
 | 13 allowed properties, 6 protected paths, 9 cause families | `config/profiles/spring-boot.yaml` |
 | Noise floor 2.08% | `config/slo.yaml`, measured on Box A |
-| Trial Semi-Automated run: 2500 → 68 ms, kept | `run-1793596989174` on Box B |
+| Trial Semi-Automated run: 2500 → 69 ms, pool 2 → 50, kept | `run-1793596989174` on Box B |
 | Live benchmark: 8 experiments, CORRECT 7, LUCKY 1, $0.0115 | `docs/BENCHMARK_LIVE_RESULTS.md` (run 2, 1 Nov) |
 | Replay: 31 of 37 diagnoses correct, task grade 32 of 40, $0.054 | `docs/BENCHMARK_REPLAY_RESULTS.md` (run 2, 1 Nov) |
 | 43 waiters, 2.4 s max acquire (the K3 unit lesson) | `docs/K3_RESULT.md` |

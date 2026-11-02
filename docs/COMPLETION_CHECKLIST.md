@@ -481,9 +481,8 @@ curl -s http://127.0.0.1:8113/v1/perf/screens/17 | python3 -m json.tool | grep "
 
 1. Verify `uv run pytest -q` and `uv run ruff check .` pass clean locally.
 2. Push the branch: `git push origin capstone/perf-agent`
-3. Open the PR from `capstone/perf-agent` to `main` (operator's plan, 3 November 2026).
-   Note: `AGENTS.md` currently says `main` stays the clean S17Code baseline and capstone
-   work is never committed to it. Update that rule in the same PR, or the PR contradicts it.
+3. Open the PR from `capstone/perf-agent` to `main` (operator's plan, 3 November 2026;
+   `AGENTS.md` was updated the same day to allow it through a reviewed PR only).
 4. After submission: take down the Cloudflare tunnel and the dashboard login (`DESIGN.md` §18).
 5. Submit per the course instructions.
 

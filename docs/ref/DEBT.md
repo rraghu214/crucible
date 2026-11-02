@@ -181,7 +181,18 @@ work. Fix only when touching the file for another reason.
   repo (and the deploy remote's URL, no credentials, §19.8), and Crucible keeps its own
   checkout per service, cloned on first use and fetched before each campaign, on the
   sandbox branch created from `base_branch`. The clean-workspace check stays. DESIGN.md
-  §19.1b changes with it. Then remove the `.env` line. Low priority.
+  §19.1b changes with it. Then remove the `.env` line. ~~Low priority.~~
+
+  **Raised, 3 November 2026 (operator):** this is the intended flow, not an option:
+  Crucible clones the target from `base_branch` into its own sandbox folder on Box B,
+  commits there, pushes `perftest_sandbox`, and the push triggers the deploy (Box A's
+  hook here, Jenkins elsewhere). Decided: demo as is, build after submission. Found the
+  same day: perf-lab `main` lacked code Box A runs (`/api/slow` and the Datadog profile,
+  `3a8f82d`, committed straight to the sandbox) and had pool=10, so a clone from `main`
+  would not have reproduced the demo target. Both fixed in perf-lab
+  (`main-matches-box-a`). Still sandbox-only: `772820c`, Prometheus bound to Box A's
+  private IP, which is box configuration rather than application code. GitHub's own
+  `perftest_sandbox` is a stale September branch; the live one is on Box A's deploy repo.
 - **Kept changes never reach the base branch.** A completed campaign leaves its kept
   changes on `perftest_sandbox` only. Operator: after every completed campaign, Crucible
   opens a PR from the sandbox branch to the base branch, so the owner decides whether the
