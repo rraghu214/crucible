@@ -669,84 +669,27 @@ below comes from the files on disk (counted 3 November 2026)."
 | **Snapshot** | One fixture measured under real load and frozen: 2 min warmup discarded, 5 min measured, read through one metrics provider | **23** snapshots: 19 Actuator, 2 PromQL, 2 Datadog (`fixtures/`) | Crucible |
 | **Replay** | The model diagnoses a stored snapshot. No load, no target: about 2 seconds and a fraction of a cent per case | **40** cases: 26 task–fixture pairs, each asked through every provider view of its fixture. 37 have a true cause; **31 correct** | Crucible |
 
-And beside replay, the part replay cannot do: **live** — the whole loop on the real
-target. **6** campaigns, **8** experiments: 7 CORRECT, 1 LUCKY.
+Plus **live**: the whole loop on the real target. **6** campaigns, **8** experiments.
 
-"Task is Session 18's word. Fixture, snapshot and replay are Crucible's. S18's
-'fixture' means visible test cases an agent could memorise, a different thing."
+**Point at the 2×2 grid** (Live card): "Down: was the diagnosis right? Across: did
+the fix work? **LUCKY** is wrong diagnosis, fix worked anyway. Outcome-only scoring
+calls that a win; the same agent fails the next look-alike. Naming and counting it
+is Crucible's addition to Session 18's 'a benchmark is a procedure, not a score'."
 
-*If asked why the Benchmarks page says "26 test cases": those are the task–fixture
-pairs. Replay asks each pair once per provider view, which makes 40. The 1 November
-overnight replay had 38 cases (35 with a true cause); the blinded re-run after the
-unit fix is the 40-case run of record.*
+**Say the numbers** (run 2, 1 November, gemini-3.5-flash-lite):
+- Live: 7 CORRECT, 1 LUCKY, 0 UNLUCKY, 0 WRONG, every SLA met, $0.0115. The LUCKY
+  one: on the N+1 fault it first raised the pool (11% faster, wrong cause); the
+  next experiment fixed the query.
+- Replay: right cause in 31 of 37, task grade 32 of 40, $0.054. Weak classes: D 2/5,
+  E 1/2. Say so.
+- Scored by six dimensions with no model call: outcome, diagnosis, integrity,
+  efficiency, calibration, cost.
 
-"Session 18's lesson: a benchmark is a procedure, not a score — it is a Task, a
-Harness (the environment and allowed tools), a Policy (what the agent may do), a
-Scorer (the rules that turn a run into numbers), and a Manifest (the exact
-versioned record — commit SHA, model ID, scorer version — that lets anyone rerun
-it without calling a model). Never publish the conclusion without keeping the
-observation that produced it."
-
-"The replay/live split is Crucible's application of that principle: capture a
-fixture once, run the agent against it hundreds of times cheaply. 23 snapshots,
-$0.054 each replay run, vs 15 minutes and $0.0115 for six live campaigns."
-
-### The LUCKY quadrant
-
-The page's "Diagnosis against outcome" card lists the six dimensions the scorer
-computes, with no model call: **outcome, diagnosis accuracy, integrity, efficiency,
-calibration, cost** (`crucible/perf/scorer.py`). Verification is not a separate
-dimension: it is inside outcome, as verified fix vs unverified fix.
-
-Scoring grid: "Six dimensions. The LUCKY quadrant matters most: **wrong
-diagnosis, fix worked anyway.** Counting that as a success fails the next
-look-alike fixture. Session 18 flags this as 'visible-fixture fit' — an agent
-that memorises the answer rather than solving the problem. Crucible extends it to
-the performance domain: an agent that raises the pool because it misread a GC
-signal, on a fixture where the pool also happened to be tight, records a success
-and will fail the next fixture that looks similar but isn't. The LUCKY quadrant
-is what catches it."
-
-"**The LUCKY quadrant is not in the course by that name — it is Crucible's
-contribution.** Session 18 introduced the principle; Crucible names the
-failure mode and measures it explicitly on every run."
-
-### The numbers
-
-**Run 2, 1 November 2026, the benchmark of record (gemini-3.5-flash-lite, read from the manifests):**
-
-"Live: six Fully Automated campaigns, one per planted fault, eight experiments.
-Seven CORRECT, one LUCKY, no UNLUCKY, no WRONG, every SLA met, just over a cent
-($0.0115). The LUCKY one is real: on the N+1 query fault the agent first raised
-the pool. That made it 11% faster, so on outcome alone it counts as a success.
-The scorer marks it LUCKY because the pool was not the cause. The second
-experiment fixed the query and was scored CORRECT."
-
-"Replay: 23 clean snapshots, 40 cases. Diagnosis correct on 31 of 37 cases that
-have a true cause, 32 of 40 on the task grade, five cents ($0.054)."
-
-Point at task classes if asked: A 8/9, B 12/14, C 9/10, D 2/5, E 1/2. D and E
-are the weak classes; say so rather than skipping them.
-
-### "1993 tests vs 26 benchmark cases" — if a trainer asks
-
-These test two completely different things:
-
-| | What it tests | Count | How |
-|---|---|---|---|
-| **pytest suite** | Crucible's own code: does the collector, the guard, the applicator, the wizard behave correctly? | 1993 | Unit + integration tests; 2 min |
-| **Benchmark** | The AI agent's reasoning: does it diagnose the right cause given a snapshot? | 26 runnable cases | Replay against captured snapshots |
-
-"1993 tests check the plumbing. 26 benchmark cases check the intelligence.
-Session 18's point: passing tests is not everything — you need to test that the
-right property was actually tested."
-
-### On evaluation
-
-"Every test assertion is drafted with its reasoning and reviewed by me before it
-is committed — more than 40 groups in `docs/CRUCIBLE_TEST_ASSERTIONS.md`. The
-review asks: does the reasoning match the failure it tests for? That is the same
-question Session 18 asks about every task."
+*If asked:*
+- *"26 test cases"* = task–fixture pairs; each is asked once per provider view → 40.
+- *Tests vs benchmark:* the pytest suite (~2,000) checks the code; the 40 + 8
+  benchmark results check the agent's reasoning. Every test assertion is drafted
+  with its reasoning and reviewed by me (`docs/CRUCIBLE_TEST_ASSERTIONS.md`).
 
 ---
 
