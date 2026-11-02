@@ -232,7 +232,7 @@ dashed box in the README diagram."
 ```
 Pre-read : crucible-product-doc.html sent to trainer
 Box B    : crucible serve running on 8113 (healthz ok)
-Tunnel   : 9113 forwarded (no 8089: Locust is headless)
+Tunnel   : 9113 forwarded (Option A only; Option B uses Cloudflare URL — no tunnel needed)
 Box A    : pool_size = 2.0 confirmed
 GLC v5   : warmed (0.4)
 Knowledge: PERF_LAB_PRODUCT.md listed as indexed; knowledge-index/ non-empty (0.5)
@@ -270,7 +270,8 @@ Postgres, Redis, Prometheus and Jaeger. Box B, this machine, runs Crucible and
 the Locust load generator. GLC v5, hosted on Render, is the LLM gateway.
 Crucible never holds model keys; the gateway rotates them."
 
-**Show the loop:** the Crucible repo's README on GitHub → **Architecture**. "Solid
+**Show the loop:** the Crucible repo's README on GitHub → **How it works** →
+expand **"The full flow: what is built today, and what is planned (dashed)"**. "Solid
 boxes are what runs today. Dashed boxes are designed and not built, and I'd rather
 show you the line between them than blur it." Point at the two gates that matter:
 the operator's approval, and the target proving the commit before anything is measured.
@@ -555,7 +556,7 @@ just the run id — the full outcome is in the Findings card below it."
 Before/After chart: "Two measured windows, identical load. The only difference
 is the pool size."
 
-Trials: "The agent predicted 140 ms. The prediction is tracked as calibration,
+Trials: "The agent predicted [read off the screen]. The prediction is tracked as calibration,
 but the verdict uses only the measurement."
 
 **The stores behind this run (one line each):**
