@@ -10,8 +10,8 @@ import json
 
 import pytest
 
-from s17code.reasoning import ReasoningEngine, Verifier
-from s17code.reasoning.verifier import VerifierError
+from crucible.reasoning import ReasoningEngine, Verifier
+from crucible.reasoning.verifier import VerifierError
 
 
 def scripted(drafts: list[str], verdicts: list[dict]):

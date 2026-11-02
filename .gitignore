@@ -18,5 +18,10 @@ proofs/out/
 *.bento.html
 # Local run stores and scratch workspaces. Anchored to the repo root so it
 # does not swallow proofs/runs/, which is evidence rather than scratch.
-/.s17/
+/.crucible/
 /runs/
+CLAUDE_CODE_PROMPTS.md
+.claude/
+# Operator-only details (IPs, key paths, gateway URL) kept out of the public
+# repo; the docs refer to them by placeholder. See docs/local/PRIVATE.md.
+/docs/local/

@@ -10,16 +10,26 @@ from pathlib import Path
 
 import pytest
 
-from s17code.coding import (
-    CommandError, EditError, GuardError, Workspace, WorkspaceError,
-    glob_files, grep_code, run_command,
+from crucible.coding import (
+    CommandError,
+    EditError,
+    GuardError,
+    Workspace,
+    WorkspaceError,
+    glob_files,
+    grep_code,
+    run_command,
 )
-from s17code.coding.edit import EditLedger, apply_edit, create_file, read_code
-from s17code.coding.guard import is_protected
+from crucible.coding.edit import EditLedger, apply_edit, create_file, read_code
+from crucible.coding.guard import is_protected
 
 
 @pytest.fixture
-def repo(tmp_path: Path) -> Workspace:
+def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Workspace:
+    # A local .env (via load_dotenv on app startup) can leak a narrow
+    # CRUCIBLE_PROTECTED_PATHS process-wide; these tests assert on the
+    # shipped DEFAULT_PROTECTED set, so pin it back to unset.
+    monkeypatch.delenv("CRUCIBLE_PROTECTED_PATHS", raising=False)
     (tmp_path / "tests").mkdir()
     (tmp_path / "calc.py").write_text(
         "def average(numbers):\n    return sum(numbers) / len(numbers)\n")
@@ -48,7 +58,7 @@ def test_the_agent_cannot_edit_the_thing_that_grades_it(repo, path) -> None:
 
 
 def test_ordinary_source_is_editable(repo) -> None:
-    assert is_protected("s17code/runtime.py") is None
+    assert is_protected("crucible/runtime.py") is None
     assert is_protected("calc.py") is None
 
 
@@ -184,7 +194,7 @@ def test_a_verification_command_may_be_repeated_because_the_world_changed() -> N
     edited a file in between. Capabilities that answer a question about the
     world declare it, and the planner exempts them.
     """
-    from s17code.capabilities import default_registry
+    from crucible.capabilities import default_registry
     rerunnable = default_registry().family("rerunnable")
     assert "run_command" in rerunnable
     assert "read_code" in rerunnable          # a file re-read after an edit differs

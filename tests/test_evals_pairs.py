@@ -14,7 +14,7 @@ import json
 
 import pytest
 
-from s17code.evals import (
+from crucible.evals import (
     LabelledPair,
     best_operating,
     by_family,
@@ -24,7 +24,7 @@ from s17code.evals import (
     sweep,
     thresholds,
 )
-from s17code.evals.pairs import Operating
+from crucible.evals.pairs import Operating
 
 PROOF_PAIRS = "proofs/pairs/paraphrases.jsonl"
 

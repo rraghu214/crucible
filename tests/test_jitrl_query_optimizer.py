@@ -10,7 +10,7 @@ import json
 
 import pytest
 
-from s17code.reasoning import QueryOptimizer
+from crucible.reasoning import QueryOptimizer
 
 
 def responds(payload):

@@ -12,8 +12,8 @@ import inspect
 
 import pytest
 
-from s17code.workers import RunContext
-from s17code.workers import coding as workers
+from crucible.workers import RunContext
+from crucible.workers import coding as workers
 
 
 def test_git_workers_use_the_workspace_not_the_command_runner() -> None:
@@ -63,6 +63,6 @@ def test_the_context_carries_only_what_was_measured() -> None:
 def test_the_coding_workers_are_thin() -> None:
     """The rules live in coding/. A worker that grows logic has stolen it."""
     for name in workers.__all__:
-        body = [l for l in inspect.getsource(getattr(workers, name)).splitlines()
-                if l.strip() and not l.strip().startswith(("#", '"""', "'''"))]
+        body = [line for line in inspect.getsource(getattr(workers, name)).splitlines()
+                if line.strip() and not line.strip().startswith(("#", '"""', "'''"))]
         assert len(body) <= 12, f"{name} is {len(body)} lines; the rule belongs in coding/"

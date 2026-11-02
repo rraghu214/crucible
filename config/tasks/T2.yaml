@@ -1,0 +1,55 @@
+# ---------------------------------------------------------------------------
+# T2 -- Class B, discrimination pair: GC pressure vs connection pool exhaustion
+#
+# These two causes share the same surface signature -- p99 spikes while p50
+# stays flat -- and are the hardest pair in the benchmark to distinguish. The
+# evidence that separates them is specific:
+#
+#   Pool: acquire_mean_ms high, pending_peak_connections > 0, HikariCP fields
+#         carry the signal, GC fields look ordinary.
+#   GC:   gc_pause_mean_ms high, gc_pause_count elevated, heap_used_peak_bytes
+#         near ceiling, HikariCP fields look ordinary.
+#
+# A model that reads the shape ("p99 spike, p50 fine") and reaches for the pool
+# fails the GC fixture while passing T1, which is the LUCKY quadrant §4.7 is
+# about. Class B makes the pairing explicit in the grading.
+# ---------------------------------------------------------------------------
+
+id: T2
+task_class: B
+name: distinguish GC pressure from connection pool exhaustion
+
+# Both fixtures MUST be run. The correct answer differs by fixture, and a model
+# that names pool_exhaustion for both passes T1 and fails T2, which is
+# precisely the discrimination that class B tests.
+fixtures:
+  - perflab_pool_starved
+  - perflab_gc_pressure
+
+expected_behaviour: >
+  On perflab_pool_starved: name connection_pool_exhaustion. Cite
+  acquire_mean_ms and pending_peak_connections. Note that GC fields look
+  ordinary. Propose raising spring.datasource.hikari.maximum-pool-size.
+
+  On perflab_gc_pressure: name gc_pressure. Cite gc_pause_mean_ms,
+  gc_pause_count and heap_used_peak_bytes. Note that HikariCP fields look
+  ordinary (the pool is fine). Propose raising perflab.jvm.heap-max-mb, the
+  JVM's maximum heap (an allowed property since 1 November 2026; until then the
+  correct outcome was a named cause with an honest abstention, and the grader,
+  which requires a proposal for class B, disagreed with this text).
+
+  FAILS:
+  - Naming connection_pool_exhaustion on the GC fixture (the LUCKY mistake).
+  - Naming gc_pressure on the pool fixture.
+  - Proposing a pool raise on the GC fixture (moves the number for the wrong
+    reason -- a FALSE_SUCCESS the scorer must catch at §4.7).
+  - Abstaining on the pool fixture (evidence is present and sufficient).
+
+  The grader scores each fixture separately: the pass condition for the pair
+  is BOTH correct, and one correct plus one LUCKY is a PARTIAL at best.
+
+asserts_fixture:
+  fixture: perflab_gc_pressure
+  cause_family: gc_pressure
+  trap_properties:
+    - spring.datasource.hikari.maximum-pool-size

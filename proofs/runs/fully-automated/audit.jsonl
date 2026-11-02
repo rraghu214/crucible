@@ -1,0 +1,2 @@
+{"kind": "approval", "run_id": "run-1793611818995-fully_auto_burst_100u", "experiment": 1, "at_epoch_s": 1793612143.6466749, "approved": true, "reason": "preflight: operator chose this value when starting the run"}
+{"kind": "apply", "run_id": "run-1793611818995-fully_auto_burst_100u", "experiment": 1, "at_epoch_s": 1793612143.6599827, "prop": "spring.datasource.hikari.maximum-pool-size", "old_value": "2", "new_value": 20}

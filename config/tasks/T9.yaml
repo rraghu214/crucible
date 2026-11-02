@@ -1,0 +1,41 @@
+# ---------------------------------------------------------------------------
+# T9 -- Class A, diagnose and repair: cache miss
+#
+# /api/catalog serves rarely-changing data with the cache disabled. Every
+# request hits the DB for data that was identical the request before.
+# The fix: perflab.cache.enabled=true.
+#
+# The diagnosis requires distinguishing cache_miss from pool_exhaustion:
+# both show pool pressure (in cache_miss, the pool is busy because each
+# request holds a connection longer than needed), but the primary bottleneck
+# is the cache, and the pool issue resolves once the cache is on.
+# ---------------------------------------------------------------------------
+
+id: T9
+task_class: A
+name: diagnose and enable the cache to fix a cache miss bottleneck
+
+fixtures:
+  - perflab_cache_miss_severe
+
+expected_behaviour: >
+  Name cache_miss as the cause. The key evidence: /api/catalog in the
+  endpoint breakdown is slow while other endpoints are not; pool pressure
+  is present but secondary (connections are held longer because reads go to
+  DB); GC and thread fields are ordinary.
+
+  Propose setting perflab.cache.enabled=true. This is the real fix: the data
+  served is stable between requests, and caching it eliminates the repeated
+  DB reads.
+
+  Do NOT stop at raising the pool size: the pool IS under some pressure, but
+  that is a secondary effect of the slow reads, not the root cause. Raising
+  the pool would help a little and leave the real cause running.
+
+  A strong answer explains why cache_miss and pool_exhaustion look similar:
+  both show pool fields under load because both hold connections; the
+  difference is whether the pool is the primary resource or just the vehicle.
+
+asserts_fixture:
+  cause_family: cache_miss
+  trap_properties: []

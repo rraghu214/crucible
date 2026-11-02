@@ -15,7 +15,7 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from s17code.economics import BudgetedGateway, EconomicsConfig, RunBudget, call_site
+from crucible.economics import BudgetedGateway, EconomicsConfig, RunBudget, call_site
 
 
 @pytest.fixture

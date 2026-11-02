@@ -1,0 +1,13 @@
+{
+  "id": "20261102-091141-0ebefd",
+  "label": "pause run-1793610533986-burst_100u",
+  "args": [
+    "pause",
+    "run-1793610533986-burst_100u",
+    "--reason=operator pause from UI",
+    "--state-dir=/home/ubuntu/.crucible"
+  ],
+  "started_at_epoch_s": 1793610701.6411855,
+  "pid": 505950,
+  "cwd": "/home/ubuntu/crucible"
+}

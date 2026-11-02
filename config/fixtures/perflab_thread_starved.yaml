@@ -1,0 +1,67 @@
+# ---------------------------------------------------------------------------
+# perflab_thread_starved -- the third lookalike, and the sharpest one.
+#
+# A starved Tomcat thread pool and a starved connection pool are harder to tell
+# apart than either is from GC, because both are queueing for a scarce resource
+# and both show a flat p50 with a long tail. The distinguishing evidence is
+# specific and small: with four request threads, requests queue BEFORE they ever
+# reach the datasource, so pending_peak_connections stays near zero and
+# acquire_mean_ms stays tiny while p99 is dreadful.
+#
+# That combination -- terrible latency, healthy-looking pool -- is exactly the
+# shape that makes an agent reason "the pool is fine, so it must be something
+# else", and it is where the null-versus-zero rule earns its keep: a
+# pending_peak of null (never sampled) and a pending_peak of 0.0 (sampled, and
+# genuinely empty) point at opposite conclusions here.
+# ---------------------------------------------------------------------------
+
+id: perflab_thread_starved
+target_profile: spring-boot
+ground_truth_cause_family: thread_pool_saturation
+severity: severe
+
+bottleneck_config:
+  server.tomcat.threads.max: 4
+
+setup: >
+  Set server.tomcat.threads.max to 4 (the profile's own minimum bound) and leave
+  the connection pool at its healthy 20. Drive /api/db at 50 users. Fifty users
+  against four request threads queues at the connector, so the datasource never
+  sees pressure.
+
+# The locust tag that selects this fixture's endpoint. One family at a time:
+# an untagged run measures a blend of all nine and dilutes the signal to
+# nothing (observed on Box A, 26 September 2026).
+scenario_tag: db
+
+# Actuator only. The Tomcat thread gauges (threads_busy_peak_threads,
+# threads_config_max_threads) were added to the collector in version 1.2.0
+# (B5, 3 October 2026). The note below recorded why capture was blocked before
+# that change; it is retained as context.
+providers:
+  - actuator
+
+# server.tomcat.threads.max is on the allowed list, so the agent CAN fix
+# this -- it is a class A task, not a refusal.
+trap_properties: []
+
+task_classes: [A, B]
+
+validated_at: "2026-10-03"
+notes: >
+  UNBLOCKED 3 October 2026. The collector (1.2.0) now samples
+  tomcat.threads.busy and tomcat.threads.config.max as mid-run gauges, so
+  threads_busy_peak_threads and threads_config_max_threads travel in every
+  snapshot. The fixture is ready to capture against a 1.2.0 collector.
+
+  The distinguishing evidence is specific and small: with four request threads,
+  requests queue BEFORE they ever reach the datasource, so
+  pending_peak_connections stays near zero and acquire_mean_ms stays tiny while
+  threads_busy_peak_threads is pinned at 4 (100% utilisation) and p99 is
+  dreadful. That combination -- terrible latency, healthy-looking pool, saturated
+  thread counter -- is what separates thread saturation from pool exhaustion.
+
+  PREVIOUSLY BLOCKED: The gap was documented in docs/ref/DEBT.md. The thread
+  metrics existed in the profile's metric_map but not in snapshot_metrics or
+  gauges, so snapshots carried no thread fields and capturing would have baked
+  the absence in for all replay built on it.

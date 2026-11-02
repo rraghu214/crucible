@@ -1,0 +1,29 @@
+$ crucible resume run-1793610533986-burst_100u --state-dir=/home/ubuntu/.crucible
+
+[workspace] WARNING: src/main/resources/application.properties has diverged from origin/main — previous experiment changes may still be applied.
+  To reset: git -C /home/ubuntu/perf-lab checkout origin/main -- src/main/resources/application.properties && git -C /home/ubuntu/perf-lab commit -m 'sync: reset to main' && git -C /home/ubuntu/perf-lab push perftest perftest_sandbox
+
+resuming run run-1793610533986-burst_100u: perflab-db-latency
+  abort:  crucible abort run-1793610533986-burst_100u
+  pause:  crucible pause run-1793610533986-burst_100u
+[campaign] resumed
+[campaign] amended: experiment=1, changes=["p99_ms","profile"]
+[campaign] experiment_started: experiment=1, p99_before=2500.0
+[campaign] proposed: experiment=1, summary=connection_pool_exhaustion: spring.datasource.hikari.maximum-pool-size '2' -> 50, params={"spring.datasource.hikari.maximum-pool-size":50}, reasoning=The application exhibits classic connection pool exhaustion. `utilisation_peak_pct` is at 100.0%, active peak connections are pinned at `pool_max_connections` (2.0), and `pending_peak_connections` reaches 94.0. The `acquire_mean_ms` is 2216.99 ms, which closely mirrors the high request latency (`p99_ms` of 2500.0 ms), indicating that the requests are waiting heavily to acquire a database connection from a severely restricted pool size of 2. Historical experiment evidence for this target confirms that increasing `spring.datasource.hikari.maximum-pool-size` drastically reduces p99 latency., cause_family=connection_pool_exhaustion, confidence=0.95, predicted_p99_ms=70.0, evidence_cited=["hikaricp.utilisation_peak_pct","hikaricp.active_peak_connections","hikaricp.pool_max_connections","hikaricp.pending_peak_connections","hikaricp.acquire_mean_ms","load_summary.p99_ms","runtime_config.spring.datasource.hikari.maximum-pool-size"], created_at_epoch_s=1793610999.2454977
+
+[approval] experiment 1 proposal ready — run: crucible approve run-1793610533986-burst_100u --experiment 1 --as <your name>
+           written to: /home/ubuntu/.crucible/approvals/run-1793610533986-burst_100u/001.request.json
+[approval] waiting for operator decision …
+[approval] experiment 1: approved by ui:operator (approved with matching parameters)
+[campaign] approval: experiment=1, approved=True, reason=approved with matching parameters
+[campaign] applying: experiment=1, cause=connection_pool_exhaustion, commit=3a2029bb84d934f0f6c6d8f1189b53b3a9b0a9e3, changes=[{"prop":"spring.datasource.hikari.maximum-pool-size","value":50,"previous":"2","unit":""}]
+[campaign] deployed: experiment=1, commit=3a2029bb84d934f0f6c6d8f1189b53b3a9b0a9e3, target_running=3a2029bb84d934f0f6c6d8f1189b53b3a9b0a9e3, verified=True
+[campaign] in_force: experiment=1, property_read_back=True
+[campaign] measuring: experiment=1, commit=3a2029bb84d934f0f6c6d8f1189b53b3a9b0a9e3
+[campaign] verdict: experiment=1, verdict=IMPROVED, kept=True, p99_after=68.0
+[campaign] done: experiments=1, stopped_reason=SLA met after experiment 1: p99 68.0 ms
+
+resume finished: SLA met after experiment 1: p99 68.0 ms
+continuing series run-1793610533986
+
+series run-1793610533986: complete

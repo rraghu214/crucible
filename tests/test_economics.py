@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import pytest
 
-from s17code.core.live_graph import GraphPatch, TaskSpec
-from s17code.economics import (
+from crucible.core.live_graph import GraphPatch, TaskSpec
+from crucible.economics import (
     TIER_KEY,
     BudgetedGateway,
     BudgetPolicy,

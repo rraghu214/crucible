@@ -24,7 +24,7 @@ What is checked:
    the spans the backend actually stored. Nothing else in this repo can make the
    claim "a real trace lands in Jaeger" true; a round trip can.
 
-   The query URL is ``S17_TRACE_QUERY_URL`` if set, and otherwise derived from the
+   The query URL is ``CRUCIBLE_TRACE_QUERY_URL`` if set, and otherwise derived from the
    OTLP endpoint's host on Jaeger's default UI port — so pointing the exporter at a
    local Jaeger is enough, with no second flag to remember. When nothing is
    reachable the round trip is reported as *not attempted* and the proof still
@@ -36,7 +36,7 @@ What is checked:
     python proofs/p4_trace_export.py --task "<anything>" \
         --otel-endpoint http://127.0.0.1:4318/v1/traces
     #   ... or name a query API that is somewhere else:
-    S17_TRACE_QUERY_URL=http://jaeger.internal:16686 python proofs/p4_trace_export.py --task "<anything>"
+    CRUCIBLE_TRACE_QUERY_URL=http://jaeger.internal:16686 python proofs/p4_trace_export.py --task "<anything>"
 """
 
 from __future__ import annotations
@@ -52,8 +52,8 @@ from pathlib import Path
 
 from harness import Args, Proof, main, run_task, sync, transport_for
 
-from s17code.telemetry import export_run
-from s17code.telemetry.spans import (
+from crucible.telemetry import export_run
+from crucible.telemetry.spans import (
     COST,
     GEN_AI_INPUT_MESSAGES,
     GEN_AI_INPUT_TOKENS,
@@ -80,7 +80,7 @@ DEFAULT_QUERY_PORT = 16686
 
 def query_base(args: Args) -> str | None:
     """Where to ask "did it arrive?". Explicit beats derived; derived beats nothing."""
-    explicit = (os.getenv("S17_TRACE_QUERY_URL") or "").strip()
+    explicit = (os.getenv("CRUCIBLE_TRACE_QUERY_URL") or "").strip()
     if explicit:
         return explicit.rstrip("/")
     if not args.otel_endpoint:

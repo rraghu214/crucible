@@ -1,0 +1,163 @@
+{
+  "spec": {
+    "id": "perflab_thread_starved",
+    "cause_family": "thread_pool_saturation",
+    "profile": "spring-boot",
+    "setup": "Set server.tomcat.threads.max to 4 (the profile's own minimum bound) and leave the connection pool at its healthy 20. Drive /api/db at 50 users. Fifty users against four request threads queues at the connector, so the datasource never sees pressure.\n",
+    "task_classes": [
+      "A",
+      "B"
+    ],
+    "trap_properties": [],
+    "bottleneck_config": {
+      "server.tomcat.threads.max": 4
+    },
+    "severity": "severe",
+    "validated_at": "2026-10-03",
+    "scenario_tag": "db",
+    "providers": [
+      "actuator"
+    ],
+    "expect_possible_failure": false,
+    "notes": "UNBLOCKED 3 October 2026. The collector (1.2.0) now samples tomcat.threads.busy and tomcat.threads.config.max as mid-run gauges, so threads_busy_peak_threads and threads_config_max_threads travel in every snapshot. The fixture is ready to capture against a 1.2.0 collector.\nThe distinguishing evidence is specific and small: with four request threads, requests queue BEFORE they ever reach the datasource, so pending_peak_connections stays near zero and acquire_mean_ms stays tiny while threads_busy_peak_threads is pinned at 4 (100% utilisation) and p99 is dreadful. That combination -- terrible latency, healthy-looking pool, saturated thread counter -- is what separates thread saturation from pool exhaustion.\nPREVIOUSLY BLOCKED: The gap was documented in docs/ref/DEBT.md. The thread metrics existed in the profile's metric_map but not in snapshot_metrics or gauges, so snapshots carried no thread fields and capturing would have baked the absence in for all replay built on it.\n"
+  },
+  "provider": "actuator",
+  "captured_at_epoch_s": 1793535229.5578828,
+  "warmup_s": 120.0,
+  "measure_s": 300.0,
+  "snapshot": {
+    "collector_version": "1.2.0",
+    "captured_at_epoch_s": 1793535229.5578828,
+    "run_id": "fixture-perflab_thread_starved",
+    "profile": "spring-boot",
+    "target": "http://10.0.0.79:8080",
+    "window": {
+      "count": 23568.0,
+      "total_ms": 1192758.166472,
+      "mean_ms": 50.60922294942295,
+      "max_recent_ms": 60.198980999999996,
+      "max_recent_ms_note": "rolling ~2-minute maximum read at end of window, NOT the maximum over the measured window. Micrometer's MAX decays, so a spike early in the window has already aged out. Under-reports transient causes such as GC pauses; approximates the true window max only for sustained ones.",
+      "warmup_s": 120.0,
+      "measure_s": 300.0
+    },
+    "load_summary": {
+      "p50_ms": 450.0,
+      "p95_ms": 490.0,
+      "p99_ms": 510.0,
+      "mean_ms": 449.1302658865176,
+      "max_ms": 555.6198721751571,
+      "rps": 76.39912984654212,
+      "request_count": 22868,
+      "failure_count": 0,
+      "error_rate_pct": 0.0,
+      "warmup_s": 120.0,
+      "measure_s": 300.0,
+      "ramp_s": 5.0,
+      "per_endpoint": {
+        "/api/db": {
+          "p50_ms": 450.0,
+          "p99_ms": 510.0,
+          "rps": 76.39912984654212,
+          "request_count": 22868,
+          "failure_count": 0,
+          "error_rate_pct": 0.0
+        }
+      }
+    },
+    "hikaricp": {
+      "acquire_count": 31874.0,
+      "acquire_mean_ms": 0.0028422783146137918,
+      "acquire_max_recent_ms": 0.29668300000000003,
+      "acquire_total_ms": 90.594779,
+      "creation_count": 4.0,
+      "creation_mean_ms": 24.75,
+      "creation_max_recent_ms": 0.0,
+      "creation_total_ms": 99.0,
+      "pending_peak_connections": 0.0,
+      "active_peak_connections": 4.0,
+      "idle_trough_connections": 11.0,
+      "pool_max_connections": 20.0,
+      "utilisation_peak_pct": 20.0
+    },
+    "jvm": {
+      "gc_pause_count": 59.0,
+      "gc_pause_mean_ms": 8.915254237288135,
+      "gc_pause_max_recent_ms": 5.0,
+      "gc_pause_total_ms": 526.0,
+      "heap_used_peak_bytes": 72989168.0,
+      "threads_live_peak_threads": 24.0
+    },
+    "tomcat": {
+      "threads_busy_peak_threads": 4.0,
+      "threads_config_max_threads": 4.0
+    },
+    "http": {
+      "request_count": 32450.0,
+      "request_mean_ms": 51.46274556847458,
+      "request_max_recent_ms": 60.198980999999996,
+      "request_total_ms": 1669966.093697
+    },
+    "endpoint_breakdown": {
+      "/api/version": {
+        "request_count": 2.0,
+        "mean_ms": 13.586545000000001,
+        "max_ms": 0.0
+      },
+      "/actuator/metrics/{requiredMetricName}": {
+        "request_count": 591.0,
+        "mean_ms": 1.825790292724196,
+        "max_ms": 6.675251
+      },
+      "/actuator/health": {
+        "request_count": 2.0,
+        "mean_ms": 1654.7782545,
+        "max_ms": 0.0
+      },
+      "/actuator/env/{toMatch}": {
+        "request_count": 7.0,
+        "mean_ms": 18.129019714285715,
+        "max_ms": 0.0
+      },
+      "/actuator/prometheus": {
+        "request_count": 87.0,
+        "mean_ms": 25.144093724137928,
+        "max_ms": 24.308546
+      },
+      "/api/db": {
+        "request_count": 31764.0,
+        "mean_ms": 52.3623591927654,
+        "max_ms": 60.198980999999996
+      }
+    },
+    "runtime_config": {
+      "spring.application.name": "******",
+      "server.port": "******",
+      "perflab.version": "******",
+      "perflab.cache.enabled": "true",
+      "perflab.downstream.timeout-ms": "5000",
+      "spring.datasource.hikari.maximum-pool-size": "20",
+      "spring.datasource.hikari.minimum-idle": "10",
+      "spring.datasource.hikari.connection-timeout": "30000",
+      "spring.datasource.hikari.pool-name": "******",
+      "spring.jpa.open-in-view": "******",
+      "spring.jpa.properties.hibernate.default_batch_fetch_size": "50",
+      "spring.jpa.properties.hibernate.jdbc.batch_size": "50",
+      "server.tomcat.threads.max": "4",
+      "server.tomcat.threads.min-spare": "10",
+      "spring.task.execution.pool.core-size": "8",
+      "spring.task.execution.pool.max-size": "16",
+      "spring.task.execution.pool.queue-capacity": "100",
+      "_redacted_count": 120
+    },
+    "baseline_reference": {},
+    "available_evidence": {
+      "metrics": true,
+      "traces": false,
+      "trace_reason": "no trace provider configured for this campaign",
+      "trace_sampling_rate_pct": null,
+      "endpoint_breakdown": true,
+      "gauge_sampling": true,
+      "notes": []
+    }
+  }
+}

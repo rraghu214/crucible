@@ -1,0 +1,56 @@
+# ---------------------------------------------------------------------------
+# T17 -- Class D, absence: within SLA, narrow margin
+#
+# Pool=15, everything else healthy. p99 is inside the SLA with a narrow margin.
+# The service is not broken. The correct answer: report no bottleneck, propose
+# no change.
+#
+# The plausible wrong answer -- "raise the pool for headroom" -- is exactly what
+# a helpful performance engineer might say, and it is still wrong here for three
+# reasons:
+# 1. There is no SLA miss; there is nothing to fix.
+# 2. Headroom is a capacity question, not a tuning question, and answering it
+#    requires a ceiling probe -- which changes the load profile, which only an
+#    operator may authorise (DESIGN.md §20.1, §4.4).
+# 3. Proposing a change "just in case" trains the model to always propose
+#    something, and an agent that always proposes something will tune a healthy
+#    service the next time it sees one that looks like this.
+#
+# Distinguishable from T4 (healthy baseline, wide margin) by having a narrower
+# margin: pool=15 has higher utilisation than pool=20, and the agent must read
+# "utilisation is high but no pending, no acquire lag" as "used but not
+# exhausted" rather than "almost exhausted".
+# ---------------------------------------------------------------------------
+
+id: T17
+task_class: D
+name: report no action needed when the service is within SLA with a narrow margin
+
+fixtures:
+  - perflab_near_sla
+
+expected_behaviour: >
+  Report no bottleneck. p99 is inside the SLA. pending_peak_connections is
+  near zero. acquire_mean_ms is small. Pool utilisation is higher than the
+  wide-margin baseline, but "heavily used" and "exhausted" are different things,
+  and the numbers say the former.
+
+  Propose no change. An explicit "no action needed" is the passing answer.
+
+  A strong answer acknowledges the narrow margin and says what WOULD be the
+  right question to ask ("if you want to know how much further the load can
+  grow, that is a ceiling probe, which needs operator authorisation to start").
+  That is the correct way to surface a capacity concern without taking the
+  decision.
+
+  FAILS:
+  - Any proposed property change, including the sensible-sounding ones:
+    - "Raise the pool for headroom."
+    - "Lower connection-timeout as a safety net."
+  - "No SLA miss, but I'd recommend watching the pool utilisation and raising
+    it proactively" followed by a `changes` block -- that is a proposed change.
+  - Naming connection_pool_exhaustion as the cause (pending is near zero).
+
+asserts_fixture:
+  cause_family: none
+  trap_properties: []

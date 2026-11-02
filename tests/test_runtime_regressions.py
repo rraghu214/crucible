@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import json
 
-import s17code.routes as agent_route
-import s17code.runtime as runtime_module
-import s17code.workers.general as general_workers
-from s17code.core.memory.embeddings import DeterministicEmbedder
-from s17code.tools import file_uri_to_path
+import crucible.routes as agent_route
+import crucible.workers.general as general_workers
+from crucible.core.memory.embeddings import DeterministicEmbedder
+from crucible.tools import file_uri_to_path
 
 
 def _patch(add=None, reason="next outcome earned this frontier"):
@@ -69,8 +68,8 @@ def test_search_outcome_expands_into_fetches_only_after_urls_exist(app_client, m
     async def fetch(url):
         return {"url": url, "status": 200, "content_type": "text/plain", "text": f"content from {url}"}
 
-    monkeypatch.setattr(runtime_module, "web_search", search)
-    monkeypatch.setattr(runtime_module, "fetch_url", fetch)
+    monkeypatch.setattr(general_workers, "web_search", search)
+    monkeypatch.setattr(general_workers, "fetch_url", fetch)
     result = app_client.post("/v1/agent/runs", json={"tenant_id": "t", "project_id": "p",
         "prompt": "Look up current Python asyncio best practices and summarize three reliable sources."}).json()
     patches = [event["payload"]["add"] for event in result["events"] if event["kind"] == "graph_patched"]
@@ -85,7 +84,7 @@ def test_directory_discovery_earns_parallel_indexing(app_client, monkeypatch, tm
     papers.mkdir()
     for name in ("a.md", "b.md", "c.md"):
         (papers / name).write_text(f"# {name}\nA distinct paper about {name}.")
-    monkeypatch.setenv("S17_SANDBOX_ROOT", str(tmp_path))
+    monkeypatch.setenv("CRUCIBLE_SANDBOX_ROOT", str(tmp_path))
 
     def decide(context):
         states = _states(context)
@@ -128,7 +127,7 @@ def test_unseen_comparison_launches_independent_agents_then_synthesizes(app_clie
     _install_agent(monkeypatch, decide)
     async def search(query, max_results=3):
         return {"query": query, "hits": [{"title": query, "url": "https://language.test", "snippet": "evidence"}]}
-    monkeypatch.setattr(runtime_module, "web_search", search)
+    monkeypatch.setattr(general_workers, "web_search", search)
     body = app_client.post("/v1/agent/runs", json={"tenant_id": "t", "project_id": "compare",
         "prompt": "Research Rust and Go, then compare their concurrency models."}).json()
     starts = [event["node_id"] for event in body["events"] if event["kind"] == "task_started"]
@@ -237,7 +236,7 @@ def test_verify_artifact_reads_back_its_own_file_uri(app_client, monkeypatch):
 
 def test_failed_file_read_is_visible_to_the_final_answer(app_client, monkeypatch, tmp_path):
     app_client.app.state.runtime.memory.embedder = DeterministicEmbedder(128)
-    monkeypatch.setenv("S17_SANDBOX_ROOT", str(tmp_path))
+    monkeypatch.setenv("CRUCIBLE_SANDBOX_ROOT", str(tmp_path))
 
     def decide(context):
         states = _states(context)
@@ -253,3 +252,65 @@ def test_failed_file_read_is_visible_to_the_final_answer(app_client, monkeypatch
         "prompt": "Open missing.txt and report its contents."}).json()
     assert body["graph"]["nodes"]["attempt_read"]["state"] == "failed"
     assert "does not exist" in body["answer"]
+
+
+# --- capability workers with almost no coverage -----------------------------
+# retriever and validate_work are both planner-selectable but were silently
+# broken for months by the worker extraction (69c48c4): run_retriever lost its
+# `recall` binding and run_validate_work its `import os`. Nothing exercised
+# them. These are the smoke tests that would have caught it.
+
+
+def test_retriever_capability_runs_and_returns_scoped_memory(app_client, monkeypatch):
+    app_client.app.state.runtime.memory.embedder = DeterministicEmbedder(128)
+
+    def decide(context):
+        states = _states(context)
+        if not states:
+            return _patch([_task("retrieve", "retriever", {"query": context["goal"]})])
+        if states.get("retrieve") == "succeeded" and "answer" not in states:
+            return _patch([_task("answer", "answer_with_evidence",
+                                 {"query": context["goal"]}, ["retrieve"])])
+        return {"add": [], "cancel": [], "finish": True, "reason": "retrieved and answered"}
+
+    _install_agent(monkeypatch, decide, answer="You are comparing Rust and Go. [source: chat://n/1]")
+    scope = {"tenant_id": "acme", "project_id": "langs", "user_id": "rohan"}
+    assert app_client.post("/v1/agent/facts", json={
+        **scope, "text": "Rohan is comparing Rust and Go for a systems project.",
+        "source_uri": "chat://n/1"}).status_code == 200
+
+    body = app_client.post("/v1/agent/runs", json={**scope, "prompt": "What am I comparing?"}).json()
+    node = body["graph"]["nodes"]["retrieve"]
+    assert node["state"] == "succeeded", node.get("result")
+    assert node["result"]["hits"], "retriever returned no scoped-memory hits"
+    assert body["graph"]["nodes"]["answer"]["state"] == "succeeded"
+
+
+def test_validate_work_capability_spawns_a_validator_child(app_client, monkeypatch, tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "calc.py").write_text("def add(a, b):\n    return a + b\n")
+    monkeypatch.setenv("CRUCIBLE_WORKSPACE", str(workspace))
+    app_client.app.state.runtime.memory.embedder = DeterministicEmbedder(128)
+
+    def decide(context):
+        states = _states(context)
+        # The validator child runs with its own goal; drive it straight to an answer.
+        if "Validate that this requirement" in context["goal"]:
+            if not states:
+                return _patch([_task("checked", "answer_with_evidence", {"query": context["goal"]})])
+            return {"add": [], "cancel": [], "finish": True, "reason": "validator reported"}
+        if not states:
+            return _patch([_task("validate", "validate_work",
+                                 {"requirement": "add(a, b) returns a + b", "paths": ["calc.py"]})])
+        return {"add": [], "cancel": [], "finish": True, "reason": "validation done"}
+
+    _install_agent(monkeypatch, decide, answer="Ran it. add() returns a + b; nothing is broken.")
+    body = app_client.post("/v1/agent/runs", json={
+        "tenant_id": "acme", "project_id": "coding", "user_id": "rohan",
+        "prompt": "Confirm add() is correct.",
+        "allowed_side_effects": ["validate_work"]}).json()
+    node = body["graph"]["nodes"]["validate"]
+    assert node["state"] == "succeeded", node.get("result")
+    assert node["result"]["validator_status"] == "completed"
+    assert "summary" in node["result"]

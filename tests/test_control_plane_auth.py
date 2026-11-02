@@ -27,10 +27,10 @@ WRITE_PATHS = [
 def test_a_write_path_refuses_to_serve_when_no_token_is_configured(
     app_client, monkeypatch, method, path, body
 ) -> None:
-    monkeypatch.delenv("S17_CONTROL_TOKEN", raising=False)
+    monkeypatch.delenv("CRUCIBLE_CONTROL_TOKEN", raising=False)
     response = getattr(app_client, method)(path, json=body)
     assert response.status_code == 503
-    assert "S17_CONTROL_TOKEN" in response.json()["detail"]
+    assert "CRUCIBLE_CONTROL_TOKEN" in response.json()["detail"]
 
 
 @pytest.mark.parametrize(("method", "path", "body"), WRITE_PATHS)
@@ -63,7 +63,7 @@ def test_the_completion_callback_has_its_own_token_and_also_fails_closed(
     assert accepted.status_code == 200
     assert accepted.json()["duplicate_or_unknown"] is True
 
-    monkeypatch.delenv("S17_COMPLETION_TOKEN", raising=False)
+    monkeypatch.delenv("CRUCIBLE_COMPLETION_TOKEN", raising=False)
     unset = app_client.post("/v1/agent/completions", json=body,
                             headers={"Authorization": f"Bearer {conftest.COMPLETION_TOKEN}"})
     assert unset.status_code == 503

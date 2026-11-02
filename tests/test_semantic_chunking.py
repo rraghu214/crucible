@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from s17code.core.memory.chunking import semantic_chunks
-from s17code.core.memory.embeddings import DeterministicEmbedder
+from crucible.core.memory.chunking import semantic_chunks
+from crucible.core.memory.embeddings import DeterministicEmbedder
 
 TEXT = """Artificial intelligence systems learn patterns from data. Neural networks train on examples.
 

@@ -3,7 +3,7 @@
 # One JSON object per line: {"id", "task", "expectation", "difficulty"}. Only
 # "task" is required. "expectation" is a short natural-language success criterion
 # the generic rubric scores against; it is NOT an answer key the code matches on,
-# and no s17code module reads it for anything but the judge prompt. "difficulty"
+# and no crucible module reads it for anything but the judge prompt. "difficulty"
 # is a free-form label used only to group p1's report — nothing branches on it.
 #
 # The set deliberately spans difficulty so cost-per-resolved-task can differ from

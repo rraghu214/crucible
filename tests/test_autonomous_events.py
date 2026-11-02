@@ -3,8 +3,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from s17code.events import AutonomousEventEngine, EventEnvelope, EventStore, Subscription
-from s17code.events.outbox import ActionOutbox
+from crucible.events import AutonomousEventEngine, EventEnvelope, EventStore, Subscription
+from crucible.events.outbox import ActionOutbox
 
 
 class RecordingRuntime:

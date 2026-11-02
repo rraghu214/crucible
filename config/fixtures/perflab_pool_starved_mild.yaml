@@ -1,0 +1,59 @@
+# ---------------------------------------------------------------------------
+# perflab_pool_starved_mild -- the same cause, quietly.
+#
+# EVALUATION.md's grid is families x SEVERITIES for a reason. pool=2 under 50
+# users is unmissable: a model that pattern-matches "huge acquire time, huge
+# pending" gets it right without doing any arithmetic. pool=5 is where that stops
+# working -- the waits are real but unremarkable, and telling a constrained pool
+# from an ordinary one needs the numbers actually divided.
+#
+# The pair is also what makes a LUCKY diagnosis visible (DESIGN.md §4.7). An
+# agent that says "pool" to everything scores identically on this fixture and on
+# the severe one; an agent that is reading the evidence does not.
+# ---------------------------------------------------------------------------
+
+id: perflab_pool_starved_mild
+target_profile: spring-boot
+ground_truth_cause_family: connection_pool_exhaustion
+severity: mild
+
+bottleneck_config:
+  spring.datasource.hikari.maximum-pool-size: 5
+
+setup: >
+  As perflab_pool_starved, with the pool at 5 rather than 2. Same endpoint, same
+  50 users, same think time. Expect pending in the single figures and acquire
+  time in the tens of milliseconds rather than the thousands -- present, but not
+  the kind of number that announces itself.
+
+# Actuator only. Multi-provider capture is deliberately narrow (EVALUATION.md,
+# "Open: fixtures vs snapshots" -- not every fixture needs every provider), and
+# the severe sibling is the better one to spend it on: a provider disagreement
+# shows up unambiguously against a strong signal and ambiguously against a weak
+# one.
+# The locust tag that selects this fixture's endpoint. One family at a time:
+# an untagged run measures a blend of all nine and dilutes the signal to
+# nothing (observed on Box A, 26 September 2026).
+scenario_tag: db
+
+providers:
+  - actuator
+
+trap_properties:
+  - spring.datasource.hikari.connection-timeout
+
+task_classes: [A, C]
+
+# Confirmed on Box A, 26 September 2026, and the pool=5 guess landed where it
+# needed to. p99 560 ms, acquire_mean 258.3 ms, pending peak 32 -- squarely
+# between healthy (58 / 0.1 / 0) and severe (1200 / 1022.6 / 43). Present, and
+# not the kind of number that announces itself, which is the whole point of
+# having a second severity.
+validated_at: "2026-09-26"
+
+notes: >
+  The severity boundary is a judgement, not a measurement: pool=5 was chosen as
+  "constrained but arguable" without anything having been measured at that
+  setting yet. If the K1 re-validation shows pool=5 produces a signal as loud as
+  pool=2 -- or none at all -- this number is the one to change, and the fixture
+  is worth nothing until it sits in between.

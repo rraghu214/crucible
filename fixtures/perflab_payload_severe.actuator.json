@@ -1,0 +1,177 @@
+{
+  "spec": {
+    "id": "perflab_payload_severe",
+    "cause_family": "payload_serialization",
+    "profile": "spring-boot",
+    "setup": "No configuration change needed: /api/payload is already written to return a large, uncompressed JSON body. Default configuration. Drive /api/payload at 50 users. Expect threads_busy_peak to be elevated (CPU-bound serialisation holds threads), DB fields quiet (no DB involvement on this path), GC possibly elevated from object allocation, p99 dominated by serialisation time.\n",
+    "task_classes": [
+      "D"
+    ],
+    "trap_properties": [],
+    "bottleneck_config": {
+      "endpoint": "/api/payload"
+    },
+    "severity": "severe",
+    "validated_at": "2026-10-03",
+    "scenario_tag": "payload",
+    "providers": [
+      "actuator"
+    ],
+    "expect_possible_failure": false,
+    "notes": "The payload family exercises the agent's ability to distinguish CPU-bound serialisation from everything else. The distinguishing evidence: threads busy (serialisation holds them), pool quiet (no DB), GC possibly elevated (string allocation), and /api/payload in the endpoint breakdown as the slow one. Without a serialisation-time metric in the snapshot, the agent must reason from absence (no pool pressure, no GC explosion, slow CPU-heavy endpoint) rather than from a direct signal. That is legitimate diagnosis, and the correct abstention afterwards shows the agent knows the boundary.\n"
+  },
+  "provider": "actuator",
+  "captured_at_epoch_s": 1793541190.5492525,
+  "warmup_s": 120.0,
+  "measure_s": 300.0,
+  "snapshot": {
+    "collector_version": "1.2.0",
+    "captured_at_epoch_s": 1793541190.5492525,
+    "run_id": "fixture-perflab_payload_severe",
+    "profile": "spring-boot",
+    "target": "http://10.0.0.79:8080",
+    "window": {
+      "count": 24839.0,
+      "total_ms": 9033315.502756,
+      "mean_ms": 363.67468508216916,
+      "max_recent_ms": 1040.7603629999999,
+      "max_recent_ms_note": "rolling ~2-minute maximum read at end of window, NOT the maximum over the measured window. Micrometer's MAX decays, so a spike early in the window has already aged out. Under-reports transient causes such as GC pauses; approximates the true window max only for sustained ones.",
+      "warmup_s": 120.0,
+      "measure_s": 300.0
+    },
+    "load_summary": {
+      "p50_ms": 400.0,
+      "p95_ms": 720.0,
+      "p99_ms": 830.0,
+      "mean_ms": 436.6732513391313,
+      "max_ms": 1174.0565923973918,
+      "rps": 77.8212435814144,
+      "request_count": 23308,
+      "failure_count": 0,
+      "error_rate_pct": 0.0,
+      "warmup_s": 120.0,
+      "measure_s": 300.0,
+      "ramp_s": 5.0,
+      "per_endpoint": {
+        "/api/payload": {
+          "p50_ms": 400.0,
+          "p99_ms": 830.0,
+          "rps": 77.8212435814144,
+          "request_count": 23308,
+          "failure_count": 0,
+          "error_rate_pct": 0.0
+        }
+      }
+    },
+    "hikaricp": {
+      "acquire_count": 109.0,
+      "acquire_mean_ms": 0.06525222935779816,
+      "acquire_max_recent_ms": 0.0,
+      "acquire_total_ms": 7.112493,
+      "creation_count": 0.0,
+      "creation_mean_ms": null,
+      "creation_max_recent_ms": 0.0,
+      "creation_total_ms": 0.0,
+      "pending_peak_connections": 0.0,
+      "active_peak_connections": 0.0,
+      "idle_trough_connections": 10.0,
+      "pool_max_connections": 20.0,
+      "utilisation_peak_pct": 0.0
+    },
+    "jvm": {
+      "gc_pause_count": 1466.0,
+      "gc_pause_mean_ms": 53.354706684856744,
+      "gc_pause_max_recent_ms": 239.0,
+      "gc_pause_total_ms": 78217.99999999999,
+      "heap_used_peak_bytes": 221821848.0,
+      "threads_live_peak_threads": 72.0
+    },
+    "tomcat": {
+      "threads_busy_peak_threads": 48.0,
+      "threads_config_max_threads": 200.0
+    },
+    "http": {
+      "request_count": 166484.0,
+      "request_mean_ms": 169.99642472976987,
+      "request_max_recent_ms": 1040.7603629999999,
+      "request_total_ms": 28301684.774711005
+    },
+    "endpoint_breakdown": {
+      "/api/slow": {
+        "request_count": 51610.0,
+        "mean_ms": 200.52275515919393,
+        "max_ms": 0.0
+      },
+      "/api/version": {
+        "request_count": 2.0,
+        "mean_ms": 26.642381,
+        "max_ms": 0.0
+      },
+      "/actuator/metrics/{requiredMetricName}": {
+        "request_count": 5643.0,
+        "mean_ms": 7.767851073896862,
+        "max_ms": 510.86666999999994
+      },
+      "/api/payload": {
+        "request_count": 32323.0,
+        "mean_ms": 389.17697748315436,
+        "max_ms": 1040.7603629999999
+      },
+      "/api/ledger": {
+        "request_count": 76626.0,
+        "mean_ms": 68.78100051101454,
+        "max_ms": 0.0
+      },
+      "/actuator/health": {
+        "request_count": 2.0,
+        "mean_ms": 1401.9893385,
+        "max_ms": 0.0
+      },
+      "/actuator/env/{toMatch}": {
+        "request_count": 21.0,
+        "mean_ms": 11.96203138095238,
+        "max_ms": 0.0
+      },
+      "/actuator/prometheus": {
+        "request_count": 259.0,
+        "mean_ms": 215.98875713127413,
+        "max_ms": 846.913854
+      },
+      "/actuator/env": {
+        "request_count": 2.0,
+        "mean_ms": 21.656564499999998,
+        "max_ms": 0.0
+      }
+    },
+    "runtime_config": {
+      "spring.application.name": "******",
+      "server.port": "******",
+      "perflab.version": "******",
+      "perflab.cache.enabled": "true",
+      "perflab.downstream.timeout-ms": "5000",
+      "spring.datasource.hikari.maximum-pool-size": "20",
+      "spring.datasource.hikari.minimum-idle": "10",
+      "spring.datasource.hikari.connection-timeout": "30000",
+      "spring.datasource.hikari.pool-name": "******",
+      "spring.jpa.open-in-view": "******",
+      "spring.jpa.properties.hibernate.default_batch_fetch_size": "50",
+      "spring.jpa.properties.hibernate.jdbc.batch_size": "50",
+      "server.tomcat.threads.max": "200",
+      "server.tomcat.threads.min-spare": "10",
+      "spring.task.execution.pool.core-size": "8",
+      "spring.task.execution.pool.max-size": "16",
+      "spring.task.execution.pool.queue-capacity": "100",
+      "_redacted_count": 120
+    },
+    "baseline_reference": {},
+    "available_evidence": {
+      "metrics": true,
+      "traces": false,
+      "trace_reason": "no trace provider configured for this campaign",
+      "trace_sampling_rate_pct": null,
+      "endpoint_breakdown": true,
+      "gauge_sampling": true,
+      "notes": []
+    }
+  }
+}

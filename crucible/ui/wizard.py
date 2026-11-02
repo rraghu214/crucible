@@ -1,0 +1,325 @@
+"""The New Test Run wizard's write path: the operator's values into slo.yaml and profile.yaml.
+
+Operator decisions, 23 October 2026: Launch overwrites `config/slo.yaml`, and the
+deploy fields of the Target & Repo step are written to the profile. Both files
+stay editable by hand; the wizard reads them fresh every time it opens.
+
+Three rules hold the write path to the same standard as a hand edit:
+
+- **Only an operator writes.** The routes need the control token, and these are
+  protected paths the agent's guard refuses (DESIGN.md §4.4). Nothing a model
+  produced is written unless the operator submitted it in the form.
+- **Never mid-campaign.** A campaign holding a deploy-branch lock was started
+  against the files as they are; changing its goal under it would judge its
+  verdicts against a goal it never ran for.
+- **Re-validated before replacing.** The edited text is loaded by the same
+  `Sla.load` / `TargetProfile.load` a campaign uses, and every written value is
+  read back. A file that would not load, or would load differently, is never
+  put in place.
+
+Edits are targeted line replacements, not a YAML re-dump, so the files' comments
+-- most of which record why a value is what it is -- survive.
+"""
+from __future__ import annotations
+
+import difflib
+import json
+import os
+import re
+import tempfile
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+from ..perf.campaign import CampaignRefused, Sla
+from ..perf.deploy import BranchPolicyViolation
+from ..perf.loadprofile import locust_tasks, tag_for_endpoint
+from ..perf.profile import TargetProfile
+
+MARKER = "# wizard:"
+
+
+class WizardRefused(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class WizardForm:
+    endpoint: str
+    p99_ms: float
+    error_rate_pct: float
+    users: int
+    config_file: str
+    base_branch: str
+    restart_command: list[str]
+    health_url: str
+    operator: str = "operator"
+    provenance: str = ""
+    #: Users started per second, from the first scenario's Ramp (users / ramp
+    #: seconds). None leaves at_load.spawn_rate as it is.
+    spawn_rate: float | None = None
+    #: Declared scenarios for slo.yaml; None leaves the file's list as it is.
+    scenarios: list[dict[str, Any]] | None = None
+    #: The hooks block for slo.yaml; None leaves it as it is.
+    hooks: dict[str, Any] | None = None
+    #: plan.max_experiments for slo.yaml; None leaves it as it is.
+    max_experiments: int | None = None
+
+
+def _scalar(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return f"{value:g}"
+    return json.dumps(value)
+
+
+_LINE = re.compile(r"^(?P<ind> *)(?P<key>[A-Za-z0-9_.-]+):[ \t]*(?P<val>[^#\r\n]*?)"
+                   r"(?P<cmt>[ \t]+#[^\r\n]*)?(?P<nl>\r?\n)?$")
+
+
+def set_value(text: str, keys: list[str], value: Any) -> str:
+    """Replace the value at a nested key path, keeping the line's trailing comment.
+
+    At each level only the block's direct children are considered, so a key of
+    the same name deeper down (or in another block) is never the one replaced.
+    """
+    lines = text.splitlines(keepends=True)
+    start, parent = 0, -1
+    for depth, key in enumerate(keys):
+        child, hit = None, None
+        for i in range(start, len(lines)):
+            stripped = lines[i].strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            indent = len(lines[i]) - len(lines[i].lstrip(" "))
+            if indent <= parent:
+                break
+            child = indent if child is None else child
+            m = _LINE.match(lines[i])
+            if indent == child and m and m.group("key") == key:
+                hit = (i, m)
+                break
+        if hit is None:
+            raise WizardRefused(f"cannot find '{'.'.join(keys[:depth + 1])}' to update")
+        i, m = hit
+        start, parent = i + 1, len(m.group("ind"))
+    val = m.group("val").strip()
+    if not val or val in ("|", ">", "|-", ">-"):
+        raise WizardRefused(f"'{'.'.join(keys)}' is not a single-line value")
+    if _same(val, value):
+        # Rewriting an unchanged value only re-spells it (`/api/db` as
+        # `"/api/db"`, `1.0` as `1`), and the Review diff then hides the real
+        # changes among lines that change nothing (trial, 31 October 2026).
+        return text
+    lines[i] = f"{m.group('ind')}{keys[-1]}: {_scalar(value)}{m.group('cmt') or ''}{m.group('nl') or ''}"
+    return "".join(lines)
+
+
+def _same(written: str, value: Any) -> bool:
+    """The value already on the line, as YAML reads it, equals the new one."""
+    try:
+        old = yaml.safe_load(written)
+    except yaml.YAMLError:
+        return False
+    # bool is an int in Python: true must never count as equal to 1.
+    if isinstance(old, bool) != isinstance(value, bool):
+        return False
+    if isinstance(value, tuple):
+        value = list(value)
+    return old == value
+
+
+def _stamp(text: str, before: str, note: str) -> str:
+    """One `# wizard:` line above `before`, replacing any earlier one."""
+    lines = [ln for ln in text.splitlines(keepends=True) if not ln.startswith(MARKER)]
+    newline = "\r\n" if "\r\n" in text else "\n"
+    for i, line in enumerate(lines):
+        if line.startswith(before):
+            lines.insert(i, f"{MARKER} {note}{newline}")
+            return "".join(lines)
+    raise WizardRefused(f"cannot find '{before}' to stamp")
+
+
+def current(sla_path: Path, profile_path: Path, locustfile: Path) -> dict[str, Any]:
+    sla = Sla.load(sla_path)
+    profile = TargetProfile.load(profile_path)
+    return {
+        "endpoint": sla.endpoint, "p99_ms": sla.p99_ms, "error_rate_pct": sla.error_rate_pct,
+        "users": int((sla.at_load or {}).get("users", 50)),
+        "noise_p99_spread_pct": sla.noise_p99_spread_pct, "noise_measured_on": sla.noise_measured_on,
+        "environment": f"{sla.environment_name} ({sla.environment_kind})", "target": sla.target_base_url,
+        "profile": profile.name, "config_file": profile.config_file,
+        "base_branch": profile.deploy.base_branch, "branch": profile.deploy.branch,
+        "remote": profile.deploy.remote, "deploy_mode": profile.deploy.mode,
+        "restart_command": list(profile.restart.command), "health_url": profile.restart.health_url,
+        "hooks": sla.hooks,
+        "endpoints": [{"endpoint": t["endpoint"], "tag": t["tag"], "family": t["family"]}
+                      for t in locust_tasks(locustfile) if t["endpoint"]],
+        # The saved scenarios, in the wizard's own row format. Without them the page
+        # showed its built-in rows, so a reload put burst_100u back after burst_50u
+        # had been saved (trial, 2 November 2026, Group 53).
+        "scenarios": [_scenario_row(s) for s in sla.scenarios],
+        "experiments": sla.max_experiments or 5,
+        "requests": next((s["requests"] for s in sla.scenarios if s.get("requests")), []),
+        "data": next((s.get("data") or {} for s in sla.scenarios if s.get("requests")), {}),
+    }
+
+
+def _scenario_row(scenario: dict[str, Any]) -> dict[str, Any]:
+    """A declared scenario as the wizard edits it: ramp from the spawn rate, mix as text."""
+    users, rate = int(scenario["users"]), scenario.get("spawn_rate")
+    mix = ", ".join(f"{e}={s['weight']}" + (f"@{s['p99_ms']:g}" if s.get("p99_ms") else "")
+                    for e, s in (scenario.get("mix") or {}).items())
+    return {"name": scenario["name"], "users": users, "duration_s": int(scenario["measure_s"]),
+            "ramp_s": round(users / rate) if rate else 0, "mix": mix}
+
+
+def render(form: WizardForm, sla_path: Path, profile_path: Path, locustfile: Path) -> dict[str, str]:
+    """The two files as Launch would write them, validated. Writes nothing."""
+    try:
+        tag_for_endpoint(form.endpoint, locustfile)
+        for scenario in form.scenarios or []:
+            for endpoint in (scenario.get("mix") or {}):
+                tag_for_endpoint(endpoint, locustfile)
+    except ValueError as exc:
+        raise WizardRefused(str(exc)) from exc
+    if not form.restart_command or not all(isinstance(a, str) and a for a in form.restart_command):
+        raise WizardRefused("restart command must be a non-empty list of arguments")
+    when = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
+    note = f"written {when} by {form.operator} from the dashboard" + (f"; {form.provenance}" if form.provenance else "")
+
+    old_sla = sla_path.read_text(encoding="utf-8")
+    new_sla = old_sla
+    for keys, value in ((["objective", "endpoint"], form.endpoint), (["objective", "p99_ms"], form.p99_ms),
+                        (["objective", "error_rate_pct"], form.error_rate_pct),
+                        (["objective", "at_load", "users"], form.users)):
+        new_sla = set_value(new_sla, keys, value)
+    if form.spawn_rate is not None:
+        new_sla = set_value(new_sla, ["objective", "at_load", "spawn_rate"], round(form.spawn_rate, 3))
+    if form.scenarios is not None:
+        new_sla = set_value(new_sla, ["scenarios"], form.scenarios)
+    if form.hooks is not None:
+        new_sla = set_value(new_sla, ["hooks"], form.hooks)
+    if form.max_experiments is not None:
+        try:
+            new_sla = set_value(new_sla, ["plan", "max_experiments"], form.max_experiments)
+        except WizardRefused:
+            # A file written before the plan block existed: add it rather than refuse.
+            new_sla = new_sla.rstrip("\n") + f"\n\nplan:\n  max_experiments: {form.max_experiments}\n"
+    new_sla = _stamp(new_sla, "objective:", note)
+
+    old_profile = profile_path.read_text(encoding="utf-8")
+    new_profile = old_profile
+    for keys, value in ((["config_file"], form.config_file), (["deploy", "base_branch"], form.base_branch),
+                        (["restart", "health_url"], form.health_url)):
+        new_profile = set_value(new_profile, keys, value)
+    new_profile = set_value(new_profile, ["restart", "command"], form.restart_command)
+    new_profile = _stamp(new_profile, "name:", note)
+
+    _validate(form, new_sla, new_profile, sla_path, profile_path)
+    return {"sla": new_sla, "profile": new_profile,
+            "sla_diff": _diff(old_sla, new_sla, sla_path.name),
+            "profile_diff": _diff(old_profile, new_profile, profile_path.name)}
+
+
+def _diff(old: str, new: str, name: str) -> str:
+    return "".join(difflib.unified_diff(old.splitlines(keepends=True), new.splitlines(keepends=True),
+                                        f"a/{name}", f"b/{name}", n=1))
+
+
+def _validate(form: WizardForm, sla_text: str, profile_text: str, sla_path: Path, profile_path: Path) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        s, p = Path(tmp) / sla_path.name, Path(tmp) / profile_path.name
+        s.write_text(sla_text, encoding="utf-8")
+        p.write_text(profile_text, encoding="utf-8")
+        try:
+            sla, profile = Sla.load(s), TargetProfile.load(p)
+        except (CampaignRefused, BranchPolicyViolation, ValueError, OSError) as exc:
+            raise WizardRefused(f"the edited files would not load: {exc}") from exc
+    read_back = {
+        "endpoint": sla.endpoint, "p99_ms": sla.p99_ms, "error_rate_pct": sla.error_rate_pct,
+        "users": (sla.at_load or {}).get("users"), "config_file": profile.config_file,
+        "base_branch": profile.deploy.base_branch, "restart_command": list(profile.restart.command),
+        "health_url": profile.restart.health_url,
+    }
+    if form.spawn_rate is not None:
+        read_back["spawn_rate"] = (sla.at_load or {}).get("spawn_rate")
+    if form.scenarios is not None:
+        read_back["scenarios"] = sla.scenarios
+    if form.hooks is not None:
+        read_back["hooks"] = sla.hooks
+    for key, got in read_back.items():
+        want = getattr(form, key)
+        if key == "spawn_rate":
+            want = round(want, 3)
+        if key == "scenarios":
+            want = [{k: (float(v) if k in ("measure_s", "warmup_s", "spawn_rate") else v) for k, v in sc.items()}
+                    for sc in want]
+            got = [{k: v for k, v in sc.items()} for sc in got]
+        if got != want:
+            raise WizardRefused(f"{key} would read back as {got!r}, not {want!r}")
+
+
+def estimate(*, mode: str, warmup_s: float, measure_s: float, experiments: int, verify_timeout_s: float,
+             per_call_costs: list[float], ceiling_steps: int = 0) -> dict[str, Any]:
+    """Wall clock and model cost, by phase. Time is the real budget (DESIGN.md §7).
+
+    Deploy time is a range up to the profile's verify timeout, because how long
+    a deploy takes is the pipeline's, not ours to assume. Model cost per call is
+    the mean over past campaigns' priced diagnoses; with none on disk it is
+    reported as not measured rather than invented. Model latency is not added
+    to the wall clock: it was never measured either.
+    """
+    window = warmup_s + measure_s
+    per_call = sum(per_call_costs) / len(per_call_costs) if per_call_costs else None
+    rows: list[dict[str, Any]] = []
+    if mode == "Ceiling Probe":
+        rows.append({"phase": f"Load steps (x{ceiling_steps})", "what": f"{warmup_s:.0f} s warmup discarded + "
+                     f"{measure_s:.0f} s held, per step; stops at the first step that misses the SLA",
+                     "min_s": window, "max_s": window * ceiling_steps, "calls": 0})
+    elif mode == "Advisory":
+        rows += [
+            {"phase": "Baseline", "what": f"{warmup_s:.0f} s warmup discarded + {measure_s:.0f} s measured",
+             "min_s": window, "max_s": window, "calls": 0},
+            {"phase": "Diagnosis (up to 3)", "what": "up to three ranked proposals, each with its exact diff; "
+             "nothing applied or re-measured", "min_s": 0.0, "max_s": 0.0, "calls": 3},
+        ]
+    else:
+        rows += [
+            {"phase": "Baseline", "what": f"{warmup_s:.0f} s warmup discarded + {measure_s:.0f} s measured",
+             "min_s": window, "max_s": window, "calls": 0},
+            {"phase": f"Diagnosis (x{experiments})", "what": "one model call per experiment",
+             "min_s": 0.0, "max_s": 0.0, "calls": experiments},
+            {"phase": f"Deploy + verify (x{experiments})", "what": f"push, rebuild, proof the change is in force "
+             f"(up to the profile's {verify_timeout_s:.0f} s timeout)", "min_s": 0.0,
+             "max_s": verify_timeout_s * experiments, "calls": 0},
+            {"phase": f"Re-measure (x{experiments})", "what": "same window after each change",
+             "min_s": window, "max_s": window * experiments, "calls": 0},
+        ]
+    for row in rows:
+        row["cost"] = None if per_call is None else row["calls"] * per_call
+    calls = sum(r["calls"] for r in rows)
+    return {"rows": rows, "min_s": sum(r["min_s"] for r in rows), "max_s": sum(r["max_s"] for r in rows),
+            "calls": calls, "cost": None if per_call is None else calls * per_call,
+            "per_call_cost": per_call, "priced_calls_on_record": len(per_call_costs)}
+
+
+def write(rendered: dict[str, str], sla_path: Path, profile_path: Path, active_runs: list[dict[str, Any]]) -> None:
+    if active_runs:
+        held = ", ".join(str(r.get("run_id", "?")) for r in active_runs)
+        raise WizardRefused(f"a campaign has not stopped ({held}), so a new one cannot start. "
+                            "To change the running campaign's goal or load, use Save changes instead")
+    staged = []
+    for path, text in ((sla_path, rendered["sla"]), (profile_path, rendered["profile"])):
+        fd, tmp = tempfile.mkstemp(prefix=f".{path.name}-", dir=path.parent)
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
+            handle.write(text)
+        staged.append((Path(tmp), path))
+    for tmp, path in staged:
+        os.replace(tmp, path)

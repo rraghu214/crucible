@@ -28,8 +28,8 @@ from p1_cost_per_task import (  # noqa: E402
     summarise,
 )
 
-from s17code.economics import EconomicsConfig, TierLadder  # noqa: E402
-from s17code.evals import EvalsConfig  # noqa: E402
+from crucible.economics import EconomicsConfig, TierLadder  # noqa: E402
+from crucible.evals import EvalsConfig  # noqa: E402
 
 CONFIG_DIR = ROOT / "config"
 

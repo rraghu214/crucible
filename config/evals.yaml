@@ -7,7 +7,7 @@
 # property of an answer-to-a-task pair, not of any domain. The only per-task input
 # is the `expectation` string in the task DATA file (proofs/tasks/*.jsonl).
 #
-# Nothing in s17code names a criterion, a weight, a threshold, a provider or a
+# Nothing in crucible names a criterion, a weight, a threshold, a provider or a
 # model. Reweight the rubric, move the bar, add a criterion or repoint the panel
 # by editing this file.
 

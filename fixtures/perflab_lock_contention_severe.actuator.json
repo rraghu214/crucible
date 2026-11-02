@@ -1,0 +1,172 @@
+{
+  "spec": {
+    "id": "perflab_lock_contention_severe",
+    "cause_family": "lock_contention",
+    "profile": "spring-boot",
+    "setup": "No configuration change needed: the /api/ledger endpoint is already written with a synchronized block that serialises writes. Drive /api/ledger at 50 users. The default configuration (pool=20, threads=200) is already healthy for this endpoint -- the bottleneck is the in-process lock, not a tunable resource. Expect p99 proportional to 1/(throughput limit), not to any pool or thread setting.\n",
+    "task_classes": [
+      "D"
+    ],
+    "trap_properties": [],
+    "bottleneck_config": {
+      "endpoint": "/api/ledger"
+    },
+    "severity": "severe",
+    "validated_at": "2026-10-03",
+    "scenario_tag": "ledger",
+    "providers": [
+      "actuator"
+    ],
+    "expect_possible_failure": false,
+    "notes": "This is the \"outside authority\" fixture for lock_contention, analogous to perflab_code_latency for application_code. The entire signal is about what is ABSENT: pool fields ordinary, thread fields ordinary, GC ordinary -- and p99 high anyway, with throughput capped far below what the hardware can do. The shape is \"something in the request path is serial\" and the evidence for which thing is thin from the outside (no lock-contention metric in Micrometer by default). A correct answer names the cause from the process of elimination and from the endpoint being /api/ledger (the name is a hint, not proof).\n"
+  },
+  "provider": "actuator",
+  "captured_at_epoch_s": 1793540766.312585,
+  "warmup_s": 120.0,
+  "measure_s": 300.0,
+  "snapshot": {
+    "collector_version": "1.2.0",
+    "captured_at_epoch_s": 1793540766.312585,
+    "run_id": "fixture-perflab_lock_contention_severe",
+    "profile": "spring-boot",
+    "target": "http://10.0.0.79:8080",
+    "window": {
+      "count": 56999.0,
+      "total_ms": 3770997.616354001,
+      "mean_ms": 66.15901360294042,
+      "max_recent_ms": 304.496589,
+      "max_recent_ms_note": "rolling ~2-minute maximum read at end of window, NOT the maximum over the measured window. Micrometer's MAX decays, so a spike early in the window has already aged out. Under-reports transient causes such as GC pauses; approximates the true window max only for sustained ones.",
+      "warmup_s": 120.0,
+      "measure_s": 300.0
+    },
+    "load_summary": {
+      "p50_ms": 68.0,
+      "p95_ms": 140.0,
+      "p99_ms": 160.0,
+      "mean_ms": 70.66679073421615,
+      "max_ms": 308.6826913058758,
+      "rps": 182.9652359038527,
+      "request_count": 54774,
+      "failure_count": 0,
+      "error_rate_pct": 0.0,
+      "warmup_s": 120.0,
+      "measure_s": 300.0,
+      "ramp_s": 5.0,
+      "per_endpoint": {
+        "/api/ledger": {
+          "p50_ms": 68.0,
+          "p99_ms": 160.0,
+          "rps": 182.9652359038527,
+          "request_count": 54774,
+          "failure_count": 0,
+          "error_rate_pct": 0.0
+        }
+      }
+    },
+    "hikaricp": {
+      "acquire_count": 109.0,
+      "acquire_mean_ms": 0.06525222935779816,
+      "acquire_max_recent_ms": 0.0,
+      "acquire_total_ms": 7.112493,
+      "creation_count": 0.0,
+      "creation_mean_ms": null,
+      "creation_max_recent_ms": 0.0,
+      "creation_total_ms": 0.0,
+      "pending_peak_connections": 0.0,
+      "active_peak_connections": 0.0,
+      "idle_trough_connections": 10.0,
+      "pool_max_connections": 20.0,
+      "utilisation_peak_pct": 0.0
+    },
+    "jvm": {
+      "gc_pause_count": 163.0,
+      "gc_pause_mean_ms": 5.98159509202454,
+      "gc_pause_max_recent_ms": 6.0,
+      "gc_pause_total_ms": 975.0000000000001,
+      "heap_used_peak_bytes": 76475248.0,
+      "threads_live_peak_threads": 58.0
+    },
+    "tomcat": {
+      "threads_busy_peak_threads": 22.0,
+      "threads_config_max_threads": 200.0
+    },
+    "http": {
+      "request_count": 132622.0,
+      "request_mean_ms": 117.84425441879175,
+      "request_max_recent_ms": 304.496589,
+      "request_total_ms": 15628740.709529
+    },
+    "endpoint_breakdown": {
+      "/api/slow": {
+        "request_count": 51610.0,
+        "mean_ms": 200.52275515919393,
+        "max_ms": 0.0
+      },
+      "/api/version": {
+        "request_count": 2.0,
+        "mean_ms": 26.642381,
+        "max_ms": 0.0
+      },
+      "/actuator/metrics/{requiredMetricName}": {
+        "request_count": 4198.0,
+        "mean_ms": 0.6962988851834206,
+        "max_ms": 6.765251
+      },
+      "/api/ledger": {
+        "request_count": 76626.0,
+        "mean_ms": 68.78100051101454,
+        "max_ms": 304.496589
+      },
+      "/actuator/health": {
+        "request_count": 2.0,
+        "mean_ms": 1401.9893385,
+        "max_ms": 0.0
+      },
+      "/actuator/env/{toMatch}": {
+        "request_count": 14.0,
+        "mean_ms": 17.316622285714285,
+        "max_ms": 0.0
+      },
+      "/actuator/prometheus": {
+        "request_count": 173.0,
+        "mean_ms": 19.036860861271677,
+        "max_ms": 30.176069
+      },
+      "/actuator/env": {
+        "request_count": 1.0,
+        "mean_ms": 33.920138,
+        "max_ms": 0.0
+      }
+    },
+    "runtime_config": {
+      "spring.application.name": "******",
+      "server.port": "******",
+      "perflab.version": "******",
+      "perflab.cache.enabled": "true",
+      "perflab.downstream.timeout-ms": "5000",
+      "spring.datasource.hikari.maximum-pool-size": "20",
+      "spring.datasource.hikari.minimum-idle": "10",
+      "spring.datasource.hikari.connection-timeout": "30000",
+      "spring.datasource.hikari.pool-name": "******",
+      "spring.jpa.open-in-view": "******",
+      "spring.jpa.properties.hibernate.default_batch_fetch_size": "50",
+      "spring.jpa.properties.hibernate.jdbc.batch_size": "50",
+      "server.tomcat.threads.max": "200",
+      "server.tomcat.threads.min-spare": "10",
+      "spring.task.execution.pool.core-size": "8",
+      "spring.task.execution.pool.max-size": "16",
+      "spring.task.execution.pool.queue-capacity": "100",
+      "_redacted_count": 120
+    },
+    "baseline_reference": {},
+    "available_evidence": {
+      "metrics": true,
+      "traces": false,
+      "trace_reason": "no trace provider configured for this campaign",
+      "trace_sampling_rate_pct": null,
+      "endpoint_breakdown": true,
+      "gauge_sampling": true,
+      "notes": []
+    }
+  }
+}

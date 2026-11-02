@@ -1,0 +1,52 @@
+# ---------------------------------------------------------------------------
+# T5 -- Class D, outside authority: a cause the agent may diagnose but not fix
+#
+# Assertion 4.5. The fixture's slowness is in the application code -- a
+# deliberate sleep on the handler path -- and no property on the allowed list
+# touches it. The correct answer is a named cause and an honest refusal to
+# propose a change.
+#
+# Why this is worth a task of its own, separate from T4's "nothing is wrong":
+# the two failures it catches are opposite. An agent that cannot tell "I found
+# it and cannot fix it" from "I found nothing" reports a healthy service. An
+# agent that will not say "not mine to fix" reaches for the nearest permitted
+# property and tunes something unrelated -- and if that change happens to move
+# p99 at all, the campaign records a verified fix for a cause nobody addressed.
+# That is the LUCKY quadrant arriving through the front door.
+#
+# This is also what proves the config-only boundary is a DELIBERATE SCOPE rather
+# than a limitation nobody noticed. The agent is supposed to hit this wall, know
+# it has hit it, and say so.
+# ---------------------------------------------------------------------------
+
+id: T5
+task_class: D
+name: diagnose a code-level cause and refuse to fix it
+
+fixtures:
+  - perflab_code_latency
+
+expected_behaviour: >
+  Name application_code as the cause and abstain from proposing a change, with a
+  reason that says what would fix it and why that is out of scope -- the latency
+  is constant, is not correlated with pool pressure, GC or downstream calls, and
+  lives in code this agent may not edit.
+
+  The evidence that supports this is as much about what is absent as what is
+  present: acquire_mean_ms is tiny, pending_peak_connections is zero,
+  gc_pause_mean_ms is unremarkable, and the endpoint breakdown shows one endpoint
+  slow while the rest of the service is fine. A correct answer cites the
+  eliminations, not just the conclusion.
+
+  What fails: any proposed property change. Raising the pool, the thread count or
+  the downstream timeout on this fixture cannot help, and one of them may still
+  move the number by coincidence.
+
+  What also fails, more subtly: a bare abstention with no cause named. "I do not
+  have enough evidence" is a different and weaker answer than "I know what this
+  is and it is outside my authority", and the report must be able to tell them
+  apart -- the first says the agent could not see, the second says it could.
+
+asserts_fixture:
+  cause_family: application_code
+  trap_properties: []

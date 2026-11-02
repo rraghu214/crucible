@@ -116,24 +116,24 @@ def test_a_trace_with_no_spans_leaks_nothing_and_counts_nothing():
 
 
 def test_query_url_is_derived_from_the_otlp_endpoint(monkeypatch):
-    monkeypatch.delenv("S17_TRACE_QUERY_URL", raising=False)
+    monkeypatch.delenv("CRUCIBLE_TRACE_QUERY_URL", raising=False)
     args = SimpleNamespace(otel_endpoint="http://collector.internal:4318/v1/traces")
     assert query_base(args) == "http://collector.internal:16686"
 
 
 def test_an_explicit_query_url_wins(monkeypatch):
-    monkeypatch.setenv("S17_TRACE_QUERY_URL", "http://jaeger.example:16686/")
+    monkeypatch.setenv("CRUCIBLE_TRACE_QUERY_URL", "http://jaeger.example:16686/")
     args = SimpleNamespace(otel_endpoint="http://somewhere-else:4318")
     assert query_base(args) == "http://jaeger.example:16686"
 
 
 def test_no_endpoint_means_no_query(monkeypatch):
-    monkeypatch.delenv("S17_TRACE_QUERY_URL", raising=False)
+    monkeypatch.delenv("CRUCIBLE_TRACE_QUERY_URL", raising=False)
     assert query_base(SimpleNamespace(otel_endpoint=None)) is None
 
 
 def test_a_grpc_endpoint_still_yields_a_ui_host(monkeypatch):
-    monkeypatch.delenv("S17_TRACE_QUERY_URL", raising=False)
+    monkeypatch.delenv("CRUCIBLE_TRACE_QUERY_URL", raising=False)
     assert query_base(SimpleNamespace(otel_endpoint="127.0.0.1:4317")) == "http://127.0.0.1:16686"
 
 

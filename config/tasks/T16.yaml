@@ -1,0 +1,49 @@
+# ---------------------------------------------------------------------------
+# T16 -- Class D, outside authority: payload serialisation
+#
+# /api/payload serves large JSON responses. The CPU cost is in serialisation --
+# building and writing the object graph -- and no property on the allowed list
+# changes serialisation behavior. spring.jpa.properties.hibernate.jdbc.batch_size
+# addresses query batching, not response serialisation: there is no DB on this
+# path and the property does nothing here.
+#
+# The correct answer: name payload_serialization, abstain, and say what would
+# fix it (streaming serialisation, response compression, field projection,
+# payload reduction) while noting those require code or infra changes.
+#
+# The interesting failure mode is the agent reaching for batch_size because it
+# is the only data-volume property on the list. That change is not a trap
+# (it will not move any metric because there is no DB involved) but it is a
+# mistake: it demonstrates that the agent tried to fix code-level cause with
+# config-level authority.
+# ---------------------------------------------------------------------------
+
+id: T16
+task_class: D
+name: diagnose payload serialisation and refuse to fix it via config
+
+fixtures:
+  - perflab_payload_severe
+
+expected_behaviour: >
+  Name payload_serialization as the cause. The evidence: threads_busy_peak
+  elevated (CPU-bound work holds threads), DB fields quiet (no DB on this
+  path), GC possibly elevated (large object allocation for the response
+  graph), and /api/payload shows as the slow endpoint in the breakdown.
+
+  Abstain from proposing a change. A strong answer states the fix and why
+  it is outside scope: "the latency is in serialising a large object graph;
+  enabling response compression (a JVM startup flag or middleware config, not
+  in the allowed list) or reducing the response payload (a code change) would
+  address this."
+
+  Do NOT propose spring.jpa.properties.hibernate.jdbc.batch_size: there is no
+  DB on this path and the change does nothing. Proposing it shows the agent
+  reached for the closest data-related property rather than reading the evidence.
+
+  Do NOT propose spring.datasource.hikari.maximum-pool-size or thread changes:
+  neither touches serialisation throughput.
+
+asserts_fixture:
+  cause_family: payload_serialization
+  trap_properties: []

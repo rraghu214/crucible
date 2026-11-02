@@ -1,0 +1,426 @@
+# ---------------------------------------------------------------------------
+# TargetProfile: Spring Boot on the JVM
+#
+# Read by the guard, the applicator and the scorer. This file GRANTS AUTHORITY:
+# a property absent from allowed_properties cannot be changed by the agent, and
+# a value outside its bounds is refused before anything is applied.
+#
+# Prose about how this runtime fails lives in SKILL.md next to this file. That
+# file is rendered into the model's system prompt and nowhere else, and grants
+# nothing (DESIGN.md section 5). Do not move authority into it.
+# ---------------------------------------------------------------------------
+
+name: spring-boot
+runtime: jvm
+# The service, for people. Display only: grants nothing.
+service: perf-lab
+
+# Declared by the profile, never by a global constant. `gc` is a JVM/CLR concept;
+# CPython's analogue is `gil_contention` and Node's is `event_loop_block`. A
+# hardcoded list would make the agent propose impossible hypotheses on one
+# runtime and miss real ones on another (DESIGN.md section 5).
+cause_families:
+  - connection_pool_exhaustion
+  - thread_pool_saturation
+  - gc_pressure
+  - inefficient_query
+  - cache_miss
+  - downstream_latency
+  - lock_contention
+  - payload_serialization
+  # Added 26 September 2026. The code itself is slow -- a blocking call on the
+  # handler path, a synchronous library call, an in-memory computation -- and
+  # NO property on allowed_properties below can fix it. That is the point:
+  # naming a cause grants no authority (allowed_properties does), so a family
+  # the agent can name but cannot act on is how the config-only boundary
+  # becomes a declared scope rather than a blind spot.
+  #
+  # fastapi.yaml already declared this. The same condition being nameable on
+  # one runtime and not the other was an inconsistency, not a safety property,
+  # and it left `perflab_code_latency` as a fixture nothing could correctly
+  # name. See DESIGN.md section 5 and assertion 4.5.
+  - application_code
+
+# Relative to the WORKSPACE, which is a checkout of the target's own repository
+# (https://github.com/rraghu214/perf-lab) -- not of Crucible. See DESIGN.md
+# 19.1b. Point --workspace at that checkout and this path resolves.
+config_file: src/main/resources/application.properties
+
+# The agent may change these and nothing else. Bounds are the profile's judgement,
+# not the model's: the agent argues for a value, this file decides whether the
+# value is sane for this runtime.
+allowed_properties:
+  spring.datasource.hikari.maximum-pool-size:
+    type: int
+    min: 1
+    max: 100
+  spring.datasource.hikari.minimum-idle:
+    type: int
+    min: 0
+    max: 100
+  spring.datasource.hikari.connection-timeout:
+    type: int
+    min: 1000
+    max: 60000
+  server.tomcat.threads.max:
+    type: int
+    min: 4
+    max: 800
+  server.tomcat.threads.min-spare:
+    type: int
+    min: 1
+    max: 200
+  spring.task.execution.pool.core-size:
+    type: int
+    min: 1
+    max: 200
+  spring.task.execution.pool.max-size:
+    type: int
+    min: 1
+    max: 400
+  spring.task.execution.pool.queue-capacity:
+    type: int
+    min: 0
+    max: 10000
+  spring.jpa.properties.hibernate.jdbc.batch_size:
+    type: int
+    min: 1
+    max: 500
+  spring.jpa.properties.hibernate.default_batch_fetch_size:
+    type: int
+    min: 1
+    max: 500
+  perflab.cache.enabled:
+    type: bool
+  perflab.downstream.timeout-ms:
+    type: int
+    min: 100
+    max: 30000
+  # The JVM's maximum heap, in MB. Operator decision, 1 November 2026: gc_pressure
+  # needed a real lever; until then the agent could name GC and do nothing about
+  # it. Heap size is a JVM flag, read before Spring starts, so it cannot be a
+  # Spring property -- but it lives in application.properties anyway, because
+  # that is the one file the agent edits and the one file each experiment
+  # commits. Box A's deploy hook (scripts/box_a_post_receive.sh) reads this line
+  # and passes -Xmx<n>m to java; Spring ignores the key. Bounds: Box A has 5.9 GB
+  # and the JVM's own default is ~1.5 GB; below 128 MB PerfLab does not start.
+  # Proof it is in force: the commit check (the jar carries the sha of the
+  # commit that set it) plus in_force below. Reading the key back from
+  # /actuator/env proves only that the file landed, so the campaign reads the
+  # heap ceiling the JVM reports and measures nothing until it matches (operator
+  # decision, 1 November 2026). jvm.memory.max for area:heap reads ~3% under
+  # -Xmx on Box A's Serial GC, because one survivor space is not counted.
+  perflab.jvm.heap-max-mb:
+    type: int
+    min: 128
+    max: 1536
+    in_force:
+      metric: jvm.memory.max
+      tag: "area:heap"
+      scale: 1048576
+      tolerance_pct: 5
+
+# The first half of the SLA protection. The second half is the Policy memory kind,
+# which the agent has no write permission for. Both exist because a file guard can
+# be bypassed if config moves, and a memory permission cannot -- and neither is to
+# be weakened independently of the other (DESIGN.md section 4.4).
+protected_paths:
+  - config/slo.yaml
+  - config/bench/**
+  - config/profiles/**
+  - locust/**
+  - tests/**
+  - docs/CRUCIBLE_TEST_ASSERTIONS.md
+
+# How an approved change reaches the target box (DESIGN.md section 19).
+#
+# THE AGENT NEVER WRITES THIS COMMAND. It decides *whether* to deploy; remote and
+# branch come from here, and this file is a protected path. That separation is
+# the whole safety argument: pushing to a sandbox branch on pre-prod is
+# reversible, but a model composing `HEAD:main` or `--force` is not.
+#
+# mode: "pipeline" -- push triggers CI, deploy is autonomous
+#       "manual"   -- campaign blocks with the instructions below (section 11)
+# Declared, never guessed: an agent that assumed "pipeline" would silently skip a
+# deploy that never happened, and then measure the old build.
+deploy:
+  # "pipeline" since 21 September 2026: scripts/box_a_post_receive.sh is
+  # installed as the post-receive hook on Box A's ~/perflab-deploy.git, and Box B
+  # pushes to it over a dedicated, git-only deploy key. Section 19.5 says
+  # automation is declared and never guessed, so this line was "manual" until the
+  # hook actually existed -- an agent assuming a pipeline would skip a deploy
+  # that never happened and then measure the old build.
+  mode: pipeline
+  remote: perftest
+  # The ONLY branch Crucible ever writes to. Operator decision, 20 September
+  # 2026. Enforced in DeployTarget's constructor rather than at push time, so a
+  # profile naming a shared branch fails when it is LOADED -- during
+  # `crucible plan`, before anything has been measured -- and so every adapter
+  # inherits the rule instead of each one remembering it.
+  branch: perftest_sandbox
+  # The branch the operator works from. READ once, to create the sandbox branch
+  # when it does not yet exist, and never written to. Without this a first
+  # campaign against a fresh remote would fail on a missing ref, and the obvious
+  # fix -- "push to the branch that does exist" -- is exactly what must not
+  # happen.
+  # The TARGET repo's branch (github.com/rraghu214/perf-lab), not Crucible's.
+  # This was `capstone/perf-agent` until the split on 21 September 2026 and was
+  # then simply wrong: the workspace is a perf-lab checkout, so the sandbox
+  # branch has to be created from perf-lab's own base.
+  base_branch: main
+  # Kept for the case where the hook is unavailable and an operator has to step
+  # in; section 11 requires the campaign to block with instructions rather than
+  # fail, and a manifest that records a manual step is a different claim from one
+  # that does not.
+  instructions: |
+    If the pipeline is unavailable, deploy by hand: check out the
+    commit on Box A, rebuild with
+      ./mvnw -B -DskipTests -Dperflab.commit=<sha> package
+    restart the JVM with the profile's lab settings, and wait for /api/version to
+    report the new commit. The -Dperflab.commit flag is not optional: without it
+    the build reports a null commit and Crucible refuses to measure. The campaign
+    resumes once the sha matches, and the manifest records that a human
+    intervened.
+  # Section 19.6: no measurement may begin until the target proves it is running
+  # the new commit. /api/version now reports `commit`, sourced from
+  # META-INF/build-info.properties, which the target's pom.xml populates from
+  # -Dperflab.commit at package time. A build without that flag reports null
+  # rather than a placeholder, so an unprovable target blocks rather than being
+  # measured by mistake.
+  version_url: http://10.0.0.79:8080/api/version
+  version_field: commit
+  verify_timeout_s: 300
+  poll_interval_s: 5
+
+restart:
+  command: ["./mvnw", "spring-boot:run"]
+  manual: false
+  instructions: |
+    If automation is unavailable: stop the running perf-lab process, then start it
+    with ./mvnw spring-boot:run from the perf-lab directory. A manual restart is
+    recorded on the manifest -- a run with human intervention is not comparable to
+    a fully autonomous one.
+  health_url: http://localhost:8080/actuator/health
+  health_timeout_s: 120
+  settle_s: 5
+
+# Metric names the COLLECTOR looks up when assembling a snapshot, keyed by the
+# role each plays. The role names are generic; the metric names are this
+# runtime's. A profile whose runtime has no analogue simply omits the role, and
+# the snapshot then reports that field as null -- "we never looked" -- which is
+# the honest answer rather than a zero.
+snapshot_metrics:
+  pool_acquire: hikaricp.connections.acquire
+  pool_creation: hikaricp.connections.creation
+  pool_max: hikaricp.connections.max
+  gc_pause: jvm.gc.pause
+  http_requests: http.server.requests
+
+# Gauges the load runner samples once a second DURING a run. Keys are the short
+# names the snapshot uses; values are this runtime's provider metric names.
+#
+# These live here and not in runner.py for the same reason cause_families do: a
+# gauge name is a property of the runtime, not of Crucible. `jvm.memory.used`
+# does not exist on CPython, and a sampler asking a FastAPI target for JVM
+# meters would get nothing back and record every gauge as "not measured" -- the
+# agent would then correctly say it never looked, for a reason that was a bug.
+gauges:
+  pending: hikaricp.connections.pending
+  active: hikaricp.connections.active
+  idle: hikaricp.connections.idle
+  threads_live: jvm.threads.live
+  heap_used: jvm.memory.used
+  tomcat_threads_busy: tomcat.threads.busy
+  tomcat_threads_config_max: tomcat.threads.config.max
+
+# Tag filters for Actuator, the counterpart of `labels:` under promql/datadog
+# below. Actuator sums every tag combination of a meter unless asked, so a bare
+# `jvm.memory.used` is heap PLUS non-heap. Found 1 November 2026: every snapshot's
+# heap_used_peak_bytes read ~240 MB on a healthy run and 267 MB on a 128 MB heap.
+actuator:
+  jvm.memory.used:
+    area: heap
+
+# The SAME logical metrics as above, as Prometheus publishes them.
+#
+# Declared, not derived. Micrometer's Prometheus registry renames every meter:
+# dots become underscores and the meter's BASE UNIT is appended, so
+# `hikaricp.connections.acquire` becomes `hikaricp_connections_acquire_seconds`
+# while `hikaricp.connections.pending` stays `hikaricp_connections_pending` and
+# `jvm.memory.used` becomes `jvm_memory_used_bytes`. There is no single rule
+# that produces all three, and a name derived by the wrong rule returns no data
+# -- which the collector correctly reports as "never measured", leaving the
+# agent to rule out a cause on evidence Prometheus was collecting all along.
+#
+# `unit` is what the adapter converts by. Only `seconds` is convertible today;
+# anything else is carried through marked unreadable and excluded from derived
+# values rather than being read at the wrong magnitude (DESIGN.md 4.8).
+promql:
+  hikaricp.connections.acquire:
+    count: hikaricp_connections_acquire_seconds_count
+    total: hikaricp_connections_acquire_seconds_sum
+    max: hikaricp_connections_acquire_seconds_max
+    unit: seconds
+  hikaricp.connections.creation:
+    count: hikaricp_connections_creation_seconds_count
+    total: hikaricp_connections_creation_seconds_sum
+    max: hikaricp_connections_creation_seconds_max
+    unit: seconds
+  jvm.gc.pause:
+    count: jvm_gc_pause_seconds_count
+    total: jvm_gc_pause_seconds_sum
+    max: jvm_gc_pause_seconds_max
+    unit: seconds
+  http.server.requests:
+    count: http_server_requests_seconds_count
+    total: http_server_requests_seconds_sum
+    max: http_server_requests_seconds_max
+    unit: seconds
+    # Micrometer splits this across uri/status/method/outcome, so a bare name
+    # returns dozens of series and the adapter refuses to pick one. Verified
+    # empty against Box A's Prometheus on 20 September 2026 before this was
+    # added. COUNT and TOTAL_TIME are summed; MAX is max()'d, because the
+    # slowest request in the service is the largest per-URI maximum, not the
+    # sum of them.
+    aggregate: sum
+  # Gauges: a bare series name, no unit conversion involved.
+  hikaricp.connections.max: hikaricp_connections_max
+  hikaricp.connections.pending: hikaricp_connections_pending
+  hikaricp.connections.active: hikaricp_connections_active
+  hikaricp.connections.idle: hikaricp_connections_idle
+  jvm.threads.live: jvm_threads_live_threads
+  # One series per memory pool (Eden, Survivor, Tenured, several non-heap), so
+  # this needs both a label matcher and a sum. `area: heap` is deliberate: the
+  # collector's field is `heap_used_peak_bytes`, and quietly including non-heap
+  # would make the number not the thing its name claims.
+  jvm.memory.used:
+    value: jvm_memory_used_bytes
+    labels:
+      area: heap
+    aggregate: sum
+  tomcat.threads.busy: tomcat_threads_busy_threads
+  tomcat.threads.config.max: tomcat_threads_config_max_threads
+
+# The SAME logical metrics again, as Datadog publishes them.
+#
+# CHECKED against a live backend on 10-11 October 2026 (Box A pushing through
+# Micrometer's DatadogMeterRegistry): every timer and gauge name below returned
+# data. The units did NOT survive the check -- see `unit:` below. Not yet checked:
+# jvm.memory.used with `area: heap` (returned nothing on 11 October).
+#
+# Declared, not derived, for a sharper reason than under Prometheus. Datadog's
+# suffix depends on HOW a metric was submitted: a distribution exposes `.count`,
+# `.sum` and `.max`, a plain timer may expose `.avg` and no `.sum` at all, and a
+# gauge exposes only itself. There is no rule that turns a Micrometer name into
+# the right triple, and a wrong name returns no data -- which the collector
+# faithfully records as "never measured" while Datadog holds the answer.
+#
+# `unit: milliseconds` on every timer is the load-bearing line. This block said
+# nanoseconds until 11 October 2026, a provisional guess. The first live capture
+# read the pool wait as 0.001 ms against ~1024 ms from Actuator and PromQL on the
+# same load, and Datadog's own API labels these series `millisecond` (acquire.max
+# 2243). Under Prometheus the same meter is seconds. The adapter converts to the
+# collector's seconds contract using the unit declared here, and refuses an
+# undeclared one rather than guessing.
+datadog:
+  hikaricp.connections.acquire:
+    count: hikaricp.connections.acquire.count
+    total: hikaricp.connections.acquire.sum
+    max: hikaricp.connections.acquire.max
+    unit: milliseconds
+  hikaricp.connections.creation:
+    count: hikaricp.connections.creation.count
+    total: hikaricp.connections.creation.sum
+    max: hikaricp.connections.creation.max
+    unit: milliseconds
+  jvm.gc.pause:
+    count: jvm.gc.pause.count
+    total: jvm.gc.pause.sum
+    max: jvm.gc.pause.max
+    unit: milliseconds
+  http.server.requests:
+    count: http.server.requests.count
+    total: http.server.requests.sum
+    max: http.server.requests.max
+    unit: milliseconds
+  # Gauges: a bare metric name, no unit conversion involved.
+  hikaricp.connections.max: hikaricp.connections.max
+  hikaricp.connections.pending: hikaricp.connections.pending
+  hikaricp.connections.active: hikaricp.connections.active
+  hikaricp.connections.idle: hikaricp.connections.idle
+  jvm.threads.live: jvm.threads.live
+  # One series per memory pool, exactly as under Prometheus. `area: heap` is
+  # deliberate: the collector's field is `heap_used_peak_bytes`, and quietly
+  # including non-heap would make the number not the thing its name claims.
+  jvm.memory.used:
+    value: jvm.memory.used
+    aggregator: sum
+    tags:
+      area: heap
+  tomcat.threads.busy: tomcat.threads.busy
+  tomcat.threads.config.max: tomcat.threads.config.max
+
+# Histogram series for true service-wide percentiles. Actuator cannot do this:
+# it exposes one instance's pre-aggregated p99, and two instances' p99s do not
+# combine into a service p99. Prometheus keeps the buckets, so the quantile is
+# taken AFTER summing them, which is the only valid order (DESIGN.md 5).
+promql_histogram: http_server_requests_seconds_bucket
+
+# Cumulative timers read once at end of warmup and once at end of measurement,
+# so the collector can express each as a delta across the measured window rather
+# than a lifetime average.
+window_timers:
+  - hikaricp.connections.acquire
+  - hikaricp.connections.creation
+  - jvm.gc.pause
+  - http.server.requests
+
+# Provider metric name -> the cause family it speaks to. The collector uses the
+# names; this mapping is what lets the agent say which evidence it actually has.
+metric_map:
+  hikaricp.connections.acquire: connection_pool_exhaustion
+  hikaricp.connections.pending: connection_pool_exhaustion
+  hikaricp.connections.active: connection_pool_exhaustion
+  hikaricp.connections.idle: connection_pool_exhaustion
+  hikaricp.connections.timeout: connection_pool_exhaustion
+  tomcat.threads.busy: thread_pool_saturation
+  tomcat.threads.config.max: thread_pool_saturation
+  executor.active: thread_pool_saturation
+  executor.queued: thread_pool_saturation
+  jvm.gc.pause: gc_pressure
+  jvm.memory.used: gc_pressure
+  jvm.memory.max: gc_pressure
+  hibernate.query.executions: inefficient_query
+  cache.gets: cache_miss
+  cache.puts: cache_miss
+  http.client.requests: downstream_latency
+  jvm.threads.states: lock_contention
+  http.server.requests: payload_serialization
+
+# Allowlist, never blocklist (DESIGN.md section 12). /actuator/env returns every
+# property on the target, including datasource passwords and API keys. Only the
+# keys named here survive into a snapshot, a prompt or a journal. A blocklist
+# fails open on the one key nobody thought of; this fails closed.
+redaction_allowlist:
+  - spring.application.name
+  - server.port
+  - perflab.version
+  - perflab.cache.enabled
+  - perflab.downstream.timeout-ms
+  - spring.datasource.hikari.maximum-pool-size
+  - spring.datasource.hikari.minimum-idle
+  - spring.datasource.hikari.connection-timeout
+  - spring.datasource.hikari.pool-name
+  - server.tomcat.threads.max
+  - server.tomcat.threads.min-spare
+  - spring.task.execution.pool.core-size
+  - spring.task.execution.pool.max-size
+  - spring.task.execution.pool.queue-capacity
+  - spring.jpa.properties.hibernate.jdbc.batch_size
+  - spring.jpa.properties.hibernate.default_batch_fetch_size
+  - spring.jpa.open-in-view
+  # Added 1 November 2026 (operator): every allowed property must be readable in
+  # the snapshot, or the agent cannot see the value it is reasoning about.
+  - perflab.jvm.heap-max-mb
+
+skill_file: spring-boot.SKILL.md

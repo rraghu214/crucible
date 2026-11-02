@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from s17code.events import ScheduleLease
+from crucible.events import ScheduleLease
 
 
 def test_a_second_tick_cannot_run_while_the_first_still_holds_the_lease(tmp_path) -> None:

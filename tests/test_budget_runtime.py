@@ -12,9 +12,9 @@ import json
 
 import pytest
 
-from s17code.core.memory.embeddings import DeterministicEmbedder
-from s17code.economics import EconomicsConfig
-from s17code.telemetry import export_run
+from crucible.core.memory.embeddings import DeterministicEmbedder
+from crucible.economics import EconomicsConfig
+from crucible.telemetry import export_run
 
 
 class FakeGateway:
@@ -165,7 +165,7 @@ def test_the_planner_reallocates_across_the_frontier_every_round(budgeted_client
 
 def test_an_unbudgeted_run_is_unchanged(app_client, monkeypatch):
     """Economics is additive. Omit the budget and nothing about the run changes."""
-    import s17code.routes as agent_route
+    import crucible.routes as agent_route
 
     app_client.app.state.runtime.memory.embedder = DeterministicEmbedder(128)
 

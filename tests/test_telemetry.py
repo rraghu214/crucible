@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from s17code.telemetry import build_span_tree, export_run
-from s17code.telemetry.spans import (
+from crucible.telemetry import build_span_tree, export_run
+from crucible.telemetry.spans import (
     COST,
     GEN_AI_INPUT_MESSAGES,
     GEN_AI_INPUT_TOKENS,
@@ -178,7 +178,7 @@ def test_budget_decisions_land_as_span_events(journal):
 # --------------------------------------------------------------------------- #
 
 def test_content_capture_is_off_by_default(journal, monkeypatch):
-    monkeypatch.delenv("S17_OTEL_CAPTURE_CONTENT", raising=False)
+    monkeypatch.delenv("CRUCIBLE_OTEL_CAPTURE_CONTENT", raising=False)
     journal["events"][3]["payload"]["metered_calls"][0].update(
         {"prompt": "a private prompt", "completion": "a private completion"})
     export = export_run(journal)
@@ -200,7 +200,7 @@ def test_content_capture_is_opt_in_per_call(journal):
 
 
 def test_the_env_switch_also_opts_in(journal, monkeypatch):
-    monkeypatch.setenv("S17_OTEL_CAPTURE_CONTENT", "1")
+    monkeypatch.setenv("CRUCIBLE_OTEL_CAPTURE_CONTENT", "1")
     journal["events"][3]["payload"]["metered_calls"][0]["prompt"] = "x"
     assert export_run(journal).capture_content is True
 
@@ -210,7 +210,7 @@ def test_the_env_switch_also_opts_in(journal, monkeypatch):
 # --------------------------------------------------------------------------- #
 
 def test_no_endpoint_means_nothing_goes_over_the_wire(journal, monkeypatch):
-    monkeypatch.delenv("S17_OTEL_EXPORTER_ENDPOINT", raising=False)
+    monkeypatch.delenv("CRUCIBLE_OTEL_EXPORTER_ENDPOINT", raising=False)
     export = export_run(journal)
     assert export.exported_over_the_wire is False
     assert export.endpoint is None
@@ -219,14 +219,14 @@ def test_no_endpoint_means_nothing_goes_over_the_wire(journal, monkeypatch):
 
 
 def test_the_endpoint_is_read_from_config(monkeypatch):
-    monkeypatch.setenv("S17_OTEL_EXPORTER_ENDPOINT", "")
+    monkeypatch.setenv("CRUCIBLE_OTEL_EXPORTER_ENDPOINT", "")
     provider, memory, wired = build_tracer_provider(endpoint=None)
     assert wired is False
     provider.shutdown()
 
 
 def test_service_name_is_configurable(journal, monkeypatch):
-    monkeypatch.setenv("S17_OTEL_SERVICE_NAME", "custom-service")
+    monkeypatch.setenv("CRUCIBLE_OTEL_SERVICE_NAME", "custom-service")
     assert export_run(journal).service_name == "custom-service"
     assert export_run(journal, service_name="explicit").service_name == "explicit"
 

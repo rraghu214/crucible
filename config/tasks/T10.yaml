@@ -1,0 +1,44 @@
+# ---------------------------------------------------------------------------
+# T10 -- Class A, diagnose and repair: downstream latency (timeout too tight)
+#
+# /api/downstream calls httpbin, which responds in ~500ms. The configured
+# timeout is 200ms, so every call times out and returns 5xx. The fix is
+# to raise perflab.downstream.timeout-ms to allow the call to complete.
+#
+# This is class A because there IS a config fix (raise the timeout). The
+# upstream-cause diagnosis is downstream_latency (external dependency wait),
+# not pool or thread pressure -- neither is the bottleneck here. Threads and
+# pool fields look nearly healthy because requests fail fast (at 200ms).
+# ---------------------------------------------------------------------------
+
+id: T10
+task_class: A
+name: diagnose downstream latency and fix the timeout mismatch
+
+fixtures:
+  - perflab_downstream_latency_severe
+
+expected_behaviour: >
+  Name downstream_latency as the cause. The signal: near-100% error rate on
+  /api/downstream, p99 exactly at the timeout value (200ms, suspiciously
+  precise), pool and thread fields nearly healthy (requests fail fast and
+  release resources).
+
+  Propose raising perflab.downstream.timeout-ms to a value that allows httpbin
+  to respond (e.g. 2000ms), within the profile's bounds (100-30000ms).
+
+  Do NOT propose pool or thread changes: the bottleneck is the external
+  response wait, not a local resource. Raising the pool or threads does not
+  reduce the downstream response time; it just creates more goroutines waiting
+  on the same thing.
+
+  A strong answer notes that fixing the timeout is a necessary but not
+  sufficient fix: if the downstream is genuinely slow (500ms is a real
+  constraint), the long-term answer is a circuit breaker or caching, which is
+  outside the config scope.
+
+asserts_fixture:
+  cause_family: downstream_latency
+  trap_properties:
+    - spring.datasource.hikari.maximum-pool-size
+    - server.tomcat.threads.max
