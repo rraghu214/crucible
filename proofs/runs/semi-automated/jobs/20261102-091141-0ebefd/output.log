@@ -1,0 +1,6 @@
+$ crucible pause run-1793610533986-burst_100u --reason=operator pause from UI --state-dir=/home/ubuntu/.crucible
+pause requested for run run-1793610533986-burst_100u (/home/ubuntu/.crucible/pauses/run-1793610533986-burst_100u.pause)
+  - the in-flight experiment will be discarded and re-run on resume
+  - all experiments already verified are kept
+  - the campaign stops at its next experiment boundary, not mid-apply
+  - resume with: crucible resume run-1793610533986-burst_100u

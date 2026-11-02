@@ -1,0 +1,9 @@
+{
+  "action": "approve",
+  "responder": "ui:operator",
+  "reason": "",
+  "params": {
+    "spring.datasource.hikari.maximum-pool-size": 50
+  },
+  "decided_at_epoch_s": 1793611103.5295532
+}

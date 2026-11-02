@@ -1,0 +1,25 @@
+{
+  "id": "20261102-090854-c9cb79",
+  "label": "semi-automated run-1793610533986",
+  "args": [
+    "run",
+    "--profile=spring-boot",
+    "--sla=/home/ubuntu/crucible/config/slo.yaml",
+    "--scenario=burst_100u",
+    "--users=100",
+    "--measure=180.0",
+    "--spawn-rate=6.666666666666667",
+    "--experiments=2",
+    "--all-scenarios",
+    "--cost-cap=1.0",
+    "--wall-clock-cap=1.0",
+    "--run-id=run-1793610533986",
+    "--state-dir=/home/ubuntu/.crucible",
+    "--workspace=/home/ubuntu/perf-lab",
+    "--approve=file",
+    "--stakeholder-request=Keep /api/db p99 under 120 ms at 100 users"
+  ],
+  "started_at_epoch_s": 1793610534.2901921,
+  "pid": 505825,
+  "cwd": "/home/ubuntu/crucible"
+}

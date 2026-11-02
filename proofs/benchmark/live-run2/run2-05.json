@@ -1,0 +1,882 @@
+{
+  "run_id": "run2-05",
+  "sla": {
+    "name": "bench-gc-pressure",
+    "endpoint": "/api/churn",
+    "p99_ms": 300.0,
+    "error_rate_pct": 1.0,
+    "environment_name": "oracle-ashburn-boxa",
+    "environment_kind": "pre-prod",
+    "target_base_url": "http://10.0.0.79:8080",
+    "noise_p99_spread_pct": 2.08,
+    "noise_measured_on": "2026-09-12",
+    "noise_source": "docs/K1_CLOUD_RESULT.md",
+    "cpu_steal_abort_pct": 10.0,
+    "at_load": {
+      "users": 50,
+      "spawn_rate": 10,
+      "think_time_s": [
+        0.1,
+        0.3
+      ]
+    },
+    "scenarios": [],
+    "hooks": {},
+    "source_path": "/home/ubuntu/crucible-draft/config/bench/slo-perflab_gc_pressure.yaml"
+  },
+  "profile": "spring-boot",
+  "scenario": "steady",
+  "collector_version": "1.2.0",
+  "baseline": {
+    "load": {
+      "p50_ms": 250.0,
+      "p95_ms": 1600.0,
+      "p99_ms": 2500.0,
+      "mean_ms": 461.38400594225146,
+      "max_ms": 4866.833297535777,
+      "rps": 74.9676332080414,
+      "request_count": 22449,
+      "failure_count": 0,
+      "error_rate_pct": 0.0,
+      "warmup_s": 120.0,
+      "measure_s": 300.0,
+      "ramp_s": 5.0,
+      "per_endpoint": {
+        "/api/churn": {
+          "p50_ms": 250.0,
+          "p99_ms": 2500.0,
+          "rps": 74.9676332080414,
+          "request_count": 22449,
+          "failure_count": 0,
+          "error_rate_pct": 0.0
+        }
+      }
+    },
+    "snapshot": {
+      "collector_version": "1.2.0",
+      "captured_at_epoch_s": 1793547619.839684,
+      "run_id": "run2-05-baseline",
+      "profile": "spring-boot",
+      "target": "http://10.0.0.79:8080",
+      "window": {
+        "count": 23277.0,
+        "total_ms": 7107182.472975997,
+        "mean_ms": 305.3306900793056,
+        "max_recent_ms": 6379.107935,
+        "max_recent_ms_note": "rolling ~2-minute maximum read at end of window, NOT the maximum over the measured window. Micrometer's MAX decays, so a spike early in the window has already aged out. Under-reports transient causes such as GC pauses; approximates the true window max only for sustained ones.",
+        "warmup_s": 120.0,
+        "measure_s": 300.0
+      },
+      "load_summary": {
+        "p50_ms": 250.0,
+        "p95_ms": 1600.0,
+        "p99_ms": 2500.0,
+        "mean_ms": 461.38400594225146,
+        "max_ms": 4866.833297535777,
+        "rps": 74.9676332080414,
+        "request_count": 22449,
+        "failure_count": 0,
+        "error_rate_pct": 0.0,
+        "warmup_s": 120.0,
+        "measure_s": 300.0,
+        "ramp_s": 5.0,
+        "per_endpoint": {
+          "/api/churn": {
+            "p50_ms": 250.0,
+            "p99_ms": 2500.0,
+            "rps": 74.9676332080414,
+            "request_count": 22449,
+            "failure_count": 0,
+            "error_rate_pct": 0.0
+          }
+        }
+      },
+      "hikaricp": {
+        "acquire_count": 109.0,
+        "acquire_mean_ms": 0.08482926605504587,
+        "acquire_max_recent_ms": 0.0,
+        "acquire_total_ms": 9.24639,
+        "creation_count": 0.0,
+        "creation_mean_ms": null,
+        "creation_max_recent_ms": 0.0,
+        "creation_total_ms": 0.0,
+        "pending_peak_connections": 0.0,
+        "active_peak_connections": 0.0,
+        "idle_trough_connections": 10.0,
+        "pool_max_connections": 20.0,
+        "utilisation_peak_pct": 0.0
+      },
+      "jvm": {
+        "gc_pause_count": 2300.0,
+        "gc_pause_mean_ms": 160.85521739130434,
+        "gc_pause_max_recent_ms": 268.0,
+        "gc_pause_total_ms": 369967.0,
+        "heap_used_peak_bytes": 129385928.0,
+        "threads_live_peak_threads": 72.0
+      },
+      "tomcat": {
+        "threads_busy_peak_threads": 38.0,
+        "threads_config_max_threads": 200.0
+      },
+      "http": {
+        "request_count": 32751.0,
+        "request_mean_ms": 293.253726966291,
+        "request_max_recent_ms": 6379.107935,
+        "request_total_ms": 9604352.811872998
+      },
+      "endpoint_breakdown": {
+        "/api/version": {
+          "request_count": 2.0,
+          "mean_ms": 10.4706595,
+          "max_ms": 0.0
+        },
+        "/actuator/metrics/{requiredMetricName}": {
+          "request_count": 741.0,
+          "mean_ms": 131.73770669230768,
+          "max_ms": 1544.06811
+        },
+        "/actuator/health": {
+          "request_count": 2.0,
+          "mean_ms": 1588.4703545,
+          "max_ms": 0.0
+        },
+        "/api/churn": {
+          "request_count": 31911.0,
+          "mean_ms": 291.67736098633696,
+          "max_ms": 4508.416031000001
+        },
+        "/actuator/env/{toMatch}": {
+          "request_count": 8.0,
+          "mean_ms": 16.583045875,
+          "max_ms": 0.0
+        },
+        "/actuator/prometheus": {
+          "request_count": 90.0,
+          "mean_ms": 2174.3884701555558,
+          "max_ms": 6379.107935
+        }
+      },
+      "runtime_config": {
+        "spring.application.name": "******",
+        "server.port": "******",
+        "perflab.version": "******",
+        "perflab.cache.enabled": "true",
+        "perflab.downstream.timeout-ms": "5000",
+        "spring.datasource.hikari.maximum-pool-size": "20",
+        "spring.datasource.hikari.minimum-idle": "10",
+        "spring.datasource.hikari.connection-timeout": "30000",
+        "spring.datasource.hikari.pool-name": "******",
+        "spring.jpa.open-in-view": "******",
+        "spring.jpa.properties.hibernate.default_batch_fetch_size": "50",
+        "spring.jpa.properties.hibernate.jdbc.batch_size": "50",
+        "server.tomcat.threads.max": "200",
+        "server.tomcat.threads.min-spare": "10",
+        "spring.task.execution.pool.core-size": "8",
+        "spring.task.execution.pool.max-size": "16",
+        "spring.task.execution.pool.queue-capacity": "100",
+        "perflab.jvm.heap-max-mb": "128",
+        "_redacted_count": 120
+      },
+      "baseline_reference": {},
+      "available_evidence": {
+        "metrics": true,
+        "traces": false,
+        "trace_reason": "no trace provider configured for this campaign",
+        "trace_sampling_rate_pct": null,
+        "endpoint_breakdown": true,
+        "gauge_sampling": true,
+        "notes": []
+      }
+    },
+    "sla_met": false,
+    "watchdog": {
+      "run_id": "run2-05-baseline",
+      "scenario": "steady",
+      "thresholds": {
+        "unreachable_checks": 3,
+        "error_rate_pct": 1.0,
+        "error_rate_trend_pct_per_check": 0.15,
+        "error_rate_trend_window": 4,
+        "throughput_collapse_pct": 25.0,
+        "latency_ceiling_ms": 70000.0,
+        "load_generator_beat_max_age_s": 60.0,
+        "cpu_steal_abort_pct": 10.0,
+        "warn_fraction": 0.8,
+        "source": "config/slo.yaml (bench-gc-pressure)"
+      },
+      "ceiling_probe": false,
+      "suspended_tripwires": [],
+      "checks": [
+        {
+          "number": 1,
+          "elapsed_s": 300.0007747132331,
+          "reading": {
+            "elapsed_s": 300.0007747132331,
+            "reachable": null,
+            "http_status": null,
+            "error_rate_pct": 0.0,
+            "throughput_rps": 68.6,
+            "p99_ms": 2500.0,
+            "load_generator_users": 50,
+            "load_generator_beat_age_s": 4.994654178619385,
+            "cpu_steal_pct": null,
+            "note": ""
+          },
+          "tripwires": [
+            {
+              "name": "target_reachable",
+              "status": "unknown",
+              "reading": "not probed",
+              "detail": "nothing probed the target this check; unknown is not the same as reachable"
+            },
+            {
+              "name": "error_rate",
+              "status": "ok",
+              "reading": "0.00% | max 1.00%",
+              "detail": ""
+            },
+            {
+              "name": "error_rate_trend",
+              "status": "unknown",
+              "reading": "1 of 3 checks needed",
+              "detail": "a trend needs at least three checks; two points are a difference"
+            },
+            {
+              "name": "throughput_collapse",
+              "status": "unknown",
+              "reading": "68.6 rps | no reference yet",
+              "detail": "nothing to compare against until a reference throughput is established"
+            },
+            {
+              "name": "latency_ceiling",
+              "status": "ok",
+              "reading": "2.5 s | aborts above 70 s",
+              "detail": ""
+            },
+            {
+              "name": "load_generator_alive",
+              "status": "ok",
+              "reading": "50 users | last beat 5 s ago | aborts above 60 s",
+              "detail": ""
+            },
+            {
+              "name": "host_contention",
+              "status": "unknown",
+              "reading": "not measured | would abort above 10.0%",
+              "detail": "nothing read CPU steal; a run where nobody looked is not a run that was clean"
+            }
+          ],
+          "adjudications": [],
+          "tripped": [],
+          "warned": []
+        }
+      ],
+      "check_count": 1,
+      "aborted": false,
+      "abort": null,
+      "observed_cpu_steal_pct": null,
+      "cpu_steal_abort_pct": 10.0,
+      "cpu_steal_note": "CPU steal was never read during this run; it is unknown, not clean"
+    }
+  },
+  "experiments": [
+    {
+      "run_id": "run2-05",
+      "experiment": 1,
+      "started_at_epoch_s": 1793547619.8543108,
+      "collector_version": "1.2.0",
+      "cause_family": "gc_pressure",
+      "cause_family_declared": true,
+      "proposal": {
+        "cause_family": "gc_pressure",
+        "changes": [
+          {
+            "prop": "perflab.jvm.heap-max-mb",
+            "value": 1024,
+            "previous": null,
+            "unit": ""
+          }
+        ],
+        "reasoning": "The snapshot shows severe GC pressure: gc_pause_total_ms is 369,967.0 ms out of the 300-second measure window, meaning the application spent over 120% of the window duration in garbage collection pauses. There were 2,300 GC pauses with a mean of 160.86 ms. Furthermore, heap_used_peak_bytes is 129,385,928 bytes (~123.3 MB), which is very close to the configured heap max of 128 MB (perflab.jvm.heap-max-mb). Connection pool exhaustion and thread saturation are ruled out by low acquire times and low thread/connection utilization peaks. Increasing the max heap size will provide more headroom and reduce GC frequency and duration.",
+        "confidence": 0.95,
+        "predicted_p99_ms": 300.0,
+        "evidence_cited": [
+          "jvm.gc_pause_total_ms",
+          "jvm.gc_pause_count",
+          "jvm.gc_pause_mean_ms",
+          "jvm.heap_used_peak_bytes",
+          "runtime_config.perflab.jvm.heap-max-mb",
+          "load_summary.p99_ms"
+        ],
+        "abstained": false,
+        "abstain_reason": ""
+      },
+      "diagnosis": {
+        "proposal": {
+          "cause_family": "gc_pressure",
+          "changes": [
+            {
+              "prop": "perflab.jvm.heap-max-mb",
+              "value": 1024,
+              "previous": null,
+              "unit": ""
+            }
+          ],
+          "reasoning": "The snapshot shows severe GC pressure: gc_pause_total_ms is 369,967.0 ms out of the 300-second measure window, meaning the application spent over 120% of the window duration in garbage collection pauses. There were 2,300 GC pauses with a mean of 160.86 ms. Furthermore, heap_used_peak_bytes is 129,385,928 bytes (~123.3 MB), which is very close to the configured heap max of 128 MB (perflab.jvm.heap-max-mb). Connection pool exhaustion and thread saturation are ruled out by low acquire times and low thread/connection utilization peaks. Increasing the max heap size will provide more headroom and reduce GC frequency and duration.",
+          "confidence": 0.95,
+          "predicted_p99_ms": 300.0,
+          "evidence_cited": [
+            "jvm.gc_pause_total_ms",
+            "jvm.gc_pause_count",
+            "jvm.gc_pause_mean_ms",
+            "jvm.heap_used_peak_bytes",
+            "runtime_config.perflab.jvm.heap-max-mb",
+            "load_summary.p99_ms"
+          ],
+          "abstained": false,
+          "abstain_reason": ""
+        },
+        "served_by_provider": "gemini_1",
+        "served_by_model": "gemini-3.5-flash-lite",
+        "input_tokens": 5013,
+        "output_tokens": 381,
+        "latency_ms": 1800.0,
+        "parse_error": ""
+      },
+      "approval": {
+        "state": "approved",
+        "responder": "preapproved",
+        "reason": "preflight: operator chose this value when starting the run",
+        "params": {
+          "perflab.jvm.heap-max-mb": 1024
+        },
+        "decided_at_epoch_s": 1793547621.8994699
+      },
+      "apply_result": {
+        "applied": true,
+        "restarted": false,
+        "healthy": false,
+        "reverted": false,
+        "revert_healthy": null,
+        "refused": false,
+        "refusal_reason": "",
+        "manual_step": false,
+        "commit": "c45837a2ea4b1d4cbe582eff7c484a5c20df13b2",
+        "changes": [
+          {
+            "prop": "perflab.jvm.heap-max-mb",
+            "value": 1024,
+            "previous": "128",
+            "unit": ""
+          }
+        ],
+        "reason": "applied to the workspace; no local restarter configured",
+        "needs_human": false,
+        "proposal": {
+          "cause_family": "gc_pressure",
+          "changes": [
+            {
+              "prop": "perflab.jvm.heap-max-mb",
+              "value": 1024,
+              "previous": "128",
+              "unit": ""
+            }
+          ],
+          "reasoning": "The snapshot shows severe GC pressure: gc_pause_total_ms is 369,967.0 ms out of the 300-second measure window, meaning the application spent over 120% of the window duration in garbage collection pauses. There were 2,300 GC pauses with a mean of 160.86 ms. Furthermore, heap_used_peak_bytes is 129,385,928 bytes (~123.3 MB), which is very close to the configured heap max of 128 MB (perflab.jvm.heap-max-mb). Connection pool exhaustion and thread saturation are ruled out by low acquire times and low thread/connection utilization peaks. Increasing the max heap size will provide more headroom and reduce GC frequency and duration.",
+          "confidence": 0.95,
+          "predicted_p99_ms": 300.0,
+          "evidence_cited": [
+            "jvm.gc_pause_total_ms",
+            "jvm.gc_pause_count",
+            "jvm.gc_pause_mean_ms",
+            "jvm.heap_used_peak_bytes",
+            "runtime_config.perflab.jvm.heap-max-mb",
+            "load_summary.p99_ms"
+          ],
+          "abstained": false,
+          "abstain_reason": ""
+        }
+      },
+      "deploy": {
+        "commit": "c45837a2ea4b1d4cbe582eff7c484a5c20df13b2",
+        "deployed": true,
+        "verified": true,
+        "manual": false,
+        "remote": "perftest",
+        "branch": "perftest_sandbox",
+        "waited_s": 0.02894773706793785,
+        "observed_commit": "c45837a2ea4b1d4cbe582eff7c484a5c20df13b2",
+        "reason": "target confirmed running c45837a2ea4b1d4cbe582eff7c484a5c20df13b2 after 0.0s",
+        "hook_commit": "c45837a2ea4b1d4cbe582eff7c484a5c20df13b2",
+        "hook_exit_code": 0,
+        "property_verified": true,
+        "property_reason": "all changed properties confirmed via /actuator/env",
+        "metric_verified": true,
+        "metric_reason": "in force on the target: perflab.jvm.heap-max-mb: jvm.memory.max reads 989.9 for 1024 (3.3% off)"
+      },
+      "before": {
+        "load": {
+          "p50_ms": 250.0,
+          "p95_ms": 1600.0,
+          "p99_ms": 2500.0,
+          "mean_ms": 461.38400594225146,
+          "max_ms": 4866.833297535777,
+          "rps": 74.9676332080414,
+          "request_count": 22449,
+          "failure_count": 0,
+          "error_rate_pct": 0.0,
+          "warmup_s": 120.0,
+          "measure_s": 300.0,
+          "ramp_s": 5.0,
+          "per_endpoint": {
+            "/api/churn": {
+              "p50_ms": 250.0,
+              "p99_ms": 2500.0,
+              "rps": 74.9676332080414,
+              "request_count": 22449,
+              "failure_count": 0,
+              "error_rate_pct": 0.0
+            }
+          }
+        },
+        "snapshot": {
+          "collector_version": "1.2.0",
+          "captured_at_epoch_s": 1793547619.839684,
+          "run_id": "run2-05-baseline",
+          "profile": "spring-boot",
+          "target": "http://10.0.0.79:8080",
+          "window": {
+            "count": 23277.0,
+            "total_ms": 7107182.472975997,
+            "mean_ms": 305.3306900793056,
+            "max_recent_ms": 6379.107935,
+            "max_recent_ms_note": "rolling ~2-minute maximum read at end of window, NOT the maximum over the measured window. Micrometer's MAX decays, so a spike early in the window has already aged out. Under-reports transient causes such as GC pauses; approximates the true window max only for sustained ones.",
+            "warmup_s": 120.0,
+            "measure_s": 300.0
+          },
+          "load_summary": {
+            "p50_ms": 250.0,
+            "p95_ms": 1600.0,
+            "p99_ms": 2500.0,
+            "mean_ms": 461.38400594225146,
+            "max_ms": 4866.833297535777,
+            "rps": 74.9676332080414,
+            "request_count": 22449,
+            "failure_count": 0,
+            "error_rate_pct": 0.0,
+            "warmup_s": 120.0,
+            "measure_s": 300.0,
+            "ramp_s": 5.0,
+            "per_endpoint": {
+              "/api/churn": {
+                "p50_ms": 250.0,
+                "p99_ms": 2500.0,
+                "rps": 74.9676332080414,
+                "request_count": 22449,
+                "failure_count": 0,
+                "error_rate_pct": 0.0
+              }
+            }
+          },
+          "hikaricp": {
+            "acquire_count": 109.0,
+            "acquire_mean_ms": 0.08482926605504587,
+            "acquire_max_recent_ms": 0.0,
+            "acquire_total_ms": 9.24639,
+            "creation_count": 0.0,
+            "creation_mean_ms": null,
+            "creation_max_recent_ms": 0.0,
+            "creation_total_ms": 0.0,
+            "pending_peak_connections": 0.0,
+            "active_peak_connections": 0.0,
+            "idle_trough_connections": 10.0,
+            "pool_max_connections": 20.0,
+            "utilisation_peak_pct": 0.0
+          },
+          "jvm": {
+            "gc_pause_count": 2300.0,
+            "gc_pause_mean_ms": 160.85521739130434,
+            "gc_pause_max_recent_ms": 268.0,
+            "gc_pause_total_ms": 369967.0,
+            "heap_used_peak_bytes": 129385928.0,
+            "threads_live_peak_threads": 72.0
+          },
+          "tomcat": {
+            "threads_busy_peak_threads": 38.0,
+            "threads_config_max_threads": 200.0
+          },
+          "http": {
+            "request_count": 32751.0,
+            "request_mean_ms": 293.253726966291,
+            "request_max_recent_ms": 6379.107935,
+            "request_total_ms": 9604352.811872998
+          },
+          "endpoint_breakdown": {
+            "/api/version": {
+              "request_count": 2.0,
+              "mean_ms": 10.4706595,
+              "max_ms": 0.0
+            },
+            "/actuator/metrics/{requiredMetricName}": {
+              "request_count": 741.0,
+              "mean_ms": 131.73770669230768,
+              "max_ms": 1544.06811
+            },
+            "/actuator/health": {
+              "request_count": 2.0,
+              "mean_ms": 1588.4703545,
+              "max_ms": 0.0
+            },
+            "/api/churn": {
+              "request_count": 31911.0,
+              "mean_ms": 291.67736098633696,
+              "max_ms": 4508.416031000001
+            },
+            "/actuator/env/{toMatch}": {
+              "request_count": 8.0,
+              "mean_ms": 16.583045875,
+              "max_ms": 0.0
+            },
+            "/actuator/prometheus": {
+              "request_count": 90.0,
+              "mean_ms": 2174.3884701555558,
+              "max_ms": 6379.107935
+            }
+          },
+          "runtime_config": {
+            "spring.application.name": "******",
+            "server.port": "******",
+            "perflab.version": "******",
+            "perflab.cache.enabled": "true",
+            "perflab.downstream.timeout-ms": "5000",
+            "spring.datasource.hikari.maximum-pool-size": "20",
+            "spring.datasource.hikari.minimum-idle": "10",
+            "spring.datasource.hikari.connection-timeout": "30000",
+            "spring.datasource.hikari.pool-name": "******",
+            "spring.jpa.open-in-view": "******",
+            "spring.jpa.properties.hibernate.default_batch_fetch_size": "50",
+            "spring.jpa.properties.hibernate.jdbc.batch_size": "50",
+            "server.tomcat.threads.max": "200",
+            "server.tomcat.threads.min-spare": "10",
+            "spring.task.execution.pool.core-size": "8",
+            "spring.task.execution.pool.max-size": "16",
+            "spring.task.execution.pool.queue-capacity": "100",
+            "perflab.jvm.heap-max-mb": "128",
+            "_redacted_count": 120
+          },
+          "baseline_reference": {},
+          "available_evidence": {
+            "metrics": true,
+            "traces": false,
+            "trace_reason": "no trace provider configured for this campaign",
+            "trace_sampling_rate_pct": null,
+            "endpoint_breakdown": true,
+            "gauge_sampling": true,
+            "notes": []
+          }
+        }
+      },
+      "after": {
+        "load": {
+          "p50_ms": 3.0,
+          "p95_ms": 200.0,
+          "p99_ms": 230.0,
+          "mean_ms": 45.65405703275616,
+          "max_ms": 323.61007388681173,
+          "rps": 201.53173204355403,
+          "request_count": 60335,
+          "failure_count": 0,
+          "error_rate_pct": 0.0,
+          "warmup_s": 120.0,
+          "measure_s": 300.0,
+          "ramp_s": 5.0,
+          "per_endpoint": {
+            "/api/churn": {
+              "p50_ms": 3.0,
+              "p99_ms": 230.0,
+              "rps": 201.53173204355403,
+              "request_count": 60335,
+              "failure_count": 0,
+              "error_rate_pct": 0.0
+            }
+          }
+        },
+        "snapshot": {
+          "collector_version": "1.2.0",
+          "captured_at_epoch_s": 1793548080.584147,
+          "run_id": "run2-05-exp01",
+          "profile": "spring-boot",
+          "target": "http://10.0.0.79:8080",
+          "window": {
+            "count": 62542.0,
+            "total_ms": 160290.705499,
+            "mean_ms": 2.5629289996962044,
+            "max_recent_ms": 296.15504500000003,
+            "max_recent_ms_note": "rolling ~2-minute maximum read at end of window, NOT the maximum over the measured window. Micrometer's MAX decays, so a spike early in the window has already aged out. Under-reports transient causes such as GC pauses; approximates the true window max only for sustained ones.",
+            "warmup_s": 120.0,
+            "measure_s": 300.0
+          },
+          "load_summary": {
+            "p50_ms": 3.0,
+            "p95_ms": 200.0,
+            "p99_ms": 230.0,
+            "mean_ms": 45.65405703275616,
+            "max_ms": 323.61007388681173,
+            "rps": 201.53173204355403,
+            "request_count": 60335,
+            "failure_count": 0,
+            "error_rate_pct": 0.0,
+            "warmup_s": 120.0,
+            "measure_s": 300.0,
+            "ramp_s": 5.0,
+            "per_endpoint": {
+              "/api/churn": {
+                "p50_ms": 3.0,
+                "p99_ms": 230.0,
+                "rps": 201.53173204355403,
+                "request_count": 60335,
+                "failure_count": 0,
+                "error_rate_pct": 0.0
+              }
+            }
+          },
+          "hikaricp": {
+            "acquire_count": 107.0,
+            "acquire_mean_ms": 0.03345558878504673,
+            "acquire_max_recent_ms": 0.0,
+            "acquire_total_ms": 3.579748,
+            "creation_count": 0.0,
+            "creation_mean_ms": null,
+            "creation_max_recent_ms": 0.0,
+            "creation_total_ms": 0.0,
+            "pending_peak_connections": 0.0,
+            "active_peak_connections": 0.0,
+            "idle_trough_connections": 10.0,
+            "pool_max_connections": 20.0,
+            "utilisation_peak_pct": 0.0
+          },
+          "jvm": {
+            "gc_pause_count": 1849.0,
+            "gc_pause_mean_ms": 69.78042184964846,
+            "gc_pause_max_recent_ms": 253.0,
+            "gc_pause_total_ms": 129024.0,
+            "heap_used_peak_bytes": 253349416.0,
+            "threads_live_peak_threads": 71.0
+          },
+          "tomcat": {
+            "threads_busy_peak_threads": 2.0,
+            "threads_config_max_threads": 200.0
+          },
+          "http": {
+            "request_count": 86447.0,
+            "request_mean_ms": 2.872118577220725,
+            "request_max_recent_ms": 296.15504500000003,
+            "request_total_ms": 248286.034645
+          },
+          "endpoint_breakdown": {
+            "/api/version": {
+              "request_count": 2.0,
+              "mean_ms": 26.687282,
+              "max_ms": 0.0
+            },
+            "/actuator/metrics/{requiredMetricName}": {
+              "request_count": 2060.0,
+              "mean_ms": 1.2570356048543687,
+              "max_ms": 14.465549
+            },
+            "/actuator/health": {
+              "request_count": 1.0,
+              "mean_ms": 2605.406437,
+              "max_ms": 0.0
+            },
+            "/api/churn": {
+              "request_count": 84301.0,
+              "mean_ms": 2.8460223228550077,
+              "max_ms": 296.15504500000003
+            },
+            "/actuator/env/{toMatch}": {
+              "request_count": 1.0,
+              "mean_ms": 160.76989899999998,
+              "max_ms": 0.0
+            },
+            "/actuator/prometheus": {
+              "request_count": 85.0,
+              "mean_ms": 34.84603362352941,
+              "max_ms": 26.188359000000002
+            }
+          },
+          "runtime_config": {
+            "spring.application.name": "******",
+            "server.port": "******",
+            "perflab.version": "******",
+            "perflab.cache.enabled": "true",
+            "perflab.downstream.timeout-ms": "5000",
+            "spring.datasource.hikari.maximum-pool-size": "20",
+            "spring.datasource.hikari.minimum-idle": "10",
+            "spring.datasource.hikari.connection-timeout": "30000",
+            "spring.datasource.hikari.pool-name": "******",
+            "spring.jpa.open-in-view": "******",
+            "spring.jpa.properties.hibernate.default_batch_fetch_size": "50",
+            "spring.jpa.properties.hibernate.jdbc.batch_size": "50",
+            "server.tomcat.threads.max": "200",
+            "server.tomcat.threads.min-spare": "10",
+            "spring.task.execution.pool.core-size": "8",
+            "spring.task.execution.pool.max-size": "16",
+            "spring.task.execution.pool.queue-capacity": "100",
+            "perflab.jvm.heap-max-mb": "1024",
+            "_redacted_count": 120
+          },
+          "baseline_reference": {},
+          "available_evidence": {
+            "metrics": true,
+            "traces": false,
+            "trace_reason": "no trace provider configured for this campaign",
+            "trace_sampling_rate_pct": null,
+            "endpoint_breakdown": true,
+            "gauge_sampling": true,
+            "notes": []
+          }
+        }
+      },
+      "verdict": "IMPROVED",
+      "verdict_reason": "p99 fell 90.80% (2500 -> 230 ms), clear of the 2.08% noise floor",
+      "kept": true,
+      "sla_met_before": false,
+      "sla_met_after": true,
+      "predicted_p99_ms": 300.0,
+      "calibration_error_pct": 30.434782608695652,
+      "noise_floor_pct": 2.08,
+      "margin_over_noise": 43.65384615384615,
+      "refused_by_guard": false,
+      "deployed_commit": "c45837a2ea4b1d4cbe582eff7c484a5c20df13b2",
+      "manual_steps": [],
+      "watchdog": {
+        "run_id": "run2-05-exp01",
+        "scenario": "steady",
+        "thresholds": {
+          "unreachable_checks": 3,
+          "error_rate_pct": 1.0,
+          "error_rate_trend_pct_per_check": 0.15,
+          "error_rate_trend_window": 4,
+          "throughput_collapse_pct": 25.0,
+          "latency_ceiling_ms": 70000.0,
+          "load_generator_beat_max_age_s": 60.0,
+          "cpu_steal_abort_pct": 10.0,
+          "warn_fraction": 0.8,
+          "source": "config/slo.yaml (bench-gc-pressure)"
+        },
+        "ceiling_probe": false,
+        "suspended_tripwires": [],
+        "checks": [
+          {
+            "number": 1,
+            "elapsed_s": 300.00008707214147,
+            "reading": {
+              "elapsed_s": 300.00008707214147,
+              "reachable": null,
+              "http_status": null,
+              "error_rate_pct": 0.0,
+              "throughput_rps": 201.7,
+              "p99_ms": 230.0,
+              "load_generator_users": 50,
+              "load_generator_beat_age_s": 5.000431776046753,
+              "cpu_steal_pct": null,
+              "note": ""
+            },
+            "tripwires": [
+              {
+                "name": "target_reachable",
+                "status": "unknown",
+                "reading": "not probed",
+                "detail": "nothing probed the target this check; unknown is not the same as reachable"
+              },
+              {
+                "name": "error_rate",
+                "status": "ok",
+                "reading": "0.00% | max 1.00%",
+                "detail": ""
+              },
+              {
+                "name": "error_rate_trend",
+                "status": "unknown",
+                "reading": "1 of 3 checks needed",
+                "detail": "a trend needs at least three checks; two points are a difference"
+              },
+              {
+                "name": "throughput_collapse",
+                "status": "unknown",
+                "reading": "201.7 rps | no reference yet",
+                "detail": "nothing to compare against until a reference throughput is established"
+              },
+              {
+                "name": "latency_ceiling",
+                "status": "ok",
+                "reading": "0.2 s | aborts above 70 s",
+                "detail": ""
+              },
+              {
+                "name": "load_generator_alive",
+                "status": "ok",
+                "reading": "50 users | last beat 5 s ago | aborts above 60 s",
+                "detail": ""
+              },
+              {
+                "name": "host_contention",
+                "status": "unknown",
+                "reading": "not measured | would abort above 10.0%",
+                "detail": "nothing read CPU steal; a run where nobody looked is not a run that was clean"
+              }
+            ],
+            "adjudications": [],
+            "tripped": [],
+            "warned": []
+          }
+        ],
+        "check_count": 1,
+        "aborted": false,
+        "abort": null,
+        "observed_cpu_steal_pct": null,
+        "cpu_steal_abort_pct": 10.0,
+        "cpu_steal_note": "CPU steal was never read during this run; it is unknown, not clean"
+      },
+      "prior_findings": [],
+      "notes": [
+        "property read-back (\u00a719.6 rung 2): all changed properties confirmed via /actuator/env",
+        "target metric (\u00a719.6 rung 1): in force on the target: perflab.jvm.heap-max-mb: jvm.memory.max reads 989.9 for 1024 (3.3% off)"
+      ],
+      "advisory": {},
+      "per_endpoint": {}
+    }
+  ],
+  "ruled_out": [],
+  "stopped_reason": "SLA met after experiment 1: p99 230.0 ms",
+  "aborted": false,
+  "abort_reason": "",
+  "paused": false,
+  "pause_reason": "",
+  "models_used": [
+    "gemini-3.5-flash-lite"
+  ],
+  "spans_multiple_models": false,
+  "comparability_warning": "",
+  "started_at_epoch_s": 1793547198.3298612,
+  "finished_at_epoch_s": 1793548080.5844579,
+  "guarded_files": {
+    "/home/ubuntu/crucible-draft/config/bench/slo-perflab_gc_pressure.yaml": "96230f8694c2e04a8826791efbf02a0190da76ceea210f2db77ad4b72369592e",
+    "/home/ubuntu/crucible-draft/config/profiles/spring-boot.yaml": "3c870698a85dd5df38bbbe9c6f850a06f42510854817221ef291dda0e3afd7dc"
+  },
+  "amendments": [],
+  "caps": {
+    "cost_usd": 0.1,
+    "wall_clock_s": null
+  },
+  "cap_hit": {},
+  "paused_seconds": 0.0,
+  "series": {},
+  "ground_truth": {
+    "fixture": "perflab_gc_pressure",
+    "cause_family": "gc_pressure",
+    "source": "config/fixtures/perflab_gc_pressure.yaml",
+    "recorded": "from the fixture file, before the run started"
+  }
+}

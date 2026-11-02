@@ -257,6 +257,8 @@ crucible/ui/          the dashboard (client/crucible-ui.html) and the screens it
 crucible/             the rest is the S17Code agent harness Crucible is built on
 config/               slo.yaml (the goal), profiles/ (authority), tasks/ and fixtures/ (the benchmark)
 fixtures/             the 23 frozen snapshots replay runs against
+proofs/runs/          real evidence from the latest run of each type: manifest, job log, approvals
+proofs/benchmark/     the live benchmark's six manifests (run 2)
 locust/locustfile.py  the built-in load script
 scripts/              Box A deploy hook, Box B restart script, snapshot capture, noise sampling
 tests/                1993 tests;  tests_security/ the security review's own suite

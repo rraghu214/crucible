@@ -21,7 +21,8 @@ The two governing files sit at the repository root: [`DESIGN.md`](../DESIGN.md)
 |---|---|
 | [BENCHMARK_REPLAY_RESULTS.md](BENCHMARK_REPLAY_RESULTS.md) | Replay: diagnosing frozen snapshots. Run 2 (1 Nov 2026) is the run of record |
 | [BENCHMARK_LIVE_RESULTS.md](BENCHMARK_LIVE_RESULTS.md) | Live campaigns, one per fault, with the diagnosis quadrant |
-| [bench/](bench/) | Raw replay files; the Benchmarks page reads the top-level `replay-*.json` |
+| [bench/](bench/) | Raw replay files; the Benchmarks page reads the top-level `replay-*.json` (the `2026-09-26/` set is test data) |
+| [../proofs/](../proofs/) | The latest run of each type, and the live benchmark's manifests, as recorded on Box B |
 
 ## Security
 

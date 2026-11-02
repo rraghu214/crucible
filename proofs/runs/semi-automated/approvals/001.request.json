@@ -1,0 +1,22 @@
+{
+  "run_id": "run-1793610533986-burst_100u",
+  "experiment": 1,
+  "summary": "connection_pool_exhaustion: spring.datasource.hikari.maximum-pool-size '2' -> 50",
+  "params": {
+    "spring.datasource.hikari.maximum-pool-size": 50
+  },
+  "reasoning": "The application exhibits classic connection pool exhaustion. `utilisation_peak_pct` is at 100.0%, active peak connections are pinned at `pool_max_connections` (2.0), and `pending_peak_connections` reaches 94.0. The `acquire_mean_ms` is 2216.99 ms, which closely mirrors the high request latency (`p99_ms` of 2500.0 ms), indicating that the requests are waiting heavily to acquire a database connection from a severely restricted pool size of 2. Historical experiment evidence for this target confirms that increasing `spring.datasource.hikari.maximum-pool-size` drastically reduces p99 latency.",
+  "cause_family": "connection_pool_exhaustion",
+  "confidence": 0.95,
+  "predicted_p99_ms": 70.0,
+  "evidence_cited": [
+    "hikaricp.utilisation_peak_pct",
+    "hikaricp.active_peak_connections",
+    "hikaricp.pool_max_connections",
+    "hikaricp.pending_peak_connections",
+    "hikaricp.acquire_mean_ms",
+    "load_summary.p99_ms",
+    "runtime_config.spring.datasource.hikari.maximum-pool-size"
+  ],
+  "created_at_epoch_s": 1793610999.2454977
+}

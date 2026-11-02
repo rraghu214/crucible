@@ -1,0 +1,12 @@
+{
+  "id": "20261102-091557-b4d947",
+  "label": "resume run-1793610533986-burst_100u",
+  "args": [
+    "resume",
+    "run-1793610533986-burst_100u",
+    "--state-dir=/home/ubuntu/.crucible"
+  ],
+  "started_at_epoch_s": 1793610957.4223351,
+  "pid": 506146,
+  "cwd": "/home/ubuntu/crucible"
+}

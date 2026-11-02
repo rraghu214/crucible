@@ -32,7 +32,7 @@ What it got wrong:
 **Why every earlier result is superseded.** Earlier replays had the fault's name in every prompt
 (46.6), masked settings, a heap figure that included non-heap memory (48.1), and on some PerfLab
 starts timers read from the Datadog registry 1000x too large (48.2). They are kept below as
-recorded; the 1 November blinded replay moved to `docs/bench/2026-11-01-blind/`.
+recorded; the 1 November blinded replay file was moved to the operator's archive on 3 November 2026.
 
 ---
 
@@ -51,7 +51,7 @@ the whole snapshot was sent to the model. Found 1 November 2026; fixed by
 below are kept as they were recorded, and none of them is a valid measure of
 diagnosis.
 
-Raw evidence: [`docs/bench/2026-11-01-blind/replay-2026-11-01-blind.json`](bench/2026-11-01-blind/replay-2026-11-01-blind.json)
+Raw evidence: `replay-2026-11-01-blind.json`, moved to the operator's archive on 3 November 2026 (superseded by run 2)
 (run on Box B as `results/replay-47.json`, code `13454e4`, same command, fixtures and
 model as v3: `crucible bench --tasks config/tasks/ --fixtures fixtures-46/ --skip-missing-fixtures`).
 This run also had the new SKILL.md section ("a full resource is a symptom"), so the two

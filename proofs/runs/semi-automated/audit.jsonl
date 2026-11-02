@@ -1,0 +1,4 @@
+{"kind": "pause", "run_id": "run-1793610533986-burst_100u", "experiment": null, "at_epoch_s": 1793610836.8477998, "reason": "the configuration changed before experiment 1 (p99_ms: 120.0 -> 150.0; profile: spring-boot -> spring-boot). Semi-Automated pauses to confirm: `crucible resume run-1793610533986-burst_100u` accepts it."}
+{"kind": "resume", "run_id": "run-1793610533986-burst_100u", "experiment": null, "at_epoch_s": 1793610958.7536552}
+{"kind": "approval", "run_id": "run-1793610533986-burst_100u", "experiment": 1, "at_epoch_s": 1793611105.2532203, "approved": true, "reason": "approved with matching parameters"}
+{"kind": "apply", "run_id": "run-1793610533986-burst_100u", "experiment": 1, "at_epoch_s": 1793611105.267902, "prop": "spring.datasource.hikari.maximum-pool-size", "old_value": "2", "new_value": 50}

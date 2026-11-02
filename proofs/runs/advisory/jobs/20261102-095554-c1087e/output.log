@@ -1,0 +1,22 @@
+$ crucible run --profile=spring-boot --sla=/home/ubuntu/crucible/config/slo.yaml --scenario=fully_auto_burst_100u --users=100 --measure=180.0 --spawn-rate=6.666666666666667 --experiments=2 --all-scenarios --advisory --cost-cap=1.0 --wall-clock-cap=1.0 --run-id=run-1793613354320 --state-dir=/home/ubuntu/.crucible --workspace=/home/ubuntu/perf-lab --approve=file --stakeholder-request=Keep /api/db p99 under 120 ms at 100 users
+
+series run-1793613354320 | scenario 1 of 1: fully_auto_burst_100u | run run-1793613354320-fully_auto_burst_100u
+---------------------------------------------------------------------------------------------------------------
+[gateway] warming up https://<your-gateway>.onrender.com (attempt 1/2, timeout 60s) -- waiting for a possible cold start, not hung
+[gateway] gateway is warm (0.1s)
+[campaign] started: sla={"name":"perflab-db-latency","endpoint":"/api/db","p99_ms":120.0,"error_rate_pct":1.0,"environment_name":"oracle-ashburn-boxa","environment_kind":"pre-prod","target_base_url":"http://10.0.0.79:8080","noise_p99_spread_pct":2.08,"noise_measured_on":"2026-09-12","noise_source":"docs/K1_CLOUD_RESULT.md","cpu_steal_abort_pct":10.0,"at_load":{"users":100,"spawn_rate":6.667,"think_time_s":[0.1,0.3]},"scenarios":[{"name":"fully_auto_burst_100u","users":100,"measure_s":180.0,"warmup_s":120.0,"spawn_rate":6.667}],"hooks":{"timeout_s":60.0,"pass_env":[]},"max_experiments":2,"source_path":"/home/ubuntu/crucible/config/slo.yaml"}, profile=spring-boot
+[campaign] measuring: window=baseline
+[campaign] baseline_done: p99_ms=2500.0, sla_met=False
+[campaign] experiment_started: experiment=1, p99_before=2500.0
+[campaign] advisory: experiment=1, diff=--- a/src/main/resources/application.properties
++++ b/src/main/resources/application.properties
+@@ -33,3 +33,3 @@
+ # BASELINE pool size = 10. Bottleneck injection sets this to 2.
+-spring.datasource.hikari.maximum-pool-size=2
++spring.datasource.hikari.maximum-pool-size=20
+ spring.datasource.hikari.minimum-idle=2
+, alternatives=1
+[campaign] done: experiments=1, stopped_reason=advisory run: 1 ranked proposal(s) recorded with exact diffs and nothing applied. Apply one yourself, then run again to measure its effect.
+  fully_auto_burst_100u: advisory run: 1 ranked proposal(s) recorded with exact diffs and nothing applied. Apply one yourself, then run again to measure its effect.
+
+series run-1793613354320: complete
