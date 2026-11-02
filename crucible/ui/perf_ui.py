@@ -2551,6 +2551,18 @@ async def perf_load_data_list(request: Request):
     return {"files": await asyncio.to_thread(listing, _context(request).state)}
 
 
+@router.delete("/v1/perf/load-data/{name}", dependencies=[Depends(require_control)])
+async def perf_load_data_delete(name: str, request: Request):
+    """Remove an uploaded data file (Group 40)."""
+    from ..perf.loaddata import LoadDataError, remove
+
+    try:
+        await asyncio.to_thread(remove, _context(request).state, name)
+    except LoadDataError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return {"removed": name}
+
+
 class HookFileBody(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     text: str = Field(min_length=1, max_length=200_000)
